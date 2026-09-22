@@ -1,0 +1,5 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/energy_monitor?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+    username: energy_app
+    password: "CHANGE_ME"
