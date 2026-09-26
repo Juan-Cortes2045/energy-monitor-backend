@@ -12,7 +12,8 @@
                 <constraints primaryKey="true" primaryKeyName="pk_user_configuration" nullable="false"/>
             </column>
             <column name="user_id" type="VARCHAR(10)">
-                <constraints unique="true" uniqueConstraintName="uk_user_configuration_user_id"
+                <constraints nullable="false"
+                             unique="true" uniqueConstraintName="uk_user_configuration_user_id"
                              foreignKeyName="fk_user_configuration_user_id"
                              references="user(id_user)"/>
             </column>
