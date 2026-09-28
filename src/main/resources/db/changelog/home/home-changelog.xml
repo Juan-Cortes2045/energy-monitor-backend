@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Home Management module. Order matters: a table is created after every table
+        its foreign keys point to.
+    -->
+
+    <include file="changes/home-001-create-home-type.xml" relativeToChangelogFile="true"/>
+    <include file="changes/home-002-create-home.xml" relativeToChangelogFile="true"/>
+    <include file="changes/home-003-create-home-thresholds.xml" relativeToChangelogFile="true"/>
+    <include file="changes/home-004-create-user-home.xml" relativeToChangelogFile="true"/>
+
+</databaseChangeLog>

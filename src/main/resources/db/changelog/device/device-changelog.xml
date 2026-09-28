@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Devices module. Order matters: a table is created after every table
+        its foreign keys point to.
+    -->
+
+    <include file="changes/device-001-create-appliance-type.xml" relativeToChangelogFile="true"/>
+    <include file="changes/device-002-create-device.xml" relativeToChangelogFile="true"/>
+    <include file="changes/device-003-create-device-status-log.xml" relativeToChangelogFile="true"/>
+    <include file="changes/device-004-create-device-home.xml" relativeToChangelogFile="true"/>
+
+</databaseChangeLog>

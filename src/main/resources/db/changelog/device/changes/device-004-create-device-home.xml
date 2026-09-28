@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="device-004-create-device-home" author="JuanCortes2045">
+        <comment>Assignment of a device to a home. home_id references home.home at application level only, no SQL foreign key across bounded contexts.</comment>
+
+        <createTable tableName="device_home">
+            <column name="device_id" type="VARCHAR(10)">
+                <constraints nullable="false"
+                              foreignKeyName="fk_device_home_device_id"
+                              references="device(id_device)"/>
+            </column>
+            <column name="home_id" type="VARCHAR(10)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <addPrimaryKey tableName="device_home"
+                       columnNames="device_id, home_id"
+                       constraintName="pk_device_home"/>
+
+        <rollback>
+            <dropTable tableName="device_home"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
