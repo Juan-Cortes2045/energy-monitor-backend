@@ -9,5 +9,6 @@
         <include file="home/home-changelog.xml" relativeToChangelogFile="true"/>
         <include file="device/device-changelog.xml" relativeToChangelogFile="true"/>
         <include file="measurement/measurement-changelog.xml" relativeToChangelogFile="true"/>
+        <include file="alert/alert-changelog.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
