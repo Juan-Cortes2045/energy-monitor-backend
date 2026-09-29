@@ -8,5 +8,6 @@
         <include file= "security/security-changelog.xml" relativeToChangelogFile="true"/>
         <include file="home/home-changelog.xml" relativeToChangelogFile="true"/>
         <include file="device/device-changelog.xml" relativeToChangelogFile="true"/>
+        <include file="measurement/measurement-changelog.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

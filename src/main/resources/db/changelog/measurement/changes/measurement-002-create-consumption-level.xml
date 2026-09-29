@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="measurement-002-create-consumption-level" author="JuanCortes2045">
+        <comment>Numerical classification of a consumption value. Ranges must not overlap, enforced at application level.</comment>
+
+        <createTable tableName="consumption_level">
+            <column name="id_consumption_level" type="VARCHAR(10)">
+                <constraints primaryKey="true" primaryKeyName="pk_consumption_level" nullable="false"/>
+            </column>
+            <column name="name" type="ENUM('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_consumption_level_name"/>
+            </column>
+            <column name="description" type="VARCHAR(200)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="min_limit" type="DOUBLE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_limit" type="DOUBLE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <rollback>
+            <dropTable tableName="consumption_level"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
