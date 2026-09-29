@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Security module. Order matters: a table is created after every table
+        its foreign keys point to.
+    -->
+
+    <include file="changes/security-001-create-person.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-002-create-user.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-003-create-user-configuration.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-004-create-password-reset-token.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-005-create-user-session.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-006-create-security-configuration.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-007-create-password-policy.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-008-create-login-error-log.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-009-create-system-role.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-010-create-permission.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-011-create-user-system-role.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-012-create-system-role-permission.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-013-create-audit-log.xml" relativeToChangelogFile="true"/>
+    
+
+</databaseChangeLog>

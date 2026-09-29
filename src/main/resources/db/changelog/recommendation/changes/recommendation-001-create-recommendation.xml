@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="recommendation-001-create-recommendation" author="JuanCortes2045">
+        <comment>Suggestion generated from a home's observed consumption behavior. home_id and device_id reference other bounded contexts at application level only, no SQL foreign keys. Measurements are analyzed by the domain but never stored as direct references. device_id is null when the recommendation targets the whole home. date_time is the business timestamp of generation, created_at is the audit timestamp.</comment>
+
+        <createTable tableName="recommendation">
+            <column name="id_recommendation" type="VARCHAR(10)">
+                <constraints primaryKey="true" primaryKeyName="pk_recommendation" nullable="false"/>
+            </column>
+            <column name="home_id" type="VARCHAR(10)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="device_id" type="VARCHAR(10)"/>
+            <column name="type" type="ENUM('SAVING', 'PEAK_HOURS', 'HIGH_CONSUMPTION', 'HISTORICAL_COMPARISON', 'THRESHOLD')">
+                <constraints nullable="false"/>
+            </column>
+            <column name="message_key" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="date_time" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="ENUM('READ', 'UNREAD')">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <createIndex indexName="idx_recommendation_home_id" tableName="recommendation">
+            <column name="home_id"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex indexName="idx_recommendation_home_id" tableName="recommendation"/>
+            <dropTable tableName="recommendation"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

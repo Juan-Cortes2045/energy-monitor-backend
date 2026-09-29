@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="device-002-create-device" author="JuanCortes2045">
+        <comment>Physical measurement device. installation_date is the business date, created_at is the audit timestamp.</comment>
+
+        <createTable tableName="device">
+            <column name="id_device" type="VARCHAR(10)">
+                <constraints primaryKey="true" primaryKeyName="pk_device" nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="appliance_type_id" type="VARCHAR(10)">
+                <constraints nullable="false"
+                              foreignKeyName="fk_device_appliance_type_id"
+                              references="appliance_type(id_appliance_type)"/>
+            </column>
+            <column name="location" type="VARCHAR(50)"/>
+            <column name="description" type="VARCHAR(200)"/>
+            <column name="installation_date" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="device_code" type="VARCHAR(6)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_device_device_code"/>
+            </column>
+            <column name="api_key" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <rollback>
+            <dropTable tableName="device"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

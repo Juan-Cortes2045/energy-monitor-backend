@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="home-003-create-home-thresholds" author="JuanCortes2045">
+        <comment>Consumption limits of a home, one row per home. Limits are in kWh.</comment>
+
+        <createTable tableName="home_thresholds">
+            <column name="id_threshold" type="VARCHAR(10)">
+                <constraints primaryKey="true" primaryKeyName="pk_home_thresholds" nullable="false"/>
+            </column>
+            <column name="home_id" type="VARCHAR(10)">
+                <constraints nullable="false"
+                              unique="true" uniqueConstraintName="uk_home_thresholds_home_id"
+                              foreignKeyName="fk_home_thresholds_home_id"
+                              references="home(id_home)"/>
+            </column>
+            <column name="daily_limit" type="DOUBLE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="monthly_limit" type="DOUBLE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="use_system_default" type="BOOLEAN">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <rollback>
+            <dropTable tableName="home_thresholds"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

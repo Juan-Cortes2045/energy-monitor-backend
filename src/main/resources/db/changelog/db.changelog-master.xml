@@ -4,6 +4,12 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
-        
+
+        <include file= "security/security-changelog.xml" relativeToChangelogFile="true"/>
+        <include file="home/home-changelog.xml" relativeToChangelogFile="true"/>
+        <include file="device/device-changelog.xml" relativeToChangelogFile="true"/>
+        <include file="measurement/measurement-changelog.xml" relativeToChangelogFile="true"/>
+        <include file="alert/alert-changelog.xml" relativeToChangelogFile="true"/>
+        <include file="recommendation/recommendation-changelog.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
