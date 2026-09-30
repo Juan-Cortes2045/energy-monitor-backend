@@ -5,6 +5,7 @@ import com.energymonitor.security.adapter.out.persistence.entity.SystemRolePermi
 import com.energymonitor.security.adapter.out.persistence.mapper.SystemRolePermissionMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.SystemRolePermissionRepository;
 import com.energymonitor.security.adapter.out.persistence.support.Instants;
+import com.energymonitor.security.application.port.out.SystemRolePermissionPersistencePort;
 import com.energymonitor.security.domain.model.SystemRolePermission;
 import java.util.List;
 import java.util.Optional;
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Component;
  * duplicate.
  */
 @Component
-public class SystemRolePermissionPersistenceAdapter {
+public class SystemRolePermissionPersistenceAdapter implements SystemRolePermissionPersistencePort {
 
     private final SystemRolePermissionRepository repository;
     private final SystemRolePermissionMapper mapper;

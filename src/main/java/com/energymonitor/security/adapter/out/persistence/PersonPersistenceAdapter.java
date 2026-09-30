@@ -3,6 +3,7 @@ package com.energymonitor.security.adapter.out.persistence;
 import com.energymonitor.security.adapter.out.persistence.entity.PersonEntity;
 import com.energymonitor.security.adapter.out.persistence.mapper.PersonMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.PersonRepository;
+import com.energymonitor.security.application.port.out.PersonPersistencePort;
 import com.energymonitor.security.domain.model.Person;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -12,7 +13,7 @@ import org.springframework.stereotype.Component;
  * repository details.
  */
 @Component
-public class PersonPersistenceAdapter {
+public class PersonPersistenceAdapter implements PersonPersistencePort {
 
     private final PersonRepository repository;
     private final PersonMapper mapper;

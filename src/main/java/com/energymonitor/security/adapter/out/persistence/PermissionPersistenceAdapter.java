@@ -3,6 +3,7 @@ package com.energymonitor.security.adapter.out.persistence;
 import com.energymonitor.security.adapter.out.persistence.entity.PermissionEntity;
 import com.energymonitor.security.adapter.out.persistence.mapper.PermissionMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.PermissionRepository;
+import com.energymonitor.security.application.port.out.PermissionPersistencePort;
 import com.energymonitor.security.domain.model.Permission;
 import java.util.List;
 import java.util.Optional;
@@ -12,7 +13,7 @@ import org.springframework.stereotype.Component;
  * Persistence adapter for {@link Permission}.
  */
 @Component
-public class PermissionPersistenceAdapter {
+public class PermissionPersistenceAdapter implements PermissionPersistencePort {
 
     private final PermissionRepository repository;
     private final PermissionMapper mapper;

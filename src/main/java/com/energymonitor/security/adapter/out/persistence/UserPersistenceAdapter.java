@@ -3,6 +3,8 @@ package com.energymonitor.security.adapter.out.persistence;
 import com.energymonitor.security.adapter.out.persistence.entity.UserEntity;
 import com.energymonitor.security.adapter.out.persistence.mapper.UserMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.UserRepository;
+import com.energymonitor.security.application.port.out.UserPersistencePort;
+import com.energymonitor.security.domain.model.Email;
 import com.energymonitor.security.domain.model.User;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -16,7 +18,7 @@ import org.springframework.stereotype.Component;
  * same reuse-by-key behaviour the RBAC assignments rely on.
  */
 @Component
-public class UserPersistenceAdapter {
+public class UserPersistenceAdapter implements UserPersistencePort {
 
     private final UserRepository repository;
     private final UserMapper mapper;
@@ -68,5 +70,10 @@ public class UserPersistenceAdapter {
     public Optional<User> findActiveByEmail(String email) {
         return repository.findByEmailAndDeletedAtIsNull(email)
                 .map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<User> findActiveByEmail(Email email) {
+        return findActiveByEmail(email.value());
     }
 }

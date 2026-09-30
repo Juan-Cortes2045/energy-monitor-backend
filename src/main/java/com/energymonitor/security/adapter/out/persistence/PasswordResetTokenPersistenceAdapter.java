@@ -3,6 +3,7 @@ package com.energymonitor.security.adapter.out.persistence;
 import com.energymonitor.security.adapter.out.persistence.entity.PasswordResetTokenEntity;
 import com.energymonitor.security.adapter.out.persistence.mapper.PasswordResetTokenMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.PasswordResetTokenRepository;
+import com.energymonitor.security.application.port.out.PasswordResetTokenPersistencePort;
 import com.energymonitor.security.domain.model.PasswordResetToken;
 import java.util.List;
 import java.util.Optional;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
  * stale in-memory object.
  */
 @Component
-public class PasswordResetTokenPersistenceAdapter {
+public class PasswordResetTokenPersistenceAdapter implements PasswordResetTokenPersistencePort {
 
     private final PasswordResetTokenRepository repository;
     private final PasswordResetTokenMapper mapper;

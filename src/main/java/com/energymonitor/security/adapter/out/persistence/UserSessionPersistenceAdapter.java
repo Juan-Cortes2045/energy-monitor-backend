@@ -3,6 +3,7 @@ package com.energymonitor.security.adapter.out.persistence;
 import com.energymonitor.security.adapter.out.persistence.entity.UserSessionEntity;
 import com.energymonitor.security.adapter.out.persistence.mapper.UserSessionMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.UserSessionRepository;
+import com.energymonitor.security.application.port.out.UserSessionPersistencePort;
 import com.energymonitor.security.domain.model.UserSession;
 import java.util.List;
 import java.util.Optional;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
  * what the adapter enforces by handing it the stored truth.
  */
 @Component
-public class UserSessionPersistenceAdapter {
+public class UserSessionPersistenceAdapter implements UserSessionPersistencePort {
 
     private final UserSessionRepository repository;
     private final UserSessionMapper mapper;
