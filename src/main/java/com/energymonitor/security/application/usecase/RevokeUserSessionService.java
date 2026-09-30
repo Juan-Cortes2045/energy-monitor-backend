@@ -13,7 +13,19 @@ import java.time.Clock;
 import java.time.Instant;
 
 /**
- * Revokes an authenticated session and records the closure.
+ * Ends an authenticated session and records the event in the audit trail.
+ *
+ * <p>The use case is named after revocation and the domain offers both {@code revoke} and
+ * {@code close}, so the distinction is worth stating: revocation is the security-driven
+ * invalidation of a credential, whereas closing is the ordinary end of a session. Logout is
+ * the ordinary case, so once the session capability work lands this use case is expected to
+ * close the session rather than revoke it, and administrative revocation becomes a separate
+ * concern.
+ *
+ * <p>Until then the session is revoked, which is the conservative direction: a revoked session
+ * is terminal and cannot be resumed, so the interim behaviour cannot leave a usable session
+ * behind. What it does lose is the ability to tell a logout from a compromise when reading the
+ * row later.
  */
 public class RevokeUserSessionService implements RevokeUserSession {
 

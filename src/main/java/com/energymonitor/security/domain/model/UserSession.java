@@ -5,13 +5,71 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Persisted authenticated session of a {@link User}. The revocable unit backing refresh tokens.
+ * Persisted authenticated session of a {@link User}.
  *
  * <p>A session is valid only while it has not been revoked, not been closed and not expired
  * (INV-011). The refresh token value is stored opaquely: nothing about signing it belongs to
  * the domain.
  *
+ * <h2>Revocation and closure are different events</h2>
+ *
+ * <p>Both end the session, and the difference is why, which decides what a later operator can
+ * conclude from the row:
+ *
+ * <ul>
+ *   <li>{@link #revoke()} records a <em>security invalidation</em>: the credential is or may be
+ *       in someone else's hands. Reuse of a superseded refresh token, a password reset, an
+ *       administrative decision or a suspected theft all belong here.</li>
+ *   <li>{@link #close(Instant)} records <em>ordinary termination</em>: the holder walked away.
+ *       Logout is the ordinary case.</li>
+ * </ul>
+ *
+ * <p>They are kept distinct because collapsing them loses the ability to tell, months later,
+ * whether an account was attacked or merely used. A revoked session is terminal and is never
+ * expected to come back; a closed one has simply ended.
+ *
+ * <p>Known limitation, carried into the next step: neither operation records <em>when</em> the
+ * session was revoked or <em>why</em>. {@code revoke()} takes no instant and leaves
+ * {@code closedAt} unset, so today a revocation is distinguishable from a closure only by the
+ * {@code revoked} flag, and an audit reader cannot see the revocation time. Logout currently
+ * calls {@code revoke()} and should call {@code close(Instant)} instead. Both gaps are
+ * deliberately left untouched here and are resolved with the rest of the session capability.
+ *
  * <p>Maps to the {@code user_session} table.
+ *
+ * <h2>Why refresh tokens will move to their own table</h2>
+ *
+ * <p>{@code refreshToken} is a field of this aggregate today, and that is the design decision
+ * this class records for the next step. At present one row is <em>both</em> the session and
+ * the refresh token, which is why rotation cannot be modelled: there is no way to replace the
+ * token while keeping the session, because the session <em>is</em> the token, and a rotated
+ * token would have to become a second session for the same login.
+ *
+ * <p>Rotation also needs to answer a question this structure cannot answer. Given a lineage
+ *
+ * <pre>
+ *   R1 -&gt; R2 -&gt; R3      (one family)
+ * </pre>
+ *
+ * a presentation of {@code R1} after {@code R3} is a theft signal, and answering it requires
+ * knowing that {@code R1} belongs to the same family as the current token. A single row can
+ * only remember its immediate predecessor, so after two rotations the oldest token is
+ * indistinguishable from an expired or a forged one.
+ *
+ * <p>The decision is therefore to keep the session here and move the token lineage into a
+ * separate {@code refresh_token} table that references this one. Each row there carries the
+ * session it belongs to, the family it descends from, and the token that replaced it, which
+ * makes both the current and the superseded token addressable, lets a replay of any ancestor
+ * be recognised, and lets the whole family be revoked in one operation.
+ *
+ * <p>Separating them also keeps the extractability this modular monolith is being shaped for:
+ * session lifetime and token rotation are different concerns with different rates of change,
+ * and a table that owns only the token lineage can move to an authentication service without
+ * dragging session metadata along.
+ *
+ * <p>Nothing of that exists yet. This class still holds a single {@code refreshToken} and the
+ * schema still has one row per session, because the field and the column have to be replaced
+ * together and that replacement belongs with the refresh flow rather than ahead of it.
  */
 public class UserSession {
 
@@ -143,13 +201,27 @@ public class UserSession {
         return !revoked && closedAt == null && !isExpired(now);
     }
 
-    /** Revokes the session. Revocation is terminal. */
+    /**
+     * Revokes the session as a security measure.
+     *
+     * <p>Use this when the credential is or may be compromised: reuse of a superseded refresh
+     * token, a password change or reset, an administrative revocation. Revocation is terminal
+     * and idempotent, and it is deliberately <em>not</em> the operation for an ordinary logout,
+     * which is a {@link #close(Instant)} instead.
+     *
+     * <p>Not recording the instant or the reason is a known gap, deferred to the session
+     * capability work: this method takes no time argument, so an operator reading the row later
+     * cannot tell when the session was revoked or why.
+     */
     public void revoke() {
         this.revoked = true;
     }
 
     /**
-     * Closes the session at the given instant, e.g. on logout.
+     * Closes the session at the given instant, ending it normally.
+     *
+     * <p>Use this for logout and any other voluntary end of use. Closing is not a security
+     * judgement about the credential, which is what separates it from {@link #revoke()}.
      *
      * @param instant closure time
      */

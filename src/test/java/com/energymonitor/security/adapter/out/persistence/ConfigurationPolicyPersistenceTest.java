@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.energymonitor.security.application.port.out.SecurityConfigurationPersistencePort;
+import com.energymonitor.security.application.port.out.UserConfigurationPersistencePort;
 import com.energymonitor.security.domain.model.PasswordPolicy;
 import com.energymonitor.security.domain.model.SecurityConfiguration;
 import com.energymonitor.security.domain.model.UserConfiguration;
@@ -35,8 +37,21 @@ class ConfigurationPolicyPersistenceTest {
     @Autowired
     private SecurityConfigurationPersistenceAdapter securityConfigurations;
 
+    /**
+     * The same adapter resolved by its output port rather than by its concrete class. The
+     * application layer is only able to reach these rows if the port exists and the adapter
+     * declares it, so injecting by interface is the guard against the adapter regressing into
+     * a component with nothing behind it.
+     */
+    @Autowired
+    private SecurityConfigurationPersistencePort securityConfigurationPort;
+
     @Autowired
     private UserConfigurationPersistenceAdapter userConfigurations;
+
+    /** Injected by its output port, for the same inversion guarantee as the system settings. */
+    @Autowired
+    private UserConfigurationPersistencePort userConfigurationPort;
 
     @Autowired
     private PersonPersistenceAdapter persons;
@@ -87,6 +102,41 @@ class ConfigurationPolicyPersistenceTest {
         assertEquals("3", updated.configValue());
         assertEquals("Failed logins allowed before blocking",
                 updated.description().orElseThrow());
+    }
+
+    @Test
+    void securityConfigurationIsReachableThroughItsOutputPort() {
+        securityConfigurationPort.save(
+                new SecurityConfiguration(SESSION_CONFIG_ID, "lockout.max_attempts", "5",
+                        "Failed logins allowed before blocking"));
+        flushAndClear();
+
+        // Read back through the port by the key the application knows it by, which is the shape
+        // the failed-login protection will use.
+        SecurityConfiguration setting =
+                securityConfigurationPort.findActiveByName("lockout.max_attempts").orElseThrow();
+
+        assertEquals("5", setting.configValue());
+        assertEquals(SESSION_CONFIG_ID, setting.idSecurityConfiguration());
+    }
+
+    @Test
+    void securityConfigurationThroughPortReportsMissingKeysRatherThanFailing() {
+        assertTrue(securityConfigurationPort.findActiveByName("no.such.setting").isEmpty());
+    }
+
+    @Test
+    void userConfigurationIsReachableThroughItsOutputPort() {
+        PersistenceFixtures.seedUser(persons, users);
+        userConfigurationPort.save(UserConfiguration.withDefaults(USER_CONFIG_ID, USER_ID));
+        flushAndClear();
+
+        UserConfiguration read =
+                userConfigurationPort.findActiveByUser(USER_ID).orElseThrow();
+
+        assertTrue(read.notifyByEmail());
+        assertTrue(read.notifyByPush());
+        assertTrue(read.socialProvider().isEmpty());
     }
 
     @Test
