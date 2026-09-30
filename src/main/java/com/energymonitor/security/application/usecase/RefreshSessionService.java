@@ -7,7 +7,9 @@ import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.RefreshTokenHasherPort;
 import com.energymonitor.security.application.port.out.RefreshTokenPersistencePort;
 import com.energymonitor.security.application.port.out.TokenGeneratorPort;
+import com.energymonitor.security.application.port.out.UserPersistencePort;
 import com.energymonitor.security.application.port.out.UserSessionPersistencePort;
+import com.energymonitor.security.application.result.AuthenticatedUser;
 import com.energymonitor.security.application.result.RefreshSessionResult;
 import com.energymonitor.security.application.result.RefreshStatus;
 import com.energymonitor.security.domain.model.AuditAction;
@@ -15,6 +17,7 @@ import com.energymonitor.security.domain.model.AuditLog;
 import com.energymonitor.security.domain.model.RefreshToken;
 import com.energymonitor.security.domain.model.RefreshTokenStatus;
 import com.energymonitor.security.domain.model.RevocationReason;
+import com.energymonitor.security.domain.model.User;
 import com.energymonitor.security.domain.model.UserSession;
 import java.time.Clock;
 import java.time.Duration;
@@ -62,6 +65,7 @@ public class RefreshSessionService implements RefreshSession {
 
     private final RefreshTokenPersistencePort tokenPort;
     private final UserSessionPersistencePort sessionPort;
+    private final UserPersistencePort userPort;
     private final RefreshTokenHasherPort hasher;
     private final TokenGeneratorPort secrets;
     private final AuditLogPersistencePort auditLogPort;
@@ -70,11 +74,13 @@ public class RefreshSessionService implements RefreshSession {
 
     public RefreshSessionService(RefreshTokenPersistencePort tokenPort,
                                  UserSessionPersistencePort sessionPort,
+                                 UserPersistencePort userPort,
                                  RefreshTokenHasherPort hasher, TokenGeneratorPort secrets,
                                  AuditLogPersistencePort auditLogPort,
                                  IdentifierGeneratorPort identifiers, Clock clock) {
         this.tokenPort = tokenPort;
         this.sessionPort = sessionPort;
+        this.userPort = userPort;
         this.hasher = hasher;
         this.secrets = secrets;
         this.auditLogPort = auditLogPort;
@@ -88,7 +94,7 @@ public class RefreshSessionService implements RefreshSession {
         Optional<RefreshToken> found =
                 tokenPort.findByTokenHash(hasher.hash(command.rawRefreshToken()));
         if (found.isEmpty()) {
-            return new RefreshSessionResult(RefreshStatus.REJECTED, null, null);
+            return rejected(null);
         }
         RefreshToken presented = found.orElseThrow();
 
@@ -96,16 +102,30 @@ public class RefreshSessionService implements RefreshSession {
             return handleReuse(presented, command, now);
         }
         if (!presented.isUsable(now)) {
-            return new RefreshSessionResult(RefreshStatus.REJECTED, null,
-                    presented.idUserSession());
+            return rejected(presented.idUserSession());
         }
         Optional<UserSession> maybeSession = sessionPort.findActive(presented.idUserSession());
         if (maybeSession.isEmpty()) {
-            return new RefreshSessionResult(RefreshStatus.REJECTED, null, presented.idUserSession());
+            return rejected(presented.idUserSession());
         }
         UserSession session = maybeSession.orElseThrow();
         if (!session.isActive(now)) {
-            return new RefreshSessionResult(RefreshStatus.REJECTED, null, session.idUserSession());
+            return rejected(session.idUserSession());
+        }
+
+        // The account behind the session, resolved here rather than by the caller. This is the
+        // identity the replacement access token is minted from, so it can only ever be the
+        // owner of the session the presented token belongs to.
+        Optional<User> maybeUser = userPort.findActive(session.idUser());
+        if (maybeUser.isEmpty()) {
+            return rejected(session.idUserSession());
+        }
+        User user = maybeUser.orElseThrow();
+        // A blocked or deactivated account keeps neither its access tokens nor its ability to
+        // mint new ones. Without this an administrator's revocation would only stop the next
+        // login while existing sessions went on renewing themselves.
+        if (!user.canAuthenticate()) {
+            return rejected(session.idUserSession());
         }
 
         // Retire the presented generation and mint its successor. Both writes and the session
@@ -122,7 +142,24 @@ public class RefreshSessionService implements RefreshSession {
         auditLogPort.save(new AuditLog(identifiers.generate(), session.idUser(),
                 AuditAction.UPDATE, null, command.ipAddress(), null, now));
 
-        return new RefreshSessionResult(RefreshStatus.ROTATED, rawToken, session.idUserSession());
+        return new RefreshSessionResult(RefreshStatus.ROTATED, rawToken, session.idUserSession(),
+                identityOf(user));
+    }
+
+    /**
+     * Projects the account into the shape the access token is minted from.
+     *
+     * <p>{@code lastLoginAt} is optional on the aggregate and a refresh is never the first
+     * login, but it is carried as absent rather than as a fabricated instant: nothing in the
+     * token depends on it, and inventing a value would put a false fact in a record.
+     */
+    private AuthenticatedUser identityOf(User user) {
+        return new AuthenticatedUser(user.idUser(), user.idPerson(), user.email(),
+                user.status(), user.lastLoginAt().orElse(null));
+    }
+
+    private RefreshSessionResult rejected(String idUserSession) {
+        return new RefreshSessionResult(RefreshStatus.REJECTED, null, idUserSession, null);
     }
 
     /**
@@ -161,6 +198,6 @@ public class RefreshSessionService implements RefreshSession {
                 session.idUser(), AuditAction.LOGIN_FAILED, "refresh token reuse detected",
                 command.ipAddress(), null, now)));
         return new RefreshSessionResult(RefreshStatus.REUSE_DETECTED, null,
-                presented.idUserSession());
+                presented.idUserSession(), null);
     }
 }

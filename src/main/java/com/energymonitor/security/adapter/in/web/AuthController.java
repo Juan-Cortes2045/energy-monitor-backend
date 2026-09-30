@@ -7,19 +7,25 @@ import com.energymonitor.security.adapter.in.web.dto.LoginRequest;
 import com.energymonitor.security.adapter.in.web.dto.LoginResponse;
 import com.energymonitor.security.adapter.in.web.dto.LogoutRequest;
 import com.energymonitor.security.adapter.in.web.dto.MessageResponse;
+import com.energymonitor.security.adapter.in.web.dto.RefreshRequest;
+import com.energymonitor.security.adapter.in.web.dto.RefreshResponse;
 import com.energymonitor.security.adapter.in.web.dto.RegisterRequest;
 import com.energymonitor.security.adapter.in.web.dto.ResetPasswordRequest;
 import com.energymonitor.security.application.command.ChangePasswordCommand;
 import com.energymonitor.security.application.command.CreatePasswordResetTokenCommand;
 import com.energymonitor.security.application.command.RegisterUserCommand;
 import com.energymonitor.security.application.command.ResetPasswordCommand;
-import com.energymonitor.security.application.command.RevokeUserSessionCommand;
+import com.energymonitor.security.application.command.LogoutUserSessionCommand;
+import com.energymonitor.security.application.command.RefreshSessionCommand;
 import com.energymonitor.security.application.exception.UserNotFoundException;
 import com.energymonitor.security.application.port.in.ChangePassword;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
 import com.energymonitor.security.application.port.in.RegisterUser;
 import com.energymonitor.security.application.port.in.ResetPassword;
-import com.energymonitor.security.application.port.in.RevokeUserSession;
+import com.energymonitor.security.application.port.in.LogoutUserSession;
+import com.energymonitor.security.application.port.in.RefreshSession;
+import com.energymonitor.security.application.result.RefreshSessionResult;
+import com.energymonitor.security.infrastructure.JwtTokenIssuer;
 import com.energymonitor.security.infrastructure.SecurityLoginFlow;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -43,16 +49,22 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>The account behind the authenticated endpoints is read from the validated token's
  * subject rather than from the request, so a caller can only ever act on its own account.
  *
- * <h2>Known limitations of this surface</h2>
+ * <h2>Refresh and its transport</h2>
  *
- * <p>Two parts of the authentication flow are deliberately incomplete, and both are recorded
- * here so that reading the code does not suggest otherwise:
+ * <p>{@code POST /refresh} exchanges the secret issued at login for a new access token and a
+ * new secret. The refresh token travels in the request and response bodies, matching
+ * {@code LoginResponse}, and the API therefore carries no cookies and no CSRF tokens: the
+ * credential is sent explicitly by the client rather than attached automatically by the
+ * browser, so there is nothing for a cross-site request to ride on. The trade-off is that the
+ * secret is reachable by client-side code, which makes the client's own storage discipline part
+ * of the security posture. See {@code LoginResponse} for that reasoning in full.
+ *
+ * <h2>Known limitation of this surface</h2>
+ *
+ * <p>One part of the authentication flow is deliberately incomplete, recorded here so that
+ * reading the code does not suggest otherwise:
  *
  * <ul>
- *   <li><strong>No refresh flow.</strong> {@code POST /login} returns a seven-day refresh token
- *       in the response body, but there is no {@code POST /auth/refresh} to exchange it for a
- *       new access token. The token's final transport, and the CSRF posture that follows from
- *       it, are unresolved and are settled together with that endpoint. See {@code LoginResponse}.</li>
  *   <li><strong>Password recovery is not completable.</strong> {@code POST /password/forgot}
  *       persists a reset token that no channel delivers to anyone, so {@code POST /password/reset}
  *       cannot currently be reached by a real user. The missing piece is an outbound
@@ -77,18 +89,23 @@ public class AuthController {
 
     private final RegisterUser registerUser;
     private final SecurityLoginFlow loginFlow;
-    private final RevokeUserSession revokeUserSession;
+    private final LogoutUserSession logoutUserSession;
+    private final RefreshSession refreshSession;
+    private final JwtTokenIssuer tokenIssuer;
     private final CreatePasswordResetToken createPasswordResetToken;
     private final ResetPassword resetPassword;
     private final ChangePassword changePassword;
 
     public AuthController(RegisterUser registerUser, SecurityLoginFlow loginFlow,
-                          RevokeUserSession revokeUserSession,
+                          LogoutUserSession logoutUserSession, RefreshSession refreshSession,
+                          JwtTokenIssuer tokenIssuer,
                           CreatePasswordResetToken createPasswordResetToken,
                           ResetPassword resetPassword, ChangePassword changePassword) {
         this.registerUser = registerUser;
         this.loginFlow = loginFlow;
-        this.revokeUserSession = revokeUserSession;
+        this.logoutUserSession = logoutUserSession;
+        this.refreshSession = refreshSession;
+        this.tokenIssuer = tokenIssuer;
         this.createPasswordResetToken = createPasswordResetToken;
         this.resetPassword = resetPassword;
         this.changePassword = changePassword;
@@ -134,9 +151,47 @@ public class AuthController {
     }
 
     /**
-     * Revokes a session. Requires a valid access token.
+     * Exchanges a refresh token for a new pair of credentials.
      *
-     * @param request       names the session to revoke
+     * <p>Reachable without an access token, which is the whole point: this is what a client
+     * calls once its access token has expired, so requiring one would make it useless exactly
+     * when it is needed.
+     *
+     * <p>The controller does no refresh-token work of its own. It does not look up a
+     * generation, compute a digest, walk a family or decide whether a token was replayed; all
+     * of that belongs to {@link RefreshSession}, and the identity used to sign the new access
+     * token comes back from that use case rather than from a lookup here. That is what makes
+     * the endpoint unable to be pointed at somebody else's account.
+     *
+     * <p>Every failure leaves as the same 401 with the same body. An unknown, expired or revoked
+     * secret and a detected replay are different situations internally, and the difference is
+     * written to the audit trail, but a client learns only that the authentication failed.
+     * Distinguishing them in the response would tell an attacker which tokens are worth
+     * replaying.
+     *
+     * @param request the presented secret
+     * @param servlet used for the caller's address
+     * @return the renewed credentials
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<RefreshResponse> refresh(@Valid @RequestBody RefreshRequest request,
+                                                    HttpServletRequest servlet) {
+        RefreshSessionResult result = refreshSession.refresh(
+                new RefreshSessionCommand(request.refreshToken(), clientIp(servlet)));
+        if (!result.issued()) {
+            throw new AuthenticationRejectedException();
+        }
+        return ResponseEntity.ok(new RefreshResponse(
+                tokenIssuer.issue(result.identity()), result.rawRefreshToken()));
+    }
+
+    /**
+     * Logs out of a session. Requires a valid access token.
+     *
+     * <p>The session is closed, not revoked. Walking away is not a security event, and the row
+     * stays readable as an ordinary departure rather than as a suspected compromise.
+     *
+     * @param request       names the session to close
      * @param authentication the validated caller, whose subject is the account identifier
      * @param servlet       used for the caller's address
      * @return an acknowledgement
@@ -145,7 +200,7 @@ public class AuthController {
     public ResponseEntity<MessageResponse> logout(@Valid @RequestBody LogoutRequest request,
                                                   Authentication authentication,
                                                   HttpServletRequest servlet) {
-        revokeUserSession.revoke(new RevokeUserSessionCommand(request.idUserSession(),
+        logoutUserSession.logout(new LogoutUserSessionCommand(request.idUserSession(),
                 authentication.getName(), clientIp(servlet)));
         return ResponseEntity.ok(new MessageResponse("Session revoked."));
     }

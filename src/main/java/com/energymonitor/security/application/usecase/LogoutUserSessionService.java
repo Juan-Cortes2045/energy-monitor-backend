@@ -1,8 +1,8 @@
 package com.energymonitor.security.application.usecase;
 
-import com.energymonitor.security.application.command.RevokeUserSessionCommand;
+import com.energymonitor.security.application.command.LogoutUserSessionCommand;
 import com.energymonitor.security.application.exception.SessionNotFoundException;
-import com.energymonitor.security.application.port.in.RevokeUserSession;
+import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.UserSessionPersistencePort;
@@ -20,20 +20,18 @@ import java.time.Instant;
  * the holder walking away, revoking is a security invalidation, and collapsing them would make
  * a logout indistinguishable from a compromise when the row is read back during an incident.
  *
- * <p><strong>Naming debt.</strong> The type, the port and the command are still called
- * {@code RevokeUserSession}, which no longer describes what they do. Renaming them would reach
- * {@code AuthController}, which injects the port, and renaming the port is out of scope for the
- * session capability work. Until the controller can move too, the misleading name is kept and
- * this paragraph is the correction.
+ * <p>Nothing here marks the session revoked. A logged-out session is closed and inactive; it
+ * is not evidence of a compromise, and keeping the two apart is what lets an audit tell them
+ * apart later.
  */
-public class RevokeUserSessionService implements RevokeUserSession {
+public class LogoutUserSessionService implements LogoutUserSession {
 
     private final UserSessionPersistencePort sessionPort;
     private final AuditLogPersistencePort auditLogPort;
     private final IdentifierGeneratorPort identifiers;
     private final Clock clock;
 
-    public RevokeUserSessionService(UserSessionPersistencePort sessionPort,
+    public LogoutUserSessionService(UserSessionPersistencePort sessionPort,
                                     AuditLogPersistencePort auditLogPort,
                                     IdentifierGeneratorPort identifiers, Clock clock) {
         this.sessionPort = sessionPort;
@@ -43,7 +41,7 @@ public class RevokeUserSessionService implements RevokeUserSession {
     }
 
     @Override
-    public void revoke(RevokeUserSessionCommand command) {
+    public void logout(LogoutUserSessionCommand command) {
         Instant now = clock.instant();
         UserSession session = sessionPort.findActive(command.idUserSession())
                 .orElseThrow(() -> new SessionNotFoundException("no active session " + command.idUserSession()));

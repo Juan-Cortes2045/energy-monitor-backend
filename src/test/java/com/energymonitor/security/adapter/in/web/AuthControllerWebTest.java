@@ -17,8 +17,9 @@ import com.energymonitor.security.application.exception.UserNotFoundException;
 import com.energymonitor.security.application.port.in.ChangePassword;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
 import com.energymonitor.security.application.port.in.RegisterUser;
+import com.energymonitor.security.application.port.in.RefreshSession;
 import com.energymonitor.security.application.port.in.ResetPassword;
-import com.energymonitor.security.application.port.in.RevokeUserSession;
+import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.result.AuthenticatedUser;
 import com.energymonitor.security.domain.model.Email;
 import com.energymonitor.security.domain.model.PasswordHash;
@@ -64,7 +65,7 @@ class AuthControllerWebTest {
     private SecurityLoginFlow loginFlow;
 
     @MockitoBean
-    private RevokeUserSession revokeUserSession;
+    private LogoutUserSession logoutUserSession;
 
     @MockitoBean
     private CreatePasswordResetToken createPasswordResetToken;
@@ -74,6 +75,9 @@ class AuthControllerWebTest {
 
     @MockitoBean
     private ChangePassword changePassword;
+
+    @MockitoBean
+    private RefreshSession refreshSession;
 
     private static User newAccount() {
         return User.register("USR0000001", "PER0000001", PasswordHash.of("$2a$10$abcdefghij"),
@@ -366,7 +370,7 @@ class AuthControllerWebTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Session revoked."));
 
-        verify(revokeUserSession).revoke(
+        verify(logoutUserSession).logout(
                 org.mockito.ArgumentMatchers.argThat(command ->
                         "SES0000001".equals(command.idUserSession())
                                 && "USR0000001".equals(command.idUser())));
@@ -394,7 +398,7 @@ class AuthControllerWebTest {
                         .content("{\"idUserSession\":\"SES0000001\"}"))
                 .andExpect(status().isUnauthorized());
 
-        verify(revokeUserSession, never()).revoke(any());
+        verify(logoutUserSession, never()).logout(any());
     }
 
     @Test
@@ -409,7 +413,7 @@ class AuthControllerWebTest {
                         .content("{\"idUserSession\":\"SES0000001\"}"))
                 .andExpect(status().isUnauthorized());
 
-        verify(revokeUserSession, never()).revoke(any());
+        verify(logoutUserSession, never()).logout(any());
     }
 
     @Test

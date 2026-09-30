@@ -73,6 +73,26 @@ class RefreshSessionTransactionTest {
     private com.energymonitor.security.adapter.out.persistence.repository.RefreshTokenRepository
             tokenRepository;
 
+    @Autowired
+    private com.energymonitor.security.adapter.out.persistence.repository.UserSessionRepository
+            userSessionRepository;
+
+    @Autowired
+    private com.energymonitor.security.adapter.out.persistence.repository.UserRepository
+            userRepository;
+
+    @Autowired
+    private com.energymonitor.security.adapter.out.persistence.repository.PersonRepository
+            personRepository;
+
+    @Autowired
+    private com.energymonitor.security.adapter.out.persistence.repository.AuditLogRepository
+            auditLogRepository;
+
+    @Autowired
+    private com.energymonitor.security.adapter.out.persistence.repository.LoginErrorLogRepository
+            loginErrorLogRepository;
+
     @MockitoSpyBean
     private RefreshTokenPersistencePort tokenPort;
 
@@ -105,13 +125,25 @@ class RefreshSessionTransactionTest {
 
     @AfterEach
     void cleanUp() {
-        // parent_id is a self-referencing foreign key, so the links are severed before the rows
-        // go: deleting a parent while a child still points at it violates the constraint.
+        // These tests cannot run inside a transaction, because the rollback they assert on is
+        // the one the application opens for itself. That means the rows they commit have to be
+        // removed by hand, in foreign key order, or the database grows a little every run.
+        //
+        // refresh_token is self-referencing, so the links are severed before the rows go:
+        // deleting a parent while a child still points at it violates the constraint.
         tokenRepository.findAll().forEach(token -> {
             token.setParentId(null);
             tokenRepository.save(token);
         });
         tokenRepository.deleteAll();
+        // The flows under test write audit rows attributed to the account, and audit_log points
+        // at user, so they have to go before the account does. Scoped to this test's own
+        // identifiers so nothing another test seeded is removed.
+        loginErrorLogRepository.deleteAll();
+        auditLogRepository.deleteAll();
+        userSessionRepository.deleteById(sessionId);
+        userRepository.deleteById(userId);
+        personRepository.deleteById(personId);
     }
 
     @Test

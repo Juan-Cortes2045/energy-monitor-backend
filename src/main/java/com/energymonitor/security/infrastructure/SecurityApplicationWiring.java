@@ -12,7 +12,7 @@ import com.energymonitor.security.application.port.in.RegisterUser;
 import com.energymonitor.security.application.port.in.RefreshSession;
 import com.energymonitor.security.application.port.in.ResetPassword;
 import com.energymonitor.security.application.port.in.RevokeRole;
-import com.energymonitor.security.application.port.in.RevokeUserSession;
+import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.UpdateUserProfile;
 import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
@@ -42,7 +42,7 @@ import com.energymonitor.security.application.usecase.RegisterUserService;
 import com.energymonitor.security.application.usecase.RefreshSessionService;
 import com.energymonitor.security.application.usecase.ResetPasswordService;
 import com.energymonitor.security.application.usecase.RevokeRoleService;
-import com.energymonitor.security.application.usecase.RevokeUserSessionService;
+import com.energymonitor.security.application.usecase.LogoutUserSessionService;
 import com.energymonitor.security.application.usecase.UpdateUserProfileService;
 import java.time.Clock;
 import org.aopalliance.aop.Advice;
@@ -89,7 +89,7 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
  *   <li>{@link ChangePasswordService} - new hash and the audit trail of the change.</li>
  *   <li>{@link ResetPasswordService} - new hash, token consumption and audit row. Partial
  *       failure would leave the password changed but the token still reusable.</li>
- *   <li>{@link RevokeUserSessionService} - session closure and its logout audit row.</li>
+ *   <li>{@link LogoutUserSessionService} - session closure and its logout audit row.</li>
  *   <li>{@link AssignRoleService} / {@link RevokeRoleService} - assignment and audit row.</li>
  *   <li>{@link ManageUserStatusService} - account state and audit row.</li>
  * </ul>
@@ -255,6 +255,8 @@ public class SecurityApplicationWiring {
      *
      * @param tokens   refresh token storage
      * @param sessions session storage
+     * @param users    account storage, the source of the identity the new access token is
+     *                minted from
      * @param hasher   digest of the presented and issued secrets
      * @param secrets  secure secret generation
      * @param audits   audit trail port
@@ -265,24 +267,25 @@ public class SecurityApplicationWiring {
     @Bean
     public RefreshSession refreshSession(RefreshTokenPersistencePort tokens,
                                          UserSessionPersistencePort sessions,
+                                         UserPersistencePort users,
                                          RefreshTokenHasherPort hasher, TokenGeneratorPort secrets,
                                          AuditLogPersistencePort audits,
                                          IdentifierGeneratorPort identifiers, Clock clock,
                                          PlatformTransactionManager transactions) {
         return transactional(transactions,
-                new RefreshSessionService(tokens, sessions, hasher, secrets, audits, identifiers,
-                        clock),
+                new RefreshSessionService(tokens, sessions, users, hasher, secrets, audits,
+                        identifiers, clock),
                 RefreshSession.class);
     }
 
     @Bean
-    public RevokeUserSession revokeUserSession(UserSessionPersistencePort sessions,
+    public LogoutUserSession logoutUserSession(UserSessionPersistencePort sessions,
                                                AuditLogPersistencePort audits,
                                                IdentifierGeneratorPort identifiers, Clock clock,
                                                PlatformTransactionManager transactions) {
         return transactional(transactions,
-                new RevokeUserSessionService(sessions, audits, identifiers, clock),
-                RevokeUserSession.class);
+                new LogoutUserSessionService(sessions, audits, identifiers, clock),
+                LogoutUserSession.class);
     }
 
     @Bean

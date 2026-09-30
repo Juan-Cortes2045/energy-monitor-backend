@@ -57,7 +57,7 @@ class RefreshSessionServiceTest {
     void setUp() {
         users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
         createSession = new CreateUserSessionService(users, sessions, identifiers, CLOCK);
-        refresh = new RefreshSessionService(tokens, sessions, hasher, secrets, audits,
+        refresh = new RefreshSessionService(tokens, sessions, users, hasher, secrets, audits,
                 identifiers, CLOCK);
     }
 

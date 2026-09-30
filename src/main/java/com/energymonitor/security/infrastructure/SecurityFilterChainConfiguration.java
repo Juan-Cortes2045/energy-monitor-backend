@@ -63,11 +63,13 @@ public class SecurityFilterChainConfiguration {
 
     /**
      * Paths reachable without a token. Registration and login have no caller to authenticate,
-     * and completing a password reset is done with a reset token rather than a session.
+     * completing a password reset is done with a reset token rather than a session, and refresh
+     * is what a client calls precisely when its access token is no longer usable.
      */
     private static final String[] PUBLIC_ENDPOINTS = {
         "/api/v1/auth/register",
         "/api/v1/auth/login",
+        "/api/v1/auth/refresh",
         "/api/v1/auth/password/forgot",
         "/api/v1/auth/password/reset"
     };
