@@ -17,6 +17,17 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
 
+security:
+  jwt:
+    # Required. The application refuses to start without it, so a deployment can never fall
+    # back to a well-known signing key. Supply it through the SECURITY_JWT_SECRET environment
+    # variable, or through application-local.yaml which is not tracked by git.
+    secret: ${SECURITY_JWT_SECRET:}
+    # The iss claim. A URI rather than a bare name, as RFC 7519 expects, and validated on
+    # every incoming token so a token minted for another service is rejected.
+    issuer: https://energy-monitor-backend
+    access-token-ttl: 15m
+
 management:
   endpoints:
     web:
