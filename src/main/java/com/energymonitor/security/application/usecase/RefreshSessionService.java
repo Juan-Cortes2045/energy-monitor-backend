@@ -53,6 +53,28 @@ import java.util.Optional;
  * <p>Expired and revoked tokens are treated differently on purpose. A client that was merely
  * slow is not a security event, and escalating it would revoke the family every time somebody's
  * clock was wrong.
+ *
+ * <h2>Known debt: a family has no size limit</h2>
+ *
+ * <p>Each rotation adds a row and retires the previous one, so a family grows for as long as a
+ * client keeps refreshing: R1, R2, R3, R4 and onwards without a ceiling. Nothing here caps it,
+ * because the project has never defined a maximum, and inventing a number would silently turn a
+ * product decision into an implementation detail. A client that refreshes in a loop therefore
+ * accumulates rows, and a family revocation walks all of them.
+ *
+ * <p>The cost is bounded in practice by the token lifetime, since every generation carries its
+ * own {@code expiresAt}, but nothing reclaims the rows, so the growth is permanent for a login
+ * that is never explicitly closed.
+ *
+ * <p>If a limit is ever agreed, this class is the right place to apply it, and two things are
+ * already in place for it: {@link RefreshTokenPersistencePort#listByFamily(String)} can count
+ * the generations that exist, and the rotation below is the only place a new generation is
+ * created. A policy would also need to decide what happens on reaching it, and that is not
+ * obvious: refusing the refresh ends the session, while revoking the family turns a long-lived
+ * login into a security incident, which is a much stronger response to an ordinary client.
+ *
+ * <p>Recorded as technical debt rather than fixed here, so the decision stays visible and
+ * deliberate instead of appearing later as an unexplained constant.
  */
 public class RefreshSessionService implements RefreshSession {
 

@@ -20,6 +20,7 @@ import com.energymonitor.security.domain.model.RevocationReason;
 import com.energymonitor.security.domain.model.UserSession;
 import com.energymonitor.security.domain.model.UserStatus;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -250,6 +251,81 @@ class RefreshSessionServiceTest {
 
         assertEquals(RefreshStatus.REJECTED, result.status());
         assertEquals(1, tokens.size(), "Nothing may be minted for a closed session");
+    }
+
+    /** A root whose window closed before the pinned clock the service runs on. */
+    private String issueAgedRoot() {
+        UserSession session = openSession();
+        tokens.save(RefreshToken.root("rft0000001", session.idUserSession(),
+                hasher.hash("raiz-vencida"),
+                NOW.minus(Duration.ofDays(30)), NOW.minus(Duration.ofDays(23))));
+        return "raiz-vencida";
+    }
+
+    @Test
+    void anExpiredTokenIsRejectedWithoutIssuingAnything() {
+        String aged = issueAgedRoot();
+
+        RefreshSessionResult result = refresh.refresh(new RefreshSessionCommand(aged, null));
+
+        assertEquals(RefreshStatus.REJECTED, result.status());
+        assertNull(result.rawRefreshToken());
+        assertNull(result.identity());
+        assertEquals(1, tokens.size(), "An expired token must not produce a successor");
+    }
+
+    @Test
+    void anExpiredTokenDoesNotRevokeTheSession() {
+        String aged = issueAgedRoot();
+
+        refresh.refresh(new RefreshSessionCommand(aged, null));
+
+        UserSession session = sessions.findActive("id0000001").orElseThrow();
+        assertFalse(session.isRevoked(), "A slow client is not a compromised one");
+        assertTrue(session.closedAt().isEmpty());
+        assertTrue(session.isActive(NOW), "The session is untouched by an expired token");
+    }
+
+    @Test
+    void anExpiredTokenDoesNotRevokeItsFamily() {
+        String aged = issueAgedRoot();
+
+        refresh.refresh(new RefreshSessionCommand(aged, null));
+
+        assertEquals(1, tokens.size());
+        assertEquals(RefreshTokenStatus.ACTIVE, tokens.findByTokenHash(hasher.hash(aged))
+                .orElseThrow().status(), "Expiry leaves the stored state alone");
+    }
+
+    @Test
+    void anExpiredTokenIsNotEscalatedToAReuseIncident() {
+        String aged = issueAgedRoot();
+
+        RefreshSessionResult result = refresh.refresh(new RefreshSessionCommand(aged, null));
+
+        // Escalating would revoke the family and the session over a lagging clock.
+        assertEquals(RefreshStatus.REJECTED, result.status());
+        assertEquals(0, audits.logs().size(), "A plain expiry is not an audit-worthy event");
+    }
+
+    @Test
+    void aFamilyGrowsWithoutAnyCapBecauseNoPolicyIsDefined() {
+        // Recorded as a technical debt, not endorsed. Nothing in the project states how many
+        // generations a family may have, so no limit is imposed here; a future policy has to
+        // decide both the number and where it is enforced.
+        issueRoot("raiz-1");
+        String current = "raiz-1";
+
+        for (int generation = 2; generation <= 8; generation++) {
+            current = refresh.refresh(new RefreshSessionCommand(current, null)).rawRefreshToken();
+        }
+
+        assertEquals(8, tokens.size(), "Generations accumulate with no ceiling");
+        assertEquals(1, tokens.listByFamily("rft0000001").stream()
+                .filter(token -> token.status() == RefreshTokenStatus.ACTIVE).count(),
+                "Only the newest generation stays active");
+        assertEquals("rft0000001", tokens.findByTokenHash(hasher.hash("raiz-1")).orElseThrow()
+                .familyId(), "Every generation still shares the original family");
     }
 
     @Test

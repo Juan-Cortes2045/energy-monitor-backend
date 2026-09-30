@@ -3,6 +3,7 @@ package com.energymonitor.security.domain.model;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -366,6 +367,81 @@ class RefreshTokenTest {
                     .hasMessageContaining("rotated");
 
             assertThat(token.status()).isEqualTo(RefreshTokenStatus.ROTATED);
+        }
+    }
+
+    @Nested
+    @DisplayName("state machine")
+    class StateMachine {
+
+        /** A token whose window closed before the reference instant. */
+        private RefreshToken aged() {
+            return new RefreshToken(ID, SESSION, ID, null, HASH, RefreshTokenStatus.ACTIVE,
+                    CREATED_AT.minus(Duration.ofDays(30)),
+                    CREATED_AT.minus(Duration.ofDays(23)), null, null, null);
+        }
+
+        @Test
+        @DisplayName("ACTIVE with a window still open is usable")
+        void activeAndNotExpiredIsUsable() {
+            assertThat(root().status()).isEqualTo(RefreshTokenStatus.ACTIVE);
+            assertThat(root().isUsable(LATER)).isTrue();
+        }
+
+        @Test
+        @DisplayName("ACTIVE with a window already closed is not usable")
+        void activeButExpiredIsNotUsable() {
+            assertThat(aged().isUsable(LATER)).isFalse();
+        }
+
+        @Test
+        @DisplayName("an aged-out token keeps its stored status: expiry is derived, not written")
+        void expiryIsDerivedNotPersisted() {
+            // Nothing marks it EXPIRED. Restating what the clock already says would need a job
+            // to keep in step with time, and no behaviour would depend on it.
+            assertThat(aged().status()).isEqualTo(RefreshTokenStatus.ACTIVE);
+            assertThat(aged().isExpired(LATER)).isTrue();
+        }
+
+        @Test
+        @DisplayName("an expired token is not a replay")
+        void expiredIsNotAReplay() {
+            // A client that was slow must not have its family revoked, or every lagging clock
+            // would become a security incident.
+            assertThat(aged().isReplayed()).isFalse();
+        }
+
+        @Test
+        @DisplayName("a retired token is a replay whatever its window says")
+        void rotatedIsReplayedEvenWhileNotExpired() {
+            RefreshToken token = root();
+
+            token.rotate(LATER);
+
+            assertThat(token.isReplayed()).isTrue();
+            assertThat(token.isExpired(LATER)).isFalse();
+        }
+
+        @Test
+        @DisplayName("a revoked token is neither usable nor a replay")
+        void revokedIsInert() {
+            RefreshToken token = root();
+
+            token.revoke(LATER, RevocationReason.ADMINISTRATIVE);
+
+            assertThat(token.isUsable(LATER)).isFalse();
+            assertThat(token.isReplayed()).isFalse();
+        }
+
+        @Test
+        @DisplayName("the four combinations map to the four outcomes")
+        void theMatrixHolds() {
+            // ACTIVE/future -> rotates. ACTIVE/past -> rejected. ROTATED -> replay.
+            // REVOKED -> rejected. Exactly one of the four reaches the rotating path.
+            assertThat(root().isUsable(LATER)).isTrue();
+            assertThat(aged().isUsable(LATER)).isFalse();
+            assertThat(root().isReplayed()).isFalse();
+            assertThat(aged().isReplayed()).isFalse();
         }
     }
 

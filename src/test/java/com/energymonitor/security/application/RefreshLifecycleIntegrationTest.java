@@ -211,6 +211,15 @@ class RefreshLifecycleIntegrationTest {
         assertEquals(RefreshTokenStatus.REVOKED, successor.status());
         assertEquals(RevocationReason.REFRESH_TOKEN_REUSE, successor.revokedReason().orElseThrow());
 
+        // The replayed generation is left as it was. Downgrading it to REVOKED would erase the
+        // very fact that made the replay visible, and the next presentation of it would then
+        // look like a plain revocation instead of a second theft signal.
+        RefreshToken replayed = stored(rootSecret);
+        assertEquals(RefreshTokenStatus.ROTATED, replayed.status(),
+                "A replayed generation must stay recognisable as a replay");
+        assertTrue(replayed.revokedAt().isEmpty());
+        assertTrue(replayed.revokedReason().isEmpty());
+
         UserSession session = sessions.findActive(sessionId).orElseThrow();
         assertTrue(session.isRevoked());
         assertEquals(RevocationReason.REFRESH_TOKEN_REUSE, session.revokedReason().orElseThrow());
@@ -275,6 +284,118 @@ class RefreshLifecycleIntegrationTest {
 
         assertEquals(RefreshStatus.REJECTED, result.status());
         assertNull(result.rawRefreshToken());
+    }
+
+    /**
+     * Plants a root token whose window closed before now.
+     *
+     * <p>Time is controlled by writing the timestamps rather than by moving a clock or waiting:
+     * the service reads the system clock, so a token stored with an expiry in the past is
+     * expired by exactly the same arithmetic production uses, and the test stays instant.
+     */
+    private void replaceRootWithAnAgedToken() {
+        Instant longAgo = Instant.now().minus(Duration.ofDays(30));
+        tokenRepository.deleteAll();
+        tokens.save(RefreshToken.root("rft" + suffix, sessionId,
+                hasher.hash(rootSecret), longAgo, longAgo.plus(Duration.ofDays(7))));
+    }
+
+    @Test
+    void anExpiredTokenIsRefusedAndIssuesNoNewGeneration() {
+        replaceRootWithAnAgedToken();
+
+        var result = refreshSession.refresh(new RefreshSessionCommand(rootSecret, "10.0.0.1"));
+
+        assertEquals(RefreshStatus.REJECTED, result.status());
+        assertNull(result.rawRefreshToken(), "An expired token must not yield a new secret");
+        assertNull(result.identity(), "and must not yield an identity to sign a token with");
+        assertEquals(1, tokens.listByFamily("rft" + suffix).size(),
+                "No successor generation may be created");
+    }
+
+    @Test
+    void anExpiredTokenLeavesTheStoredStateUntouched() {
+        replaceRootWithAnAgedToken();
+
+        refreshSession.refresh(new RefreshSessionCommand(rootSecret, null));
+
+        RefreshToken root = stored(rootSecret);
+        // Expiry is derived from expiresAt, not written: the row still says ACTIVE and nothing
+        // restates what the clock already knows.
+        assertEquals(RefreshTokenStatus.ACTIVE, root.status());
+        assertTrue(root.rotatedAt().isEmpty());
+        assertTrue(root.revokedAt().isEmpty());
+    }
+
+    @Test
+    void anExpiredTokenDoesNotRevokeTheSessionNorItsFamily() {
+        replaceRootWithAnAgedToken();
+
+        refreshSession.refresh(new RefreshSessionCommand(rootSecret, null));
+
+        UserSession session = sessions.findActive(sessionId).orElseThrow();
+        assertFalse(session.isRevoked(), "A slow client is not a compromised one");
+        assertTrue(session.closedAt().isEmpty());
+        assertEquals(0, tokens.listByFamily("rft" + suffix).stream()
+                .filter(token -> token.status() == RefreshTokenStatus.REVOKED).count(),
+                "Expiry must not revoke the family");
+    }
+
+    @Test
+    void anExpiredTokenIsRejectedWithoutAnAuditEntry() {
+        replaceRootWithAnAgedToken();
+
+        refreshSession.refresh(new RefreshSessionCommand(rootSecret, "198.51.100.4"));
+
+        // Reuse and normal rotation are worth recording; a client whose token aged out is not a
+        // security event, and logging it as one would drown the real ones.
+        assertEquals(0, auditLogRepository.count(),
+                "Expiry is a rejection, not an incident");
+    }
+
+    @Test
+    void theSessionLifecycleCombinationsBehaveAsSpecified() {
+        // Active session with a live token: the only combination that rotates.
+        assertTrue(sessions.findActive(sessionId).orElseThrow().isActive(Instant.now()));
+        var firstRotation = refreshSession.refresh(new RefreshSessionCommand(rootSecret, null));
+        assertEquals(RefreshStatus.ROTATED, firstRotation.status());
+
+        // Closed session: rejected, session stays unrevoked. The current generation is presented
+        // rather than the root, because the root was just retired and re-presenting it would be
+        // a replay, which is a different and stronger outcome.
+        logoutUserSession.logout(new LogoutUserSessionCommand(sessionId, userId, "10.0.0.1"));
+        UserSession closed = sessions.findActive(sessionId).orElseThrow();
+        assertTrue(closed.closedAt().isPresent());
+        assertTrue(closed.revokedAt().isEmpty(), "A closed session is not revoked");
+        assertFalse(closed.isRevoked());
+        var afterLogout = refreshSession.refresh(
+                new RefreshSessionCommand(firstRotation.rawRefreshToken(), null));
+        assertEquals(RefreshStatus.REJECTED, afterLogout.status());
+        assertNull(afterLogout.rawRefreshToken());
+        assertNull(afterLogout.identity());
+        assertEquals(1, tokens.listByFamily("rft" + suffix).stream()
+                .filter(token -> token.status() == RefreshTokenStatus.ACTIVE).count(),
+                "The current generation is left active but unusable, and no successor appears");
+    }
+
+    @Test
+    void aBlockedAccountCannotRenewItsSessionEither() {
+        // The same barrier as INACTIVE, checked for both because they are separate statuses and
+        // a change to the activation rule must not fix one and quietly leave the other open.
+        User user = users.findActive(userId).orElseThrow();
+        user.block();
+        users.save(user);
+
+        var result = refreshSession.refresh(new RefreshSessionCommand(rootSecret, null));
+
+        assertEquals(RefreshStatus.REJECTED, result.status());
+        assertNull(result.rawRefreshToken());
+        assertNull(result.identity());
+        assertEquals(1, tokens.listByFamily("rft" + suffix).size(),
+                "A blocked account must not mint a new generation");
+        // The session itself is untouched: the account refusing is not the same fact as the
+        // session being revoked, and conflating them would escalate an ordinary block.
+        assertFalse(sessions.findActive(sessionId).orElseThrow().isRevoked());
     }
 
     @Test

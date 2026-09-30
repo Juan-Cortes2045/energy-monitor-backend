@@ -65,6 +65,20 @@ public class SecurityFilterChainConfiguration {
      * Paths reachable without a token. Registration and login have no caller to authenticate,
      * completing a password reset is done with a reset token rather than a session, and refresh
      * is what a client calls precisely when its access token is no longer usable.
+     *
+     * <p><strong>What "reachable without a token" means.</strong> These paths are exempt from
+     * requiring authentication; they are not exempt from authentication being validated. The
+     * resource server filter still inspects an {@code Authorization: Bearer} header on any
+     * request, including these, and refuses the request with 401 when that token is malformed,
+     * expired or signed with another key. A client calling {@code /api/v1/auth/refresh} must
+     * therefore send the refresh token on its own and omit the stale access token, which is the
+     * shape the endpoint is designed for anyway.
+     *
+     * <p>The alternative, resolving the bearer token to empty for these paths so a stale header
+     * would be ignored, is deliberately not implemented. It would mean treating an invalid
+     * credential as acceptable on every public route, which is a much wider relaxation than
+     * one endpoint needs, and there is no architectural requirement behind it: the refresh
+     * secret is the authority for that call, and the client is told to present only it.
      */
     private static final String[] PUBLIC_ENDPOINTS = {
         "/api/v1/auth/register",

@@ -368,7 +368,7 @@ class AuthControllerWebTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idUserSession\":\"SES0000001\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value("Session revoked."));
+                .andExpect(jsonPath("$.message").value("Session closed."));
 
         verify(logoutUserSession).logout(
                 org.mockito.ArgumentMatchers.argThat(command ->

@@ -202,7 +202,7 @@ public class AuthController {
                                                   HttpServletRequest servlet) {
         logoutUserSession.logout(new LogoutUserSessionCommand(request.idUserSession(),
                 authentication.getName(), clientIp(servlet)));
-        return ResponseEntity.ok(new MessageResponse("Session revoked."));
+        return ResponseEntity.ok(new MessageResponse("Session closed."));
     }
 
     /**
@@ -217,7 +217,8 @@ public class AuthController {
      * would let a caller obtain the token. A user calling this endpoint therefore receives an
      * acknowledgement and no token, and cannot reach {@code POST /password/reset}.
      *
-     * <p>Not returning the token is the correct security decision and is not the defect. Echoing
+     * <p>Not returning
+     * the token is the correct security decision and is not the defect. Echoing
      * it would hand a working credential to whoever asked, turning this endpoint into an
      * account-takeover primitive. The gap is the missing delivery channel, not the absence of
      * the token in this response.
