@@ -18,7 +18,7 @@ class UserSessionTest {
     private static final Instant ONE_HOUR_LATER = CREATED_AT.plusSeconds(3600);
 
     private static UserSession openSession() {
-        return UserSession.open(ID, ID_USER, "refresh-token-opaco", CREATED_AT, EXPIRATION_AT,
+        return UserSession.open(ID, ID_USER, CREATED_AT, EXPIRATION_AT,
                 "192.168.1.10", "Mozilla/5.0");
     }
 
@@ -42,7 +42,6 @@ class UserSessionTest {
             UserSession session = openSession();
 
             assertThat(session.idUser()).isEqualTo(ID_USER);
-            assertThat(session.refreshToken()).isEqualTo("refresh-token-opaco");
             assertThat(session.ipAddress()).contains("192.168.1.10");
             assertThat(session.userAgent()).contains("Mozilla/5.0");
         }
@@ -261,26 +260,15 @@ class UserSessionTest {
     @DisplayName("rotation")
     class Rotation {
 
-        private static final String NEW_TOKEN = "refresh-token-nuevo";
         private static final Instant ROTATED_AT = Instant.parse("2026-04-01T09:00:00Z");
         private static final Instant NEW_EXPIRATION = Instant.parse("2026-04-01T17:00:00Z");
-
-        @Test
-        @DisplayName("replaces the token")
-        void rotatesToken() {
-            UserSession session = openSession();
-
-            session.rotate(NEW_TOKEN, NEW_EXPIRATION, ROTATED_AT);
-
-            assertThat(session.refreshToken()).isEqualTo(NEW_TOKEN);
-        }
 
         @Test
         @DisplayName("replaces the expiration")
         void rotatesExpiration() {
             UserSession session = openSession();
 
-            session.rotate(NEW_TOKEN, NEW_EXPIRATION, ROTATED_AT);
+            session.rotate(NEW_EXPIRATION, ROTATED_AT);
 
             assertThat(session.expirationAt()).isEqualTo(NEW_EXPIRATION);
         }
@@ -290,7 +278,7 @@ class UserSessionTest {
         void keepsIdentity() {
             UserSession session = openSession();
 
-            session.rotate(NEW_TOKEN, NEW_EXPIRATION, ROTATED_AT);
+            session.rotate(NEW_EXPIRATION, ROTATED_AT);
 
             assertThat(session.idUserSession()).isEqualTo(ID);
             assertThat(session).isEqualTo(openSession());
@@ -301,7 +289,7 @@ class UserSessionTest {
         void keepsOwner() {
             UserSession session = openSession();
 
-            session.rotate(NEW_TOKEN, NEW_EXPIRATION, ROTATED_AT);
+            session.rotate(NEW_EXPIRATION, ROTATED_AT);
 
             assertThat(session.idUser()).isEqualTo(ID_USER);
         }
@@ -311,7 +299,7 @@ class UserSessionTest {
         void keepsOriginalCreationInstant() {
             UserSession session = openSession();
 
-            session.rotate(NEW_TOKEN, NEW_EXPIRATION, ROTATED_AT);
+            session.rotate(NEW_EXPIRATION, ROTATED_AT);
 
             // Moving this would make the session's age unrecoverable and would let a client
             // slide the window forward without it being visible.
@@ -323,7 +311,7 @@ class UserSessionTest {
         void keepsClientData() {
             UserSession session = openSession();
 
-            session.rotate(NEW_TOKEN, NEW_EXPIRATION, ROTATED_AT);
+            session.rotate(NEW_EXPIRATION, ROTATED_AT);
 
             assertThat(session.ipAddress()).contains("192.168.1.10");
             assertThat(session.userAgent()).contains("Mozilla/5.0");
@@ -334,7 +322,7 @@ class UserSessionTest {
         void staysActive() {
             UserSession session = openSession();
 
-            session.rotate(NEW_TOKEN, NEW_EXPIRATION, ROTATED_AT);
+            session.rotate(NEW_EXPIRATION, ROTATED_AT);
 
             assertThat(session.isActive(ROTATED_AT)).isTrue();
             assertThat(session.isRevoked()).isFalse();
@@ -347,39 +335,9 @@ class UserSessionTest {
             UserSession session = openSession();
             Instant shorter = Instant.parse("2026-04-01T10:00:00Z");
 
-            session.rotate(NEW_TOKEN, shorter, ROTATED_AT);
+            session.rotate(shorter, ROTATED_AT);
 
             assertThat(session.expirationAt()).isEqualTo(shorter);
-        }
-
-        @Test
-        @DisplayName("refuses a blank token")
-        void refusesBlankToken() {
-            UserSession session = openSession();
-
-            assertThatThrownBy(() -> session.rotate("  ", NEW_EXPIRATION, ROTATED_AT))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("refreshToken");
-        }
-
-        @Test
-        @DisplayName("refuses a null token")
-        void refusesNullToken() {
-            UserSession session = openSession();
-
-            assertThatThrownBy(() -> session.rotate(null, NEW_EXPIRATION, ROTATED_AT))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("refreshToken");
-        }
-
-        @Test
-        @DisplayName("refuses a token wider than the column")
-        void refusesOversizedToken() {
-            UserSession session = openSession();
-
-            assertThatThrownBy(() -> session.rotate("x".repeat(256), NEW_EXPIRATION, ROTATED_AT))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("refreshToken");
         }
 
         @Test
@@ -387,7 +345,7 @@ class UserSessionTest {
         void refusesNullExpiration() {
             UserSession session = openSession();
 
-            assertThatThrownBy(() -> session.rotate(NEW_TOKEN, null, ROTATED_AT))
+            assertThatThrownBy(() -> session.rotate(null, ROTATED_AT))
                     .isInstanceOf(IllegalArgumentException.class);
         }
 
@@ -396,17 +354,17 @@ class UserSessionTest {
         void refusesNullRotatedAt() {
             UserSession session = openSession();
 
-            assertThatThrownBy(() -> session.rotate(NEW_TOKEN, NEW_EXPIRATION, null))
+            assertThatThrownBy(() -> session.rotate(NEW_EXPIRATION, null))
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("createdAt");
+                    .hasMessageContaining("rotatedAt");
         }
 
         @Test
-        @DisplayName("refuses an expiration that is not after the rotation")
+        @DisplayName("refuses a new expiry that is not after the rotation")
         void refusesInvertedNewWindow() {
             UserSession session = openSession();
 
-            assertThatThrownBy(() -> session.rotate(NEW_TOKEN, ROTATED_AT, ROTATED_AT))
+            assertThatThrownBy(() -> session.rotate(ROTATED_AT, ROTATED_AT))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessage("expirationAt must be after createdAt");
         }
@@ -417,7 +375,7 @@ class UserSessionTest {
             UserSession session = openSession();
             session.revoke(CREATED_AT.plusSeconds(60), RevocationReason.REFRESH_TOKEN_REUSE);
 
-            assertThatThrownBy(() -> session.rotate(NEW_TOKEN, NEW_EXPIRATION, ROTATED_AT))
+            assertThatThrownBy(() -> session.rotate(NEW_EXPIRATION, ROTATED_AT))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("revoked");
         }
@@ -428,7 +386,7 @@ class UserSessionTest {
             UserSession session = openSession();
             session.close(CREATED_AT.plusSeconds(60));
 
-            assertThatThrownBy(() -> session.rotate(NEW_TOKEN, NEW_EXPIRATION, ROTATED_AT))
+            assertThatThrownBy(() -> session.rotate(NEW_EXPIRATION, ROTATED_AT))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("closed");
         }
@@ -438,23 +396,21 @@ class UserSessionTest {
         void refusesExpiredSession() {
             UserSession session = openSession();
 
-            // Handing a fresh credential to a login that should be over is exactly what this
-            // guard prevents.
-            assertThatThrownBy(() -> session.rotate(NEW_TOKEN, NEW_EXPIRATION, EXPIRATION_AT))
+            // Sliding the window of a login that should be over is exactly what this guards.
+            assertThatThrownBy(() -> session.rotate(EXPIRATION_AT.plusSeconds(3600), EXPIRATION_AT))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("expired");
         }
 
         @Test
-        @DisplayName("a refused rotation leaves the previous token in place")
-        void refusedRotationKeepsPreviousToken() {
+        @DisplayName("a refused rotation leaves the previous window in place")
+        void refusedRotationKeepsPreviousExpiration() {
             UserSession session = openSession();
             session.close(CREATED_AT.plusSeconds(60));
 
-            assertThatThrownBy(() -> session.rotate(NEW_TOKEN, NEW_EXPIRATION, ROTATED_AT))
+            assertThatThrownBy(() -> session.rotate(NEW_EXPIRATION, ROTATED_AT))
                     .isInstanceOf(IllegalStateException.class);
 
-            assertThat(session.refreshToken()).isEqualTo("refresh-token-opaco");
             assertThat(session.expirationAt()).isEqualTo(EXPIRATION_AT);
         }
     }
@@ -516,7 +472,7 @@ class UserSessionTest {
     @Test
     @DisplayName("refuses an expiration that is not after the creation")
     void refusesInvertedWindow() {
-        assertThatThrownBy(() -> UserSession.open(ID, ID_USER, "token", EXPIRATION_AT, CREATED_AT, null, null))
+        assertThatThrownBy(() -> UserSession.open(ID, ID_USER, EXPIRATION_AT, CREATED_AT, null, null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("expirationAt must be after createdAt");
     }
@@ -524,7 +480,7 @@ class UserSessionTest {
     @Test
     @DisplayName("refuses a window whose ends coincide")
     void refusesEmptyWindow() {
-        assertThatThrownBy(() -> UserSession.open(ID, ID_USER, "token", CREATED_AT, CREATED_AT, null, null))
+        assertThatThrownBy(() -> UserSession.open(ID, ID_USER, CREATED_AT, CREATED_AT, null, null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("expirationAt must be after createdAt");
     }
@@ -532,7 +488,7 @@ class UserSessionTest {
     @Test
     @DisplayName("rehydrating enforces the same window as opening")
     void rehydrationEnforcesTheSameWindow() {
-        assertThatThrownBy(() -> new UserSession(ID, ID_USER, "token", EXPIRATION_AT, CREATED_AT,
+        assertThatThrownBy(() -> new UserSession(ID, ID_USER, EXPIRATION_AT, CREATED_AT,
                 null, null, false, null, null, null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("expirationAt must be after createdAt");
@@ -541,7 +497,7 @@ class UserSessionTest {
     @Test
     @DisplayName("a session is expired the moment it is created when the window is minimal")
     void minimalWindowIsStillValidState() {
-        UserSession session = UserSession.open(ID, ID_USER, "token", CREATED_AT,
+        UserSession session = UserSession.open(ID, ID_USER, CREATED_AT,
                 CREATED_AT.plusSeconds(1), null, null);
 
         assertThat(session.isActive(CREATED_AT)).isTrue();
@@ -549,17 +505,9 @@ class UserSessionTest {
     }
 
     @Test
-    @DisplayName("refuses a blank refresh token")
-    void refusesBlankRefreshToken() {
-        assertThatThrownBy(() -> UserSession.open(ID, ID_USER, "  ", CREATED_AT, EXPIRATION_AT, null, null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("refreshToken");
-    }
-
-    @Test
     @DisplayName("client data may be absent")
     void clientDataIsOptional() {
-        UserSession session = UserSession.open(ID, ID_USER, "token", CREATED_AT, EXPIRATION_AT, null, null);
+        UserSession session = UserSession.open(ID, ID_USER, CREATED_AT, EXPIRATION_AT, null, null);
 
         assertThat(session.ipAddress()).isEmpty();
         assertThat(session.userAgent()).isEmpty();
@@ -570,7 +518,7 @@ class UserSessionTest {
     @DisplayName("identity is the session identifier")
     void equalityIsByIdentifier() {
         UserSession one = openSession();
-        UserSession other = new UserSession(ID, "USR9999999", "otro-token", CREATED_AT, EXPIRATION_AT,
+        UserSession other = new UserSession(ID, "USR9999999", CREATED_AT, EXPIRATION_AT,
                 null, null, false, null, null, null);
 
         assertThat(one).isEqualTo(other).hasSameHashCodeAs(other);

@@ -39,7 +39,7 @@ class UserSessionServiceTest {
     private final UseCaseFixtures.FakeAuditLogPersistencePort audits =
             new UseCaseFixtures.FakeAuditLogPersistencePort();
     private final CreateUserSessionService createSession =
-            new CreateUserSessionService(users, sessions, tokenGenerator, identifiers, CLOCK);
+            new CreateUserSessionService(users, sessions, identifiers, CLOCK);
     private final RevokeUserSessionService revokeSession =
             new RevokeUserSessionService(sessions, audits, identifiers, CLOCK);
 
@@ -51,7 +51,6 @@ class UserSessionServiceTest {
                 new CreateUserSessionCommand("use0000001", "10.0.0.9", "test-agent"));
 
         assertTrue(session.isActive(CLOCK.instant()));
-        assertFalse(session.refreshToken().isBlank());
         assertEquals(CLOCK.instant().plus(Duration.ofDays(7)), session.expirationAt());
         assertEquals("10.0.0.9", session.ipAddress().orElseThrow());
     }

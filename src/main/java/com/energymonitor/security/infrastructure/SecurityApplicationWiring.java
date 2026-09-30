@@ -9,6 +9,7 @@ import com.energymonitor.security.application.port.in.CreateUserSession;
 import com.energymonitor.security.application.port.in.FindUser;
 import com.energymonitor.security.application.port.in.ManageUserStatus;
 import com.energymonitor.security.application.port.in.RegisterUser;
+import com.energymonitor.security.application.port.in.RefreshSession;
 import com.energymonitor.security.application.port.in.ResetPassword;
 import com.energymonitor.security.application.port.in.RevokeRole;
 import com.energymonitor.security.application.port.in.RevokeUserSession;
@@ -17,6 +18,8 @@ import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.LoginErrorLogPersistencePort;
 import com.energymonitor.security.application.port.out.PasswordHasherPort;
+import com.energymonitor.security.application.port.out.RefreshTokenHasherPort;
+import com.energymonitor.security.application.port.out.RefreshTokenPersistencePort;
 import com.energymonitor.security.application.port.out.PasswordPolicyPersistencePort;
 import com.energymonitor.security.application.port.out.PasswordResetTokenPersistencePort;
 import com.energymonitor.security.application.port.out.PermissionPersistencePort;
@@ -36,6 +39,7 @@ import com.energymonitor.security.application.usecase.CreateUserSessionService;
 import com.energymonitor.security.application.usecase.FindUserService;
 import com.energymonitor.security.application.usecase.ManageUserStatusService;
 import com.energymonitor.security.application.usecase.RegisterUserService;
+import com.energymonitor.security.application.usecase.RefreshSessionService;
 import com.energymonitor.security.application.usecase.ResetPasswordService;
 import com.energymonitor.security.application.usecase.RevokeRoleService;
 import com.energymonitor.security.application.usecase.RevokeUserSessionService;
@@ -239,9 +243,36 @@ public class SecurityApplicationWiring {
     @Bean
     public CreateUserSession createUserSession(UserPersistencePort users,
                                                UserSessionPersistencePort sessions,
-                                               TokenGeneratorPort tokenGenerator,
                                                IdentifierGeneratorPort identifiers, Clock clock) {
-        return new CreateUserSessionService(users, sessions, tokenGenerator, identifiers, clock);
+        return new CreateUserSessionService(users, sessions, identifiers, clock);
+    }
+
+    /**
+     * Rotates a refresh token. Transactional because a rotation writes the retired generation,
+     * its replacement and the session slide together, and a partial application would either
+     * retire a token without handing out its successor or leave two active generations in one
+     * family.
+     *
+     * @param tokens   refresh token storage
+     * @param sessions session storage
+     * @param hasher   digest of the presented and issued secrets
+     * @param secrets  secure secret generation
+     * @param audits   audit trail port
+     * @param identifiers identifier port
+     * @param clock    time source
+     * @return the use case behind a transaction proxy
+     */
+    @Bean
+    public RefreshSession refreshSession(RefreshTokenPersistencePort tokens,
+                                         UserSessionPersistencePort sessions,
+                                         RefreshTokenHasherPort hasher, TokenGeneratorPort secrets,
+                                         AuditLogPersistencePort audits,
+                                         IdentifierGeneratorPort identifiers, Clock clock,
+                                         PlatformTransactionManager transactions) {
+        return transactional(transactions,
+                new RefreshSessionService(tokens, sessions, hasher, secrets, audits, identifiers,
+                        clock),
+                RefreshSession.class);
     }
 
     @Bean

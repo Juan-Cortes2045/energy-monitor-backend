@@ -80,13 +80,11 @@ import java.util.Optional;
  */
 public class UserSession {
 
-    private static final int REFRESH_TOKEN_MAX = 255;
     private static final int IP_ADDRESS_MAX = 45;
     private static final int USER_AGENT_MAX = 150;
 
     private final String idUserSession;
     private final String idUser;
-    private String refreshToken;
     private final Instant createdAt;
     private Instant expirationAt;
     private final String ipAddress;
@@ -106,7 +104,6 @@ public class UserSession {
      *
      * @param idUserSession identifier, {@code VARCHAR(10)}
      * @param idUser        owning user
-     * @param refreshToken  opaque refresh token value
      * @param createdAt     session start
      * @param expirationAt  session expiry
      * @param ipAddress     optional client IP
@@ -117,13 +114,12 @@ public class UserSession {
      * @param closedAt      closure instant, {@code null} while open
      * @throws IllegalStateException if the expiration is not after the creation
      */
-    public UserSession(String idUserSession, String idUser, String refreshToken,
+    public UserSession(String idUserSession, String idUser,
                        Instant createdAt, Instant expirationAt, String ipAddress,
                        String userAgent, boolean revoked, Instant revokedAt,
                        RevocationReason revokedReason, Instant closedAt) {
         this.idUserSession = Preconditions.text(idUserSession, "idUserSession");
         this.idUser = Preconditions.text(idUser, "idUser");
-        this.refreshToken = Preconditions.text(refreshToken, REFRESH_TOKEN_MAX, "refreshToken");
         this.createdAt = Preconditions.notNull(createdAt, "createdAt");
         this.expirationAt = Preconditions.notNull(expirationAt, "expirationAt");
         Preconditions.expirationAfter(createdAt, expirationAt);
@@ -140,7 +136,6 @@ public class UserSession {
      *
      * @param idUserSession identifier
      * @param idUser        owning user
-     * @param refreshToken  opaque refresh token
      * @param createdAt     session start
      * @param expirationAt  session expiry
      * @param ipAddress     optional client IP
@@ -148,10 +143,10 @@ public class UserSession {
      * @return a fresh, open session
      * @throws IllegalStateException if the expiration is not after the creation
      */
-    public static UserSession open(String idUserSession, String idUser, String refreshToken,
+    public static UserSession open(String idUserSession, String idUser,
                                    Instant createdAt, Instant expirationAt, String ipAddress,
                                    String userAgent) {
-        return new UserSession(idUserSession, idUser, refreshToken, createdAt, expirationAt,
+        return new UserSession(idUserSession, idUser, createdAt, expirationAt,
                 ipAddress, userAgent, false, null, null, null);
     }
 
@@ -163,11 +158,6 @@ public class UserSession {
     /** @return owning user identifier */
     public String idUser() {
         return idUser;
-    }
-
-    /** @return the opaque refresh token value */
-    public String refreshToken() {
-        return refreshToken;
     }
 
     /** @return session start instant */
@@ -233,42 +223,42 @@ public class UserSession {
     }
 
     /**
-     * Replaces the refresh token, keeping the same session.
+     * Slides the session window forward because its credential was rotated.
      *
-     * <p>Rotation changes only the credential and its expiry. The session identity, the owning
-     * user, the original creation instant and the recorded client data are untouched, so a
-     * rotation is invisible as far as "which login is this" is concerned. That separation is
-     * the point: the session is the login, the token is a renewable secret hanging off it, and
-     * rotating the secret must not mint a second login.
+     * <p>The session no longer stores a secret, so there is nothing here to replace: rotating a
+     * refresh token is recorded on {@link RefreshToken}, and what the session does is move its
+     * own expiry so the login stays alive alongside the new generation. Identity, owner,
+     * creation instant and client data are all untouched, which is the separation the
+     * {@code RefreshToken} aggregate exists to express: the secret changes, the login does not.
      *
-     * <p>The original {@code createdAt} is deliberately left alone rather than moved to the
-     * rotation instant. A session that has been rotating for three weeks did not start three
-     * weeks ago, and overwriting the creation instant would make the session's own age
-     * unrecoverable and would let a client extend a session indefinitely without that being
-     * visible anywhere.
+     * <p>The original {@code createdAt} is deliberately left alone rather than moved forward.
+     * A session that has been rotating for three weeks did not start three weeks ago, and
+     * overwriting the creation instant would make the session's own age unrecoverable and would
+     * let a client extend the window indefinitely without it being visible anywhere.
      *
-     * <p>The new window is validated as {@code (rotatedAt, newExpiration)}, the same rule the
-     * constructor applies to {@code (createdAt, expirationAt)}: a token that expires at or
-     * before the moment it was issued is not a valid object. Since {@code rotatedAt} is not
-     * before {@code createdAt} in normal use, that also keeps the aggregate's own
-     * {@code expirationAt > createdAt} invariant true.
+     * <p>Only a live session may be extended. A revoked, closed or expired one is refused
+     * rather than resurrected: this is how an active login stays active, and allowing it on a
+     * dead session would hand out a fresh window for a login that should be over.
      *
-     * <p>Only an active session may rotate. A revoked, closed or expired session is refused
-     * rather than resurrected: rotation is how a live login stays alive, and allowing it on a
-     * dead session would hand out a fresh seven-day credential for a login that should be over.
+     * <p>Arguments are validated before state, matching the rest of the domain: a null or
+     * impossible instant is a caller mistake, and reporting it is more useful than reporting
+     * the state.
      *
-     * <p>Arguments are validated before state, matching the rest of the domain: a null or blank
-     * token is a caller mistake, and reporting it is more useful than reporting the state.
+     * <p>The reference instant is a parameter rather than a clock call because the domain holds
+     * no clock, and because the caller has to state when the rotation happens anyway. It is
+     * used to decide whether the session is still alive and to check that the new window lies
+     * in the future; it is not stored, because the instant of the rotation belongs to
+     * {@link RefreshToken}, which is where the new generation is recorded.
      *
-     * @param newToken     the replacement token value, which the caller has already generated
-     * @param newExpiration when the replacement stops being valid
-     * @param rotatedAt     when the replacement was issued
-     * @throws IllegalArgumentException if the token is null or blank, or an instant is null,
-     *                                  or the new window is not strictly forward
-     * @throws IllegalStateException    if the session is revoked, closed or expired
+     * @param newExpiration when the session now stops being valid, strictly after the rotation
+     * @param rotatedAt     the reference instant of the rotation
+     * @throws IllegalArgumentException if either instant is null
+     * @throws IllegalStateException    if the new window is not strictly forward, or if the
+     *                                  session is revoked, closed or already expired
      */
-    public void rotate(String newToken, Instant newExpiration, Instant rotatedAt) {
-        Preconditions.text(newToken, REFRESH_TOKEN_MAX, "refreshToken");
+    public void rotate(Instant newExpiration, Instant rotatedAt) {
+        Preconditions.notNull(newExpiration, "newExpiration");
+        Preconditions.notNull(rotatedAt, "rotatedAt");
         Preconditions.expirationAfter(rotatedAt, newExpiration);
         if (revoked) {
             throw new IllegalStateException("a revoked session cannot be rotated");
@@ -279,7 +269,6 @@ public class UserSession {
         if (isExpired(rotatedAt)) {
             throw new IllegalStateException("an expired session cannot be rotated");
         }
-        this.refreshToken = newToken;
         this.expirationAt = newExpiration;
     }
 

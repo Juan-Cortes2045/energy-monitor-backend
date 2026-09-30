@@ -240,13 +240,6 @@ public final class UseCaseFixtures {
         }
 
         @Override
-        public Optional<UserSession> findActiveByRefreshToken(String refreshToken) {
-            return byId.values().stream()
-                    .filter(session -> session.refreshToken().equals(refreshToken))
-                    .findFirst();
-        }
-
-        @Override
         public List<UserSession> listActiveByUser(String idUser) {
             return byId.values().stream()
                     .filter(session -> session.idUser().equals(idUser))

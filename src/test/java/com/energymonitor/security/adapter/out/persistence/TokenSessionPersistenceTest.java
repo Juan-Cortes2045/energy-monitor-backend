@@ -83,11 +83,10 @@ class TokenSessionPersistenceTest {
     @Test
     void openSessionRoundTripsAndKeepAllFieldsOnReload() {
         PersistenceFixtures.seedUser(persons, users);
-        userSessions.save(UserSession.open(SESSION_ID, USER_ID, REFRESH_TOKEN,
-                OPENED_AT, EXPIRES_AT, null, null));
+        userSessions.save(UserSession.open(SESSION_ID, USER_ID, OPENED_AT, EXPIRES_AT, null, null));
         flushAndClear();
 
-        UserSession read = userSessions.findActiveByRefreshToken(REFRESH_TOKEN).orElseThrow();
+        UserSession read = userSessions.findActive(SESSION_ID).orElseThrow();
         assertEquals(SESSION_ID, read.idUserSession());
         assertEquals(USER_ID, read.idUser());
         assertEquals(OPENED_AT, read.createdAt());
@@ -101,7 +100,7 @@ class TokenSessionPersistenceTest {
     @Test
     void closedSessionKeepsRevokedFlagAndClosureInstant() {
         PersistenceFixtures.seedUser(persons, users);
-        UserSession session = UserSession.open(SESSION_ID, USER_ID, REFRESH_TOKEN,
+        UserSession session = UserSession.open(SESSION_ID, USER_ID,
                 OPENED_AT, EXPIRES_AT, "192.168.1.10", "test-agent");
         session.revoke(OPENED_AT.plusSeconds(120), RevocationReason.PASSWORD_CHANGED);
         session.close(CLOSED_AT);
@@ -117,20 +116,37 @@ class TokenSessionPersistenceTest {
     }
 
     @Test
-    void rotatedSessionKeepsItsIdentityAndWritesTheNewCredential() {
+    void revokedSessionRoundTripsInstantAndReason() {
         PersistenceFixtures.seedUser(persons, users);
-        UserSession session = UserSession.open(SESSION_ID, USER_ID, REFRESH_TOKEN,
+        UserSession session = UserSession.open(SESSION_ID, USER_ID,
                 OPENED_AT, EXPIRES_AT, "192.168.1.10", "test-agent");
-        Instant rotatedAt = OPENED_AT.plusSeconds(3600);
-        Instant newExpiration = EXPIRES_AT.plus(Duration.ofDays(7));
-        session.rotate("refresh-token-rotado", newExpiration, rotatedAt);
+        Instant revokedAt = OPENED_AT.plusSeconds(300);
+        session.revoke(revokedAt, RevocationReason.REFRESH_TOKEN_REUSE);
         userSessions.save(session);
         flushAndClear();
 
         UserSession read = userSessions.findActive(SESSION_ID).orElseThrow();
-        assertEquals("refresh-token-rotado", read.refreshToken());
+        assertTrue(read.isRevoked());
+        assertEquals(revokedAt, read.revokedAt().orElseThrow());
+        assertEquals(RevocationReason.REFRESH_TOKEN_REUSE, read.revokedReason().orElseThrow());
+        // Revoking is not closing: the two stay distinguishable in the row.
+        assertTrue(read.closedAt().isEmpty());
+    }
+
+    @Test
+    void rotatedSessionKeepsItsIdentityAndSlidesOnlyTheWindow() {
+        PersistenceFixtures.seedUser(persons, users);
+        UserSession session = UserSession.open(SESSION_ID, USER_ID,
+                OPENED_AT, EXPIRES_AT, "192.168.1.10", "test-agent");
+        Instant rotatedAt = OPENED_AT.plusSeconds(3600);
+        Instant newExpiration = EXPIRES_AT.plus(Duration.ofDays(7));
+        session.rotate(newExpiration, rotatedAt);
+        userSessions.save(session);
+        flushAndClear();
+
+        UserSession read = userSessions.findActive(SESSION_ID).orElseThrow();
         assertEquals(Instants.truncate(newExpiration), read.expirationAt());
-        // Rotation replaces the credential, never the login it belongs to.
+        // Rotation slides the login, never replaces it: no second session is created.
         assertEquals(SESSION_ID, read.idUserSession());
         assertEquals(USER_ID, read.idUser());
         assertEquals(OPENED_AT, read.createdAt());
