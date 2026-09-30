@@ -15,17 +15,16 @@ import java.time.Instant;
 /**
  * Ends an authenticated session and records the event in the audit trail.
  *
- * <p>The use case is named after revocation and the domain offers both {@code revoke} and
- * {@code close}, so the distinction is worth stating: revocation is the security-driven
- * invalidation of a credential, whereas closing is the ordinary end of a session. Logout is
- * the ordinary case, so once the session capability work lands this use case is expected to
- * close the session rather than revoke it, and administrative revocation becomes a separate
- * concern.
+ * <p>This use case backs {@code POST /auth/logout}, so it is the ordinary end of a session and
+ * it closes rather than revokes. The domain separates the two events deliberately: closing is
+ * the holder walking away, revoking is a security invalidation, and collapsing them would make
+ * a logout indistinguishable from a compromise when the row is read back during an incident.
  *
- * <p>Until then the session is revoked, which is the conservative direction: a revoked session
- * is terminal and cannot be resumed, so the interim behaviour cannot leave a usable session
- * behind. What it does lose is the ability to tell a logout from a compromise when reading the
- * row later.
+ * <p><strong>Naming debt.</strong> The type, the port and the command are still called
+ * {@code RevokeUserSession}, which no longer describes what they do. Renaming them would reach
+ * {@code AuthController}, which injects the port, and renaming the port is out of scope for the
+ * session capability work. Until the controller can move too, the misleading name is kept and
+ * this paragraph is the correction.
  */
 public class RevokeUserSessionService implements RevokeUserSession {
 
@@ -48,7 +47,9 @@ public class RevokeUserSessionService implements RevokeUserSession {
         Instant now = clock.instant();
         UserSession session = sessionPort.findActive(command.idUserSession())
                 .orElseThrow(() -> new SessionNotFoundException("no active session " + command.idUserSession()));
-        session.revoke();
+        // Logout is an ordinary termination, so the session is closed. It stays unrevoked, which
+        // is the whole point of the distinction: this is not a security event.
+        session.close(now);
         sessionPort.save(session);
         auditLogPort.save(new AuditLog(identifiers.generate(), session.idUser(), AuditAction.LOGOUT,
                 null, command.ipAddress(), null, now));

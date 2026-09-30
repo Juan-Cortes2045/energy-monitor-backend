@@ -26,14 +26,21 @@ import java.util.Optional;
  *
  * <p>They are kept distinct because collapsing them loses the ability to tell, months later,
  * whether an account was attacked or merely used. A revoked session is terminal and is never
- * expected to come back; a closed one has simply ended.
+ * expected to come back; a closed one has simply ended. Neither operation converts into the
+ * other: closing never marks a session as compromised, and revoking never stamps a departure
+ * time.
  *
- * <p>Known limitation, carried into the next step: neither operation records <em>when</em> the
- * session was revoked or <em>why</em>. {@code revoke()} takes no instant and leaves
- * {@code closedAt} unset, so today a revocation is distinguishable from a closure only by the
- * {@code revoked} flag, and an audit reader cannot see the revocation time. Logout currently
- * calls {@code revoke()} and should call {@code close(Instant)} instead. Both gaps are
- * deliberately left untouched here and are resolved with the rest of the session capability.
+ * <p>Both record the first event and ignore later ones, so the instant recorded is the instant
+ * the fact became true.
+ *
+ * <p><strong>Known limitation, carried into the next step:</strong> {@code revokedAt} and
+ * {@code revokedReason} exist in the domain but have no column to live in, because adding one
+ * requires a Liquibase change that belongs with the refresh-token migration. A session rehydrated
+ * from the database therefore always comes back with an empty revocation instant and reason,
+ * even when the {@code revoked} flag is set. Nothing exercises that gap today, because the only
+ * production caller of revocation is being switched to {@code close()} by the session capability
+ * work, and the flows that revoke (password change, token reuse) arrive later. The columns must
+ * land before any of those flows reaches the database.
  *
  * <p>Maps to the {@code user_session} table.
  *
@@ -79,15 +86,24 @@ public class UserSession {
 
     private final String idUserSession;
     private final String idUser;
-    private final String refreshToken;
+    private String refreshToken;
     private final Instant createdAt;
-    private final Instant expirationAt;
+    private Instant expirationAt;
     private final String ipAddress;
     private final String userAgent;
     private boolean revoked;
+    private Instant revokedAt;
+    private RevocationReason revokedReason;
     private Instant closedAt;
 
     /**
+     * Rehydrates a stored session.
+     *
+     * <p>Revocation and closure are restored independently, so a session that was both revoked
+     * and closed keeps both facts. A row that claims to be revoked without an instant is
+     * accepted: the column pair does not exist yet in the schema, so older rows and rows
+     * written before revocation was timestamped legitimately carry the flag alone.
+     *
      * @param idUserSession identifier, {@code VARCHAR(10)}
      * @param idUser        owning user
      * @param refreshToken  opaque refresh token value
@@ -96,12 +112,15 @@ public class UserSession {
      * @param ipAddress     optional client IP
      * @param userAgent     optional client agent
      * @param revoked       whether it was already revoked
+     * @param revokedAt     when it was revoked, {@code null} when not revoked or not yet recorded
+     * @param revokedReason why it was revoked, {@code null} when not revoked or not yet recorded
      * @param closedAt      closure instant, {@code null} while open
      * @throws IllegalStateException if the expiration is not after the creation
      */
     public UserSession(String idUserSession, String idUser, String refreshToken,
                        Instant createdAt, Instant expirationAt, String ipAddress,
-                       String userAgent, boolean revoked, Instant closedAt) {
+                       String userAgent, boolean revoked, Instant revokedAt,
+                       RevocationReason revokedReason, Instant closedAt) {
         this.idUserSession = Preconditions.text(idUserSession, "idUserSession");
         this.idUser = Preconditions.text(idUser, "idUser");
         this.refreshToken = Preconditions.text(refreshToken, REFRESH_TOKEN_MAX, "refreshToken");
@@ -111,6 +130,8 @@ public class UserSession {
         this.ipAddress = Preconditions.optionalText(ipAddress, IP_ADDRESS_MAX, "ipAddress");
         this.userAgent = Preconditions.optionalText(userAgent, USER_AGENT_MAX, "userAgent");
         this.revoked = revoked;
+        this.revokedAt = revokedAt;
+        this.revokedReason = revokedReason;
         this.closedAt = closedAt;
     }
 
@@ -131,7 +152,7 @@ public class UserSession {
                                    Instant createdAt, Instant expirationAt, String ipAddress,
                                    String userAgent) {
         return new UserSession(idUserSession, idUser, refreshToken, createdAt, expirationAt,
-                ipAddress, userAgent, false, null);
+                ipAddress, userAgent, false, null, null, null);
     }
 
     /** @return the identifier */
@@ -174,6 +195,16 @@ public class UserSession {
         return revoked;
     }
 
+    /** @return when it was revoked, empty when not revoked or not yet recorded */
+    public Optional<Instant> revokedAt() {
+        return Optional.ofNullable(revokedAt);
+    }
+
+    /** @return why it was revoked, empty when not revoked or not yet recorded */
+    public Optional<RevocationReason> revokedReason() {
+        return Optional.ofNullable(revokedReason);
+    }
+
     /** @return closure instant, empty while the session is open */
     public Optional<Instant> closedAt() {
         return Optional.ofNullable(closedAt);
@@ -202,31 +233,111 @@ public class UserSession {
     }
 
     /**
-     * Revokes the session as a security measure.
+     * Replaces the refresh token, keeping the same session.
+     *
+     * <p>Rotation changes only the credential and its expiry. The session identity, the owning
+     * user, the original creation instant and the recorded client data are untouched, so a
+     * rotation is invisible as far as "which login is this" is concerned. That separation is
+     * the point: the session is the login, the token is a renewable secret hanging off it, and
+     * rotating the secret must not mint a second login.
+     *
+     * <p>The original {@code createdAt} is deliberately left alone rather than moved to the
+     * rotation instant. A session that has been rotating for three weeks did not start three
+     * weeks ago, and overwriting the creation instant would make the session's own age
+     * unrecoverable and would let a client extend a session indefinitely without that being
+     * visible anywhere.
+     *
+     * <p>The new window is validated as {@code (rotatedAt, newExpiration)}, the same rule the
+     * constructor applies to {@code (createdAt, expirationAt)}: a token that expires at or
+     * before the moment it was issued is not a valid object. Since {@code rotatedAt} is not
+     * before {@code createdAt} in normal use, that also keeps the aggregate's own
+     * {@code expirationAt > createdAt} invariant true.
+     *
+     * <p>Only an active session may rotate. A revoked, closed or expired session is refused
+     * rather than resurrected: rotation is how a live login stays alive, and allowing it on a
+     * dead session would hand out a fresh seven-day credential for a login that should be over.
+     *
+     * <p>Arguments are validated before state, matching the rest of the domain: a null or blank
+     * token is a caller mistake, and reporting it is more useful than reporting the state.
+     *
+     * @param newToken     the replacement token value, which the caller has already generated
+     * @param newExpiration when the replacement stops being valid
+     * @param rotatedAt     when the replacement was issued
+     * @throws IllegalArgumentException if the token is null or blank, or an instant is null,
+     *                                  or the new window is not strictly forward
+     * @throws IllegalStateException    if the session is revoked, closed or expired
+     */
+    public void rotate(String newToken, Instant newExpiration, Instant rotatedAt) {
+        Preconditions.text(newToken, REFRESH_TOKEN_MAX, "refreshToken");
+        Preconditions.expirationAfter(rotatedAt, newExpiration);
+        if (revoked) {
+            throw new IllegalStateException("a revoked session cannot be rotated");
+        }
+        if (closedAt != null) {
+            throw new IllegalStateException("a closed session cannot be rotated");
+        }
+        if (isExpired(rotatedAt)) {
+            throw new IllegalStateException("an expired session cannot be rotated");
+        }
+        this.refreshToken = newToken;
+        this.expirationAt = newExpiration;
+    }
+
+    /**
+     * Revokes the session as a security measure, recording when and why.
      *
      * <p>Use this when the credential is or may be compromised: reuse of a superseded refresh
-     * token, a password change or reset, an administrative revocation. Revocation is terminal
-     * and idempotent, and it is deliberately <em>not</em> the operation for an ordinary logout,
-     * which is a {@link #close(Instant)} instead.
+     * token, a password change or reset, an operator decision. It is deliberately not the
+     * operation for an ordinary logout, which is {@link #close(Instant)} instead.
      *
-     * <p>Not recording the instant or the reason is a known gap, deferred to the session
-     * capability work: this method takes no time argument, so an operator reading the row later
-     * cannot tell when the session was revoked or why.
+     * <p>Revocation is terminal and idempotent, and the first revocation is the one that
+     * stands. A later call is ignored rather than overwriting, so a second revocation carrying
+     * a later instant or a different reason cannot rewrite the moment the problem was first
+     * detected, which is the fact worth preserving.
+     *
+     * <p>This method refuses nothing about the current state. A session that was already closed
+     * can still be revoked, because revocation is a statement about the credential and remains
+     * true regardless of how the session ended. That matters when a password change revokes
+     * every session a user holds, some of which are already closed.
+     *
+     * <p>It does not close the session either: {@code closedAt} is left untouched, so a revoked
+     * session remains distinguishable from a closed one when the row is read later.
+     *
+     * @param revokedAt when the revocation happened
+     * @param reason    why the session was revoked
+     * @throws IllegalArgumentException if the instant or the reason is null
      */
-    public void revoke() {
+    public void revoke(Instant revokedAt, RevocationReason reason) {
+        Preconditions.notNull(revokedAt, "revokedAt");
+        Preconditions.notNull(reason, "revokedReason");
+        if (revoked) {
+            return;
+        }
         this.revoked = true;
+        this.revokedAt = revokedAt;
+        this.revokedReason = reason;
     }
 
     /**
      * Closes the session at the given instant, ending it normally.
      *
      * <p>Use this for logout and any other voluntary end of use. Closing is not a security
-     * judgement about the credential, which is what separates it from {@link #revoke()}.
+     * judgement about the credential, which is what separates it from {@link #revoke(Instant,
+     * RevocationReason)}: closing leaves {@code revoked} untouched, and a closed session is
+     * never marked as compromised.
+     *
+     * <p>Like revocation, closing is idempotent and the first closure is the one that stands,
+     * so a repeated logout cannot move the recorded departure time. Closing an already revoked
+     * session is allowed and changes nothing about the revocation.
      *
      * @param instant closure time
+     * @throws IllegalArgumentException if the instant is null
      */
     public void close(Instant instant) {
         Preconditions.notNull(instant, "instant");
+        if (closedAt != null) {
+            return;
+        }
         this.closedAt = instant;
     }
 

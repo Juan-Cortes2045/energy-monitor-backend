@@ -6,6 +6,24 @@ import java.util.Optional;
 
 /**
  * Output port for persisting {@link UserSession}.
+ *
+ * <h2>Temporary coupling to the refresh token</h2>
+ *
+ * <p>A session owns a refresh token for now, so this port still exposes it. That coupling is
+ * scheduled to end: refresh tokens move to their own table with their own lineage, and once
+ * that happens the token leaves this aggregate and two things change here.
+ *
+ * <ul>
+ *   <li>{@link #findActiveByRefreshToken(String)} stops making sense, because a token will no
+ *       longer identify a session row. Resolving a token becomes a lookup on the token itself,
+ *       which then points at the session it belongs to. The method is kept for now because
+ *       removing it would break the adapter for no benefit, and it has no production caller.</li>
+ *   <li>Session persistence stops being responsible for the credential value at all, so this
+ *       port becomes purely about the login: open it, find it, list a user's, close it.</li>
+ * </ul>
+ *
+ * <p>No partial model is introduced to smooth the transition. A half-built token concept now
+ * would have to be thrown away by the work that actually needs it.
  */
 public interface UserSessionPersistencePort {
 

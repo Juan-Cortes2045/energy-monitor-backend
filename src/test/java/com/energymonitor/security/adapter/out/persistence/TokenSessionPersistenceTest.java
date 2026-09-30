@@ -4,9 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.energymonitor.security.adapter.out.persistence.support.Instants;
 import com.energymonitor.security.domain.model.PasswordResetToken;
+import com.energymonitor.security.domain.model.RevocationReason;
 import com.energymonitor.security.domain.model.UserSession;
 import jakarta.persistence.EntityManager;
+import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -100,7 +103,7 @@ class TokenSessionPersistenceTest {
         PersistenceFixtures.seedUser(persons, users);
         UserSession session = UserSession.open(SESSION_ID, USER_ID, REFRESH_TOKEN,
                 OPENED_AT, EXPIRES_AT, "192.168.1.10", "test-agent");
-        session.revoke();
+        session.revoke(OPENED_AT.plusSeconds(120), RevocationReason.PASSWORD_CHANGED);
         session.close(CLOSED_AT);
         userSessions.save(session);
         flushAndClear();
@@ -111,5 +114,26 @@ class TokenSessionPersistenceTest {
         assertEquals("192.168.1.10", read.ipAddress().orElseThrow());
         assertEquals("test-agent", read.userAgent().orElseThrow());
         assertEquals(OPENED_AT, read.createdAt());
+    }
+
+    @Test
+    void rotatedSessionKeepsItsIdentityAndWritesTheNewCredential() {
+        PersistenceFixtures.seedUser(persons, users);
+        UserSession session = UserSession.open(SESSION_ID, USER_ID, REFRESH_TOKEN,
+                OPENED_AT, EXPIRES_AT, "192.168.1.10", "test-agent");
+        Instant rotatedAt = OPENED_AT.plusSeconds(3600);
+        Instant newExpiration = EXPIRES_AT.plus(Duration.ofDays(7));
+        session.rotate("refresh-token-rotado", newExpiration, rotatedAt);
+        userSessions.save(session);
+        flushAndClear();
+
+        UserSession read = userSessions.findActive(SESSION_ID).orElseThrow();
+        assertEquals("refresh-token-rotado", read.refreshToken());
+        assertEquals(Instants.truncate(newExpiration), read.expirationAt());
+        // Rotation replaces the credential, never the login it belongs to.
+        assertEquals(SESSION_ID, read.idUserSession());
+        assertEquals(USER_ID, read.idUser());
+        assertEquals(OPENED_AT, read.createdAt());
+        assertTrue(read.isActive(rotatedAt));
     }
 }

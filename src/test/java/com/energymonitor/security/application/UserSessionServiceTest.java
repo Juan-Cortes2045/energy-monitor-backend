@@ -65,16 +65,32 @@ class UserSessionServiceTest {
     }
 
     @Test
-    void revokingASessionIsTerminalAndAudited() {
+    void logoutClosesTheSessionAndIsAudited() {
         users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
         UserSession session = createSession.create(
                 new CreateUserSessionCommand("use0000001", "10.0.0.9", null));
 
         revokeSession.revoke(new RevokeUserSessionCommand(session.idUserSession(), "use0000001", "10.0.0.9"));
 
-        assertTrue(sessions.findActive(session.idUserSession()).orElseThrow().isRevoked());
-        assertFalse(sessions.findActive(session.idUserSession()).orElseThrow().isActive(CLOCK.instant()));
+        UserSession closed = sessions.findActive(session.idUserSession()).orElseThrow();
+        assertFalse(closed.isActive(CLOCK.instant()));
+        assertEquals(CLOCK.instant(), closed.closedAt().orElseThrow());
         assertEquals(AuditAction.LOGOUT, audits.logs().getFirst().action());
+    }
+
+    @Test
+    void logoutIsNotASecurityEventSoTheSessionIsNotRevoked() {
+        users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
+        UserSession session = createSession.create(
+                new CreateUserSessionCommand("use0000001", "10.0.0.9", null));
+
+        revokeSession.revoke(new RevokeUserSessionCommand(session.idUserSession(), "use0000001", "10.0.0.9"));
+
+        // Walking away is not a compromise, so the row must stay distinguishable from one.
+        UserSession closed = sessions.findActive(session.idUserSession()).orElseThrow();
+        assertFalse(closed.isRevoked());
+        assertTrue(closed.revokedAt().isEmpty());
+        assertTrue(closed.revokedReason().isEmpty());
     }
 
     @Test
@@ -85,7 +101,7 @@ class UserSessionServiceTest {
 
         revokeSession.revoke(new RevokeUserSessionCommand(session.idUserSession(), "use0000001", "10.0.0.9"));
 
-        assertTrue(sessions.findActive(session.idUserSession()).orElseThrow().isRevoked());
+        assertFalse(sessions.findActive(session.idUserSession()).orElseThrow().isActive(CLOCK.instant()));
         AuditLog logout = audits.logs().getFirst();
         assertEquals(AuditAction.LOGOUT, logout.action());
         assertEquals("use0000002", logout.idUser().orElseThrow());

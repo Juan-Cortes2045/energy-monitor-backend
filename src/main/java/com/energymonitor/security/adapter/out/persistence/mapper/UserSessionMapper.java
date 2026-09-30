@@ -53,6 +53,12 @@ public class UserSessionMapper {
      * @return the domain object
      */
     public UserSession toDomain(UserSessionEntity entity) {
+        // revokedAt and revokedReason are rehydrated as absent on purpose: the columns do not
+        // exist yet, because adding them requires the Liquibase migration that belongs to the
+        // refresh-token work. Until that lands, a revoked row comes back with the flag set and
+        // the instant and reason empty, so any flow that starts revoking sessions has to wait
+        // for the columns rather than read them back. Nothing reads them in production yet:
+        // logout closes rather than revokes, and the flows that revoke arrive later.
         return new UserSession(
                 entity.getIdUserSession(),
                 entity.getUserId(),
@@ -62,6 +68,8 @@ public class UserSessionMapper {
                 entity.getIpAddress(),
                 entity.getUserAgent(),
                 entity.isRevoked(),
+                null,
+                null,
                 entity.getClosedAt());
     }
 }
