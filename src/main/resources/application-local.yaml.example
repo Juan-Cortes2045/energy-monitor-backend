@@ -3,3 +3,12 @@ spring:
     url: jdbc:mysql://localhost:3306/energy_monitor?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
     username: energy_app
     password: "CHANGE_ME"
+
+security:
+  jwt:
+    # Copy this file to application-local.yaml, which git ignores, and replace the value with
+    # a random secret of at least 32 bytes. Generate one with:
+    #   openssl rand -base64 48
+    # Anyone holding this secret can mint tokens for any account, so it must never be
+    # committed and must be rotated per environment.
+    secret: "CHANGE_ME_AT_LEAST_32_BYTES_LONG"
