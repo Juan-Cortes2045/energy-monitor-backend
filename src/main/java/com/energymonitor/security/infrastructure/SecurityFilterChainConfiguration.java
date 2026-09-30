@@ -1,0 +1,127 @@
+package com.energymonitor.security.infrastructure;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+
+/**
+ * The HTTP security rules for the Security API.
+ *
+ * <p>The shape is a stateless bearer-token API:
+ *
+ * <ul>
+ *   <li>No HTTP session is ever created, so nothing about a caller is kept server side and
+ *       the API scales horizontally without sticky sessions.</li>
+ *   <li>CSRF protection is off, which is correct precisely because there is no session and no
+ *       cookie for a cross-site request to ride on. The refresh token is currently returned in
+ *       the login response body and is meant to be sent back in a header, not attached
+ *       automatically by the browser, so no ambient credential exists for a cross-site request
+ *       to exploit. This reasoning is contingent: it stops being true if the refresh token
+ *       moves into an ambient cookie, which is one of the reasons that decision is deferred to
+ *       the refresh flow. At that point CSRF protection must be re-enabled for the refresh
+ *       endpoint.</li>
+ *   <li>Form login and HTTP Basic are off, so the only way in is a bearer token.</li>
+ *   <li>JWT signature, issuer and expiry are validated by the resource server filter before a
+ *       request reaches any controller.</li>
+ * </ul>
+ *
+ * <p>Everything else is denied by default: a new endpoint is protected unless it is added to
+ * the permit list on purpose.
+ *
+ * <h2>CORS is not configured</h2>
+ *
+ * <p>{@code cors(Customizer.withDefaults())} below is <strong>not</strong> a project CORS
+ * policy. No {@code CorsConfigurationSource} bean exists anywhere in this application, so
+ * Spring Security falls back to a same-origin-only source and the server emits no CORS
+ * headers for any allowed origin.
+ *
+ * <p>What that means in practice:
+ *
+ * <ul>
+ *   <li>The React web frontend, served from a different origin, will fail its preflight and be
+ *       blocked by the browser when this API is integrated. The failure is visible at
+ *       integration time, not now, because no frontend consumes this API yet.</li>
+ *   <li>The React Native client is not affected: CORS is a browser enforcement mechanism and
+ *       a native HTTP client does not apply it.</li>
+ * </ul>
+ *
+ * <p>An explicit {@code CorsConfigurationSource} is required before the web frontend is
+ * integrated, and is deliberately not defined here: allowed origins, permitted methods,
+ * headers and whether credentials are allowed are decisions that depend on the deployment, and
+ * guessing them would be worse than failing closed. Until then the behaviour is fail-closed,
+ * which is the safe direction.
+ */
+@Configuration(proxyBeanMethods = false)
+@EnableWebSecurity
+public class SecurityFilterChainConfiguration {
+
+    /**
+     * Paths reachable without a token. Registration and login have no caller to authenticate,
+     * and completing a password reset is done with a reset token rather than a session.
+     */
+    private static final String[] PUBLIC_ENDPOINTS = {
+        "/api/v1/auth/register",
+        "/api/v1/auth/login",
+        "/api/v1/auth/password/forgot",
+        "/api/v1/auth/password/reset"
+    };
+
+    /**
+     * Unauthenticated access to the API description and the health probe, so a container
+     * platform can still check liveness.
+     */
+    private static final String[] INFRASTRUCTURE_ENDPOINTS = {
+        "/actuator/health",
+        "/actuator/health/**",
+        "/v3/api-docs/**",
+        "/swagger-ui/**",
+        "/swagger-ui.html"
+    };
+
+    /**
+     * Builds the single filter chain protecting the API.
+     *
+     * @param http            the builder Spring Security hands over
+     * @param entryPoint      renders 401 in the shared error shape
+     * @param accessDenied    renders 403 in the shared error shape
+     * @return the installed filter chain
+     * @throws Exception if the chain cannot be built
+     */
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                    JwtAuthenticationEntryPoint entryPoint,
+                                                    JwtAccessDeniedHandler accessDenied)
+            throws Exception {
+        return http
+                .csrf(AbstractHttpConfigurer::disable)
+                // No CorsConfigurationSource bean exists, so this resolves to same-origin
+                // only and no CORS header is ever emitted. The React web frontend will be
+                // blocked on cross-origin requests until an explicit policy is defined. See
+                // the class documentation. React Native is unaffected.
+                .cors(Customizer.withDefaults())
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable)
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(handling -> handling
+                        .authenticationEntryPoint(entryPoint)
+                        .accessDeniedHandler(accessDenied))
+                .authorizeHttpRequests(requests -> requests
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        .requestMatchers(INFRASTRUCTURE_ENDPOINTS).permitAll()
+                        .anyRequest().authenticated())
+                .oauth2ResourceServer(resourceServer -> resourceServer
+                        .authenticationEntryPoint(entryPoint)
+                        .accessDeniedHandler(accessDenied)
+                        .jwt(Customizer.withDefaults()))
+                .build();
+    }
+}
