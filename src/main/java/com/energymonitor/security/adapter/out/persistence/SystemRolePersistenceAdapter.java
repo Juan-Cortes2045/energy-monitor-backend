@@ -3,6 +3,7 @@ package com.energymonitor.security.adapter.out.persistence;
 import com.energymonitor.security.adapter.out.persistence.entity.SystemRoleEntity;
 import com.energymonitor.security.adapter.out.persistence.mapper.SystemRoleMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.SystemRoleRepository;
+import com.energymonitor.security.application.port.out.SystemRolePersistencePort;
 import com.energymonitor.security.domain.model.SystemRole;
 import java.util.List;
 import java.util.Optional;
@@ -12,7 +13,7 @@ import org.springframework.stereotype.Component;
  * Persistence adapter for {@link SystemRole}.
  */
 @Component
-public class SystemRolePersistenceAdapter {
+public class SystemRolePersistenceAdapter implements SystemRolePersistencePort {
 
     private final SystemRoleRepository repository;
     private final SystemRoleMapper mapper;

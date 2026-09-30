@@ -3,6 +3,7 @@ package com.energymonitor.security.adapter.out.persistence;
 import com.energymonitor.security.adapter.out.persistence.entity.LoginErrorLogEntity;
 import com.energymonitor.security.adapter.out.persistence.mapper.LoginErrorLogMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.LoginErrorLogRepository;
+import com.energymonitor.security.application.port.out.LoginErrorLogPersistencePort;
 import com.energymonitor.security.domain.model.LoginErrorLog;
 import java.util.List;
 import java.util.Optional;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
  * {@code created_at}; existing rows are never edited, matching the immutable domain object.
  */
 @Component
-public class LoginErrorLogPersistenceAdapter {
+public class LoginErrorLogPersistenceAdapter implements LoginErrorLogPersistencePort {
 
     private final LoginErrorLogRepository repository;
     private final LoginErrorLogMapper mapper;

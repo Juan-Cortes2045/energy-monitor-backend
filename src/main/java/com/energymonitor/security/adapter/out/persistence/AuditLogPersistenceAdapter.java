@@ -3,6 +3,7 @@ package com.energymonitor.security.adapter.out.persistence;
 import com.energymonitor.security.adapter.out.persistence.entity.AuditLogEntity;
 import com.energymonitor.security.adapter.out.persistence.mapper.AuditLogMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.AuditLogRepository;
+import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.domain.model.AuditLog;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
  * immutable domain object the application logs.
  */
 @Component
-public class AuditLogPersistenceAdapter {
+public class AuditLogPersistenceAdapter implements AuditLogPersistencePort {
 
     private final AuditLogRepository repository;
     private final AuditLogMapper mapper;

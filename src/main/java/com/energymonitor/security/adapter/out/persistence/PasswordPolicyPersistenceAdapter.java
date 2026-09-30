@@ -3,6 +3,7 @@ package com.energymonitor.security.adapter.out.persistence;
 import com.energymonitor.security.adapter.out.persistence.entity.PasswordPolicyEntity;
 import com.energymonitor.security.adapter.out.persistence.mapper.PasswordPolicyMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.PasswordPolicyRepository;
+import com.energymonitor.security.application.port.out.PasswordPolicyPersistencePort;
 import com.energymonitor.security.domain.model.PasswordPolicy;
 import java.util.List;
 import java.util.Optional;
@@ -12,7 +13,7 @@ import org.springframework.stereotype.Component;
  * Persistence adapter for {@link PasswordPolicy}.
  */
 @Component
-public class PasswordPolicyPersistenceAdapter {
+public class PasswordPolicyPersistenceAdapter implements PasswordPolicyPersistencePort {
 
     private final PasswordPolicyRepository repository;
     private final PasswordPolicyMapper mapper;

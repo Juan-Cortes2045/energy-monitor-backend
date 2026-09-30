@@ -5,6 +5,7 @@ import com.energymonitor.security.adapter.out.persistence.entity.UserSystemRoleI
 import com.energymonitor.security.adapter.out.persistence.mapper.UserSystemRoleMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.UserSystemRoleRepository;
 import com.energymonitor.security.adapter.out.persistence.support.Instants;
+import com.energymonitor.security.application.port.out.UserSystemRolePersistencePort;
 import com.energymonitor.security.domain.model.UserSystemRole;
 import java.util.List;
 import java.util.Optional;
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Component;
  * that already exists.
  */
 @Component
-public class UserSystemRolePersistenceAdapter {
+public class UserSystemRolePersistenceAdapter implements UserSystemRolePersistencePort {
 
     private final UserSystemRoleRepository repository;
     private final UserSystemRoleMapper mapper;
