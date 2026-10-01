@@ -80,7 +80,7 @@ public final class UseCaseFixtures {
 
         public User seed(String idUser, String idPerson, String email, UserStatus status) {
             User user = new User(idUser, idPerson, PasswordHash.of("hash:" + PASSWORD),
-                    Email.of(email), true, REGISTRATION, status, 0, null);
+                    Email.of(email), true, REGISTRATION, status, 0, null, null);
             byId.put(idUser, user);
             return user;
         }
@@ -106,7 +106,7 @@ public final class UseCaseFixtures {
         }
 
         public Person seed(String idPerson) {
-            Person person = new Person(idPerson, "Ada", "Lovelace", null, null, null);
+            Person person = new Person(idPerson, "Ada", "Lovelace", null);
             byId.put(idPerson, person);
             return person;
         }

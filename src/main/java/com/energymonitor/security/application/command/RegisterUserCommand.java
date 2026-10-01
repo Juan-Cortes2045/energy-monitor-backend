@@ -10,11 +10,9 @@ package com.energymonitor.security.application.command;
  * @param name         first name, required
  * @param lastName     last name, required
  * @param cellphone    optional
- * @param address      optional
  * @param profileImage optional
  * @param ipAddress    optional origin of the request, recorded in the audit trail
  */
 public record RegisterUserCommand(String email, String rawPassword, String name, String lastName,
-                                  String cellphone, String address, String profileImage,
-                                  String ipAddress) {
+                                  String cellphone, String profileImage, String ipAddress) {
 }

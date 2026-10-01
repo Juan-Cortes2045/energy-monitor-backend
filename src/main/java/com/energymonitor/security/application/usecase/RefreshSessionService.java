@@ -177,7 +177,7 @@ public class RefreshSessionService implements RefreshSession {
      */
     private AuthenticatedUser identityOf(User user) {
         return new AuthenticatedUser(user.idUser(), user.idPerson(), user.email(),
-                user.status(), user.lastLoginAt().orElse(null));
+                user.status(), user.lastLoginAt().orElse(null), user.profileImage().orElse(null));
     }
 
     private RefreshSessionResult rejected(String idUserSession) {

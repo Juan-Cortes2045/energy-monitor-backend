@@ -112,11 +112,11 @@ class RefreshSessionTransactionTest {
         rootSecret = "raiz-" + suffix;
         Instant now = Instant.now();
 
-        persons.save(new Person(personId, "Ada", "Lovelace", null, null, null));
+        persons.save(new Person(personId, "Ada", "Lovelace", null));
         users.save(new User(userId, personId,
                 PasswordHash.of("$2a$10$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"),
                 Email.of("rotacion-" + suffix + "@example.com"), true, REGISTRATION,
-                UserStatus.ACTIVE, 0, null));
+                UserStatus.ACTIVE, 0, null, null));
         sessions.save(UserSession.open(sessionId, userId,
                 now, now.plus(WEEK), "10.0.0.1", "JUnit"));
         tokenPort.save(RefreshToken.root("rft" + suffix, sessionId, hasher.hash(rootSecret),

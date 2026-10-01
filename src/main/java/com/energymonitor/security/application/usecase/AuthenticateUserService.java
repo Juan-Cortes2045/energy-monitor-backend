@@ -77,7 +77,8 @@ public class AuthenticateUserService implements AuthenticateUser {
         auditLogPort.save(AuditLog.login(identifiers.generate(), user, command.ipAddress(), now));
         return new AuthenticationResult(AuthenticationStatus.SUCCESS,
                 Optional.of(new AuthenticatedUser(user.idUser(), user.idPerson(), user.email(),
-                        user.status(), user.lastLoginAt().orElseThrow())));
+                        user.status(), user.lastLoginAt().orElseThrow(),
+                        user.profileImage().orElse(null))));
     }
 
     private LoginErrorLog error(User user, LoginErrorType type, String ipAddress, Instant now) {

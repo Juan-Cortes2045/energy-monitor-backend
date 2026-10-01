@@ -13,18 +13,24 @@ import com.energymonitor.security.domain.model.UserStatus;
  * token and no persistence detail on this record, and reflective serialization of a domain
  * aggregate never happens because a domain object is never handed to the message converter.
  *
+ * <p>{@code profileImage} is the one addition since: the avatar is account state rather than a
+ * credential, so a client needs it to render the account, and it is published from both
+ * mapping paths so login and a profile update report it identically.
+ *
  * @param idUser    the account identifier
  * @param idPerson  the owning person identifier
  * @param email     the account address
  * @param status    the account status
- * @param lastLogin when the account last authenticated, {@code null} when never
+ * @param lastLogin    when the account last authenticated, {@code null} when never
+ * @param profileImage the avatar shown for the account, {@code null} when none is set
  */
 public record AccountResponse(
         String idUser,
         String idPerson,
         String email,
         UserStatus status,
-        java.time.Instant lastLogin) {
+        java.time.Instant lastLogin,
+        String profileImage) {
 
     /**
      * Maps the credential-free identity returned by the authentication flow.
@@ -34,7 +40,8 @@ public record AccountResponse(
      */
     public static AccountResponse from(AuthenticatedUser identity) {
         return new AccountResponse(identity.idUser(), identity.idPerson(),
-                identity.email().value(), identity.status(), identity.lastLoginAt());
+                identity.email().value(), identity.status(), identity.lastLoginAt(),
+                identity.profileImage());
     }
 
     /**
@@ -48,6 +55,7 @@ public record AccountResponse(
      */
     public static AccountResponse from(User user) {
         return new AccountResponse(user.idUser(), user.idPerson(), user.email().value(),
-                user.status(), user.lastLoginAt().orElse(null));
+                user.status(), user.lastLoginAt().orElse(null),
+                user.profileImage().orElse(null));
     }
 }

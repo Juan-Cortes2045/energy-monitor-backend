@@ -60,11 +60,13 @@ public class RegisterUserService implements RegisterUser {
         }
 
         Person person = new Person(identifiers.generate(), command.name(), command.lastName(),
-                command.cellphone(), command.address(), command.profileImage());
+                command.cellphone());
         personPort.save(person);
 
+        // The avatar belongs to the account, not to the person: person only describes the human.
         User user = User.register(identifiers.generate(), person.idPerson(),
-                passwordHasher.hash(command.rawPassword()), email, now);
+                passwordHasher.hash(command.rawPassword()), email, now,
+                command.profileImage());
         userPort.save(user);
 
         auditLogPort.save(new AuditLog(identifiers.generate(), user.idUser(), AuditAction.CREATE,

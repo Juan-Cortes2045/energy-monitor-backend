@@ -89,7 +89,7 @@ class SecurityLoginFlowTest {
 
     private static AuthenticatedUser identity() {
         return new AuthenticatedUser("USR0000001", "PER0000001",
-                Email.of("someone@example.com"), UserStatus.ACTIVE, NOW);
+                Email.of("someone@example.com"), UserStatus.ACTIVE, NOW, null);
     }
 
     private static UserSession session() {

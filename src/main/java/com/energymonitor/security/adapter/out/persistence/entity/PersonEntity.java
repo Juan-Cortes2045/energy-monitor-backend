@@ -28,12 +28,6 @@ public class PersonEntity extends BaseAuditEntity {
     @Column(name = "cellphone", length = 15)
     private String cellphone;
 
-    @Column(name = "address", length = 200)
-    private String address;
-
-    @Column(name = "profile_image", length = 255)
-    private String profileImage;
-
     public PersonEntity() {
     }
 
@@ -69,19 +63,4 @@ public class PersonEntity extends BaseAuditEntity {
         this.cellphone = cellphone;
     }
 
-    public String getAddress() {
-        return address;
-    }
-
-    public void setAddress(String address) {
-        this.address = address;
-    }
-
-    public String getProfileImage() {
-        return profileImage;
-    }
-
-    public void setProfileImage(String profileImage) {
-        this.profileImage = profileImage;
-    }
 }

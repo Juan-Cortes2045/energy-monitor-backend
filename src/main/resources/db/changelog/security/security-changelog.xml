@@ -26,6 +26,8 @@
     <include file="changes/security-014-add-session-revocation.xml" relativeToChangelogFile="true"/>
     <include file="changes/security-015-create-refresh-token.xml" relativeToChangelogFile="true"/>
     <include file="changes/security-016-drop-session-refresh-token.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-017-add-user-profile-image.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-018-drop-person-contact-data.xml" relativeToChangelogFile="true"/>
     
 
 </databaseChangeLog>

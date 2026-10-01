@@ -123,7 +123,7 @@ public class AuthController {
                                                     HttpServletRequest servlet) {
         var account = registerUser.register(new RegisterUserCommand(request.email(),
                 request.password(), request.name(), request.lastName(), request.cellphone(),
-                request.address(), request.profileImage(), clientIp(servlet)));
+                request.profileImage(), clientIp(servlet)));
         return ResponseEntity.status(HttpStatus.CREATED).body(AccountResponse.from(account));
     }
 

@@ -81,18 +81,18 @@ class AuthControllerWebTest {
 
     private static User newAccount() {
         return User.register("USR0000001", "PER0000001", PasswordHash.of("$2a$10$abcdefghij"),
-                Email.of(EMAIL), REGISTRATION);
+                Email.of(EMAIL), REGISTRATION, null);
     }
 
     private static AuthenticatedUser identity() {
         return new AuthenticatedUser("USR0000001", "PER0000001", Email.of(EMAIL),
-                UserStatus.ACTIVE, Instant.now());
+                UserStatus.ACTIVE, Instant.now(), null);
     }
 
     private static String registrationBody() {
         return """
                 {"email":"someone@example.com","password":"StrongPass1!","name":"Ada",
-                 "lastName":"Lovelace","cellphone":"3001234567","address":"Calle 1 #2-3",
+                 "lastName":"Lovelace","cellphone":"3001234567",
                  "profileImage":"https://example.com/a.png"}
                 """;
     }
