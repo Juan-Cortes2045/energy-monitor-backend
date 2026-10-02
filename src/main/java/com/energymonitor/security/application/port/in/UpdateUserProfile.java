@@ -4,8 +4,7 @@ import com.energymonitor.security.application.command.UpdateUserProfileCommand;
 import com.energymonitor.security.domain.model.Person;
 
 /**
- * Input port for editing the personal and contact data of a user, and optionally their
- * account address.
+ * Input port for editing the personal data of a user, and optionally their account email and avatar.
  */
 public interface UpdateUserProfile {
 

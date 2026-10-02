@@ -12,13 +12,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface UserSessionRepository extends JpaRepository<UserSessionEntity, String> {
 
-    /**
-     * Finds the active session whose refresh token matches.
-     *
-     * @param refreshToken the opaque token value
-     * @return the row, empty when soft-deleted, revoked or unknown
-     */
-    Optional<UserSessionEntity> findByRefreshTokenAndDeletedAtIsNull(String refreshToken);
 
     /**
      * Lists the active sessions of a user, most recent first.

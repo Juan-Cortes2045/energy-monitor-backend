@@ -14,7 +14,7 @@ import com.energymonitor.security.application.port.in.ManageUserStatus;
 import com.energymonitor.security.application.port.in.RegisterUser;
 import com.energymonitor.security.application.port.in.ResetPassword;
 import com.energymonitor.security.application.port.in.RevokeRole;
-import com.energymonitor.security.application.port.in.RevokeUserSession;
+import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.UpdateUserProfile;
 import java.util.List;
 import org.aopalliance.aop.Advice;
@@ -56,7 +56,7 @@ class SecurityTransactionBoundaryTest {
     private ResetPassword resetPassword;
 
     @Autowired
-    private RevokeUserSession revokeUserSession;
+    private LogoutUserSession revokeUserSession;
 
     @Autowired
     private AssignRole assignRole;

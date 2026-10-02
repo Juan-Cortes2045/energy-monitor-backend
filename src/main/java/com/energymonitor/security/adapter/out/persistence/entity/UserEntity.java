@@ -56,6 +56,9 @@ public class UserEntity extends BaseAuditEntity {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    @Column(name = "profile_image", length = 255)
+    private String profileImage;
+
     public UserEntity() {
     }
 
@@ -129,5 +132,13 @@ public class UserEntity extends BaseAuditEntity {
 
     public void setLastLoginAt(Instant lastLoginAt) {
         this.lastLoginAt = lastLoginAt;
+    }
+
+    public String getProfileImage() {
+        return profileImage;
+    }
+
+    public void setProfileImage(String profileImage) {
+        this.profileImage = profileImage;
     }
 }

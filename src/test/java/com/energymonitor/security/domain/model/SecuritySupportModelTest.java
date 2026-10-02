@@ -16,8 +16,7 @@ class SecuritySupportModelTest {
     class PersonBehaviour {
 
         private Person person() {
-            return new Person("PER0000001", "Ana", "Restrepo", "3001234567",
-                    "Calle 5 #10-20", "https://cdn.example.com/ana.png");
+            return new Person("PER0000001", "Ana", "Restrepo", "3001234567");
         }
 
         @Test
@@ -29,27 +28,23 @@ class SecuritySupportModelTest {
             assertThat(person.name()).isEqualTo("Ana");
             assertThat(person.lastName()).isEqualTo("Restrepo");
             assertThat(person.cellphone()).contains("3001234567");
-            assertThat(person.address()).contains("Calle 5 #10-20");
-            assertThat(person.profileImage()).contains("https://cdn.example.com/ana.png");
         }
 
         @Test
         @DisplayName("optional fields may be absent")
         void optionalFieldsMayBeAbsent() {
-            Person person = new Person("PER0000001", "Ana", "Restrepo", null, null, null);
+            Person person = new Person("PER0000001", "Ana", "Restrepo", null);
 
             assertThat(person.cellphone()).isEmpty();
-            assertThat(person.address()).isEmpty();
-            assertThat(person.profileImage()).isEmpty();
         }
 
         @Test
         @DisplayName("refuses a missing first or last name")
         void refusesMissingNames() {
-            assertThatThrownBy(() -> new Person("PER0000001", " ", "Restrepo", null, null, null))
+            assertThatThrownBy(() -> new Person("PER0000001", " ", "Restrepo", null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("name");
-            assertThatThrownBy(() -> new Person("PER0000001", "Ana", null, null, null, null))
+            assertThatThrownBy(() -> new Person("PER0000001", "Ana", null, null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("lastName");
         }
@@ -66,15 +61,17 @@ class SecuritySupportModelTest {
         }
 
         @Test
-        @DisplayName("updateContactData can clear an optional field with null")
-        void updateContactDataClearsFields() {
+        @DisplayName("updateCellphone replaces or clears the phone number")
+        void updateCellphoneReplacesFields() {
             Person person = person();
 
-            person.updateContactData(null, "Nueva direccion", null);
+            person.updateCellphone("3109876543");
+            assertThat(person.cellphone()).contains("3109876543");
+
+            person.updateCellphone(null);
 
             assertThat(person.cellphone()).isEmpty();
-            assertThat(person.address()).contains("Nueva direccion");
-            assertThat(person.profileImage()).isEmpty();
+            assertThat(person.cellphone()).isEmpty();
         }
     }
 

@@ -18,7 +18,7 @@ class AuditLogTest {
         return User.register("USR0000001", "PER0000001",
                 PasswordHash.of("$2a$10$abcdefghijklmnopqrstuv"),
                 Email.of("ana@example.com"),
-                Instant.parse("2026-01-15T10:00:00Z"));
+                Instant.parse("2026-01-15T10:00:00Z"), null);
     }
 
     @Test

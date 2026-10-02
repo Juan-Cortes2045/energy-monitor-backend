@@ -5,7 +5,6 @@ import com.energymonitor.security.application.exception.AccountNotActiveExceptio
 import com.energymonitor.security.application.exception.UserNotFoundException;
 import com.energymonitor.security.application.port.in.CreateUserSession;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
-import com.energymonitor.security.application.port.out.TokenGeneratorPort;
 import com.energymonitor.security.application.port.out.UserPersistencePort;
 import com.energymonitor.security.application.port.out.UserSessionPersistencePort;
 import com.energymonitor.security.domain.model.User;
@@ -23,17 +22,14 @@ public class CreateUserSessionService implements CreateUserSession {
 
     private final UserPersistencePort userPort;
     private final UserSessionPersistencePort sessionPort;
-    private final TokenGeneratorPort tokenGenerator;
     private final IdentifierGeneratorPort identifiers;
     private final Clock clock;
 
     public CreateUserSessionService(UserPersistencePort userPort,
                                     UserSessionPersistencePort sessionPort,
-                                    TokenGeneratorPort tokenGenerator,
                                     IdentifierGeneratorPort identifiers, Clock clock) {
         this.userPort = userPort;
         this.sessionPort = sessionPort;
-        this.tokenGenerator = tokenGenerator;
         this.identifiers = identifiers;
         this.clock = clock;
     }
@@ -47,8 +43,7 @@ public class CreateUserSessionService implements CreateUserSession {
             throw new AccountNotActiveException("account " + user.idUser() + " is " + user.status() + " and cannot open a session");
         }
         UserSession session = UserSession.open(identifiers.generate(), user.idUser(),
-                tokenGenerator.generateToken(), now, now.plus(TTL), command.ipAddress(),
-                command.userAgent());
+                now, now.plus(TTL), command.ipAddress(), command.userAgent());
         return sessionPort.save(session);
     }
 }

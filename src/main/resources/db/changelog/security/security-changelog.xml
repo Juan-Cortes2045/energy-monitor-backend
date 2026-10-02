@@ -23,6 +23,12 @@
     <include file="changes/security-011-create-user-system-role.xml" relativeToChangelogFile="true"/>
     <include file="changes/security-012-create-system-role-permission.xml" relativeToChangelogFile="true"/>
     <include file="changes/security-013-create-audit-log.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-014-add-session-revocation.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-015-create-refresh-token.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-016-drop-session-refresh-token.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-017-add-user-profile-image.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-018-drop-person-contact-data.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-019-seed-default-password-policy.xml" relativeToChangelogFile="true"/>
     
 
 </databaseChangeLog>

@@ -57,16 +57,6 @@ public class UserSessionPersistenceAdapter implements UserSessionPersistencePort
                 .map(mapper::toDomain);
     }
 
-    /**
-     * Finds the active session by refresh token value.
-     *
-     * @param refreshToken the token value
-     * @return the domain object, empty when soft-deleted, revoked or unknown
-     */
-    public Optional<UserSession> findActiveByRefreshToken(String refreshToken) {
-        return repository.findByRefreshTokenAndDeletedAtIsNull(refreshToken)
-                .map(mapper::toDomain);
-    }
 
     /**
      * Lists the active sessions of a user, most recent first.

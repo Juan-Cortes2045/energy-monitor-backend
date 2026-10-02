@@ -1,7 +1,10 @@
 package com.energymonitor.security.adapter.out.persistence.entity;
 
+import com.energymonitor.security.domain.model.RevocationReason;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -24,9 +27,6 @@ public class UserSessionEntity extends BaseAuditEntity {
     @Column(name = "user_id", nullable = false, length = 10)
     private String userId;
 
-    @Column(name = "refresh_token", nullable = false, length = 255)
-    private String refreshToken;
-
     @Column(name = "revoked", nullable = false)
     @TinyIntBoolean
     private boolean revoked;
@@ -42,6 +42,13 @@ public class UserSessionEntity extends BaseAuditEntity {
 
     @Column(name = "closed_at")
     private Instant closedAt;
+
+    @Column(name = "revoked_at")
+    private Instant revokedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "revoked_reason")
+    private RevocationReason revokedReason;
 
     public UserSessionEntity() {
     }
@@ -60,14 +67,6 @@ public class UserSessionEntity extends BaseAuditEntity {
 
     public void setUserId(String userId) {
         this.userId = userId;
-    }
-
-    public String getRefreshToken() {
-        return refreshToken;
-    }
-
-    public void setRefreshToken(String refreshToken) {
-        this.refreshToken = refreshToken;
     }
 
     public boolean isRevoked() {
@@ -108,5 +107,21 @@ public class UserSessionEntity extends BaseAuditEntity {
 
     public void setClosedAt(Instant closedAt) {
         this.closedAt = closedAt;
+    }
+
+    public Instant getRevokedAt() {
+        return revokedAt;
+    }
+
+    public void setRevokedAt(Instant revokedAt) {
+        this.revokedAt = revokedAt;
+    }
+
+    public RevocationReason getRevokedReason() {
+        return revokedReason;
+    }
+
+    public void setRevokedReason(RevocationReason revokedReason) {
+        this.revokedReason = revokedReason;
     }
 }

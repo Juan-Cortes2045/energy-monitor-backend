@@ -31,14 +31,14 @@ final class PersistenceFixtures {
     }
 
     static void seedPerson(PersonPersistenceAdapter persons) {
-        persons.save(new Person(PERSON_ID, "Ada", "Lovelace", null, null, null));
+        persons.save(new Person(PERSON_ID, "Ada", "Lovelace", null));
     }
 
     /** Seeds {@code person} and {@code user}, the two roots most rows depend on. */
     static void seedUser(PersonPersistenceAdapter persons, UserPersistenceAdapter users) {
         seedPerson(persons);
         users.save(new User(USER_ID, PERSON_ID, PasswordHash.of(HASH),
-                Email.of("ada@example.com"), true, REGISTRATION, UserStatus.ACTIVE, 0, null));
+                Email.of("ada@example.com"), true, REGISTRATION, UserStatus.ACTIVE, 0, null, null));
     }
 
     /** Seeds the role a grant and an assignment can point at. */

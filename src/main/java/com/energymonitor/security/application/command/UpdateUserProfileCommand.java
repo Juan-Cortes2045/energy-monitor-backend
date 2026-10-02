@@ -11,12 +11,11 @@ package com.energymonitor.security.application.command;
  * @param name         new first name, {@code null} to keep
  * @param lastName     new last name, {@code null} to keep
  * @param cellphone    new phone or {@code null}
- * @param address      new address or {@code null}
  * @param profileImage new profile image or {@code null}
  * @param newEmail     delivery hint; the email is never taken from any of the other fields
  * @param ipAddress    optional origin of the request, recorded in the audit trail
  */
 public record UpdateUserProfileCommand(String idUser, String name, String lastName,
-                                       String cellphone, String address, String profileImage,
+                                       String cellphone, String profileImage,
                                        String newEmail, String ipAddress) {
 }

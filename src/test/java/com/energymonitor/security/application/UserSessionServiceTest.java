@@ -6,11 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.energymonitor.security.application.command.CreateUserSessionCommand;
-import com.energymonitor.security.application.command.RevokeUserSessionCommand;
+import com.energymonitor.security.application.command.LogoutUserSessionCommand;
 import com.energymonitor.security.application.exception.AccountNotActiveException;
 import com.energymonitor.security.application.exception.SessionNotFoundException;
 import com.energymonitor.security.application.usecase.CreateUserSessionService;
-import com.energymonitor.security.application.usecase.RevokeUserSessionService;
+import com.energymonitor.security.application.usecase.LogoutUserSessionService;
 import com.energymonitor.security.domain.model.AuditAction;
 import com.energymonitor.security.domain.model.AuditLog;
 import com.energymonitor.security.domain.model.UserSession;
@@ -22,7 +22,7 @@ import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@code CreateUserSession} and {@code RevokeUserSession} requirements: a session opens with
+ * {@code CreateUserSession} and {@code LogoutUserSession} requirements: a session opens with
  * an opaque refresh token and a fixed lifetime, and revoking one is terminal and audited.
  */
 class UserSessionServiceTest {
@@ -39,9 +39,9 @@ class UserSessionServiceTest {
     private final UseCaseFixtures.FakeAuditLogPersistencePort audits =
             new UseCaseFixtures.FakeAuditLogPersistencePort();
     private final CreateUserSessionService createSession =
-            new CreateUserSessionService(users, sessions, tokenGenerator, identifiers, CLOCK);
-    private final RevokeUserSessionService revokeSession =
-            new RevokeUserSessionService(sessions, audits, identifiers, CLOCK);
+            new CreateUserSessionService(users, sessions, identifiers, CLOCK);
+    private final LogoutUserSessionService logoutSession =
+            new LogoutUserSessionService(sessions, audits, identifiers, CLOCK);
 
     @Test
     void opensAnActiveSessionWithOpaqueFreshRefreshToken() {
@@ -51,7 +51,6 @@ class UserSessionServiceTest {
                 new CreateUserSessionCommand("use0000001", "10.0.0.9", "test-agent"));
 
         assertTrue(session.isActive(CLOCK.instant()));
-        assertFalse(session.refreshToken().isBlank());
         assertEquals(CLOCK.instant().plus(Duration.ofDays(7)), session.expirationAt());
         assertEquals("10.0.0.9", session.ipAddress().orElseThrow());
     }
@@ -65,16 +64,32 @@ class UserSessionServiceTest {
     }
 
     @Test
-    void revokingASessionIsTerminalAndAudited() {
+    void logoutClosesTheSessionAndIsAudited() {
         users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
         UserSession session = createSession.create(
                 new CreateUserSessionCommand("use0000001", "10.0.0.9", null));
 
-        revokeSession.revoke(new RevokeUserSessionCommand(session.idUserSession(), "use0000001", "10.0.0.9"));
+        logoutSession.logout(new LogoutUserSessionCommand(session.idUserSession(), "use0000001", "10.0.0.9"));
 
-        assertTrue(sessions.findActive(session.idUserSession()).orElseThrow().isRevoked());
-        assertFalse(sessions.findActive(session.idUserSession()).orElseThrow().isActive(CLOCK.instant()));
+        UserSession closed = sessions.findActive(session.idUserSession()).orElseThrow();
+        assertFalse(closed.isActive(CLOCK.instant()));
+        assertEquals(CLOCK.instant(), closed.closedAt().orElseThrow());
         assertEquals(AuditAction.LOGOUT, audits.logs().getFirst().action());
+    }
+
+    @Test
+    void logoutIsNotASecurityEventSoTheSessionIsNotRevoked() {
+        users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
+        UserSession session = createSession.create(
+                new CreateUserSessionCommand("use0000001", "10.0.0.9", null));
+
+        logoutSession.logout(new LogoutUserSessionCommand(session.idUserSession(), "use0000001", "10.0.0.9"));
+
+        // Walking away is not a compromise, so the row must stay distinguishable from one.
+        UserSession closed = sessions.findActive(session.idUserSession()).orElseThrow();
+        assertFalse(closed.isRevoked());
+        assertTrue(closed.revokedAt().isEmpty());
+        assertTrue(closed.revokedReason().isEmpty());
     }
 
     @Test
@@ -83,9 +98,9 @@ class UserSessionServiceTest {
         UserSession session = createSession.create(
                 new CreateUserSessionCommand("use0000002", "10.0.0.9", null));
 
-        revokeSession.revoke(new RevokeUserSessionCommand(session.idUserSession(), "use0000001", "10.0.0.9"));
+        logoutSession.logout(new LogoutUserSessionCommand(session.idUserSession(), "use0000001", "10.0.0.9"));
 
-        assertTrue(sessions.findActive(session.idUserSession()).orElseThrow().isRevoked());
+        assertFalse(sessions.findActive(session.idUserSession()).orElseThrow().isActive(CLOCK.instant()));
         AuditLog logout = audits.logs().getFirst();
         assertEquals(AuditAction.LOGOUT, logout.action());
         assertEquals("use0000002", logout.idUser().orElseThrow());
@@ -94,6 +109,6 @@ class UserSessionServiceTest {
     @Test
     void cannotRevokeAnUnknownSession() {
         assertThrows(SessionNotFoundException.class,
-                () -> revokeSession.revoke(new RevokeUserSessionCommand("ghost", "use0000001", null)));
+                () -> logoutSession.logout(new LogoutUserSessionCommand("ghost", "use0000001", null)));
     }
 }

@@ -54,17 +54,29 @@ class AccountLifecycleServiceTest {
     }
 
     @Test
-    void updatesPersonalContactAndAddressData() {
+    void updatesThePersonalDataOfThePerson() {
         seedAda();
 
         Person updated = updateProfile.update(new UpdateUserProfileCommand("use0000001",
-                "Grace", "Hopper", "3001234567", "Calle Falsa 123", null, null, "10.0.0.5"));
+                "Grace", "Hopper", "3001234567", null, null, "10.0.0.5"));
 
         assertEquals("Grace", persons.findActive(updated.idPerson()).orElseThrow().name());
         assertEquals("Hopper", updated.lastName());
         assertEquals("3001234567", updated.cellphone().orElseThrow());
-        assertEquals("Calle Falsa 123", updated.address().orElseThrow());
         assertEquals(AuditAction.UPDATE, audits.logs().getFirst().action());
+    }
+
+    @Test
+    void theAvatarIsPersistedOnTheAccountNotOnThePerson() {
+        seedAda();
+
+        updateProfile.update(new UpdateUserProfileCommand("use0000001",
+                null, null, null, "https://cdn.example.com/grace.png", null, "10.0.0.5"));
+
+        // The avatar is account state. Losing it because only the person was saved is exactly
+        // the failure this assertion guards.
+        assertEquals("https://cdn.example.com/grace.png",
+                users.findActive("use0000001").orElseThrow().profileImage().orElseThrow());
     }
 
     @Test
@@ -72,7 +84,7 @@ class AccountLifecycleServiceTest {
         seedAda();
 
         updateProfile.update(new UpdateUserProfileCommand("use0000001",
-                null, null, null, null, null, "grace@example.com", null));
+                null, null, null, null, "grace@example.com", null));
 
         assertEquals("grace@example.com", users.findActive("use0000001").orElseThrow().email().value());
         assertFalse(users.findActive("use0000001").orElseThrow().isEmailVerified());
@@ -85,7 +97,7 @@ class AccountLifecycleServiceTest {
 
         assertThrows(EmailAlreadyRegisteredException.class,
                 () -> updateProfile.update(new UpdateUserProfileCommand("use0000001",
-                        null, null, null, null, null, "taken@example.com", null)));
+                        null, null, null, null, "taken@example.com", null)));
     }
 
     @Test

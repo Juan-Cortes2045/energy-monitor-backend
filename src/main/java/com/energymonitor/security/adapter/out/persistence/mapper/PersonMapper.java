@@ -37,8 +37,6 @@ public class PersonMapper {
         entity.setName(person.name());
         entity.setLastName(person.lastName());
         entity.setCellphone(person.cellphone().orElse(null));
-        entity.setAddress(person.address().orElse(null));
-        entity.setProfileImage(person.profileImage().orElse(null));
     }
 
     /**
@@ -49,6 +47,6 @@ public class PersonMapper {
      */
     public Person toDomain(PersonEntity entity) {
         return new Person(entity.getIdPerson(), entity.getName(), entity.getLastName(),
-                entity.getCellphone(), entity.getAddress(), entity.getProfileImage());
+                entity.getCellphone());
     }
 }

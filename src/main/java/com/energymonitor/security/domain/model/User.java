@@ -15,6 +15,9 @@ import java.util.Optional;
  */
 public class User {
 
+    /** Matches {@code user.profile_image VARCHAR(255)}. */
+    private static final int PROFILE_IMAGE_MAX = 255;
+
     private final String idUser;
     private final String idPerson;
     private PasswordHash passwordHash;
@@ -24,6 +27,7 @@ public class User {
     private UserStatus status;
     private int failedLoginAttempts;
     private Instant lastLoginAt;
+    private String profileImage;
 
     /**
      * Rehydrates or registers an account. Prefer {@link #register} for new accounts.
@@ -40,7 +44,7 @@ public class User {
      */
     public User(String idUser, String idPerson, PasswordHash passwordHash, Email email,
                 boolean emailVerified, Instant dateOfRegistration, UserStatus status,
-                int failedLoginAttempts, Instant lastLoginAt) {
+                int failedLoginAttempts, Instant lastLoginAt, String profileImage) {
         this.idUser = Preconditions.text(idUser, "idUser");
         this.idPerson = Preconditions.text(idPerson, "idPerson");
         this.passwordHash = Preconditions.notNull(passwordHash, "passwordHash");
@@ -50,6 +54,7 @@ public class User {
         this.status = Preconditions.notNull(status, "status");
         this.failedLoginAttempts = Preconditions.notNegative(failedLoginAttempts, "failedLoginAttempts");
         this.lastLoginAt = lastLoginAt;
+        this.profileImage = Preconditions.optionalText(profileImage, PROFILE_IMAGE_MAX, "profileImage");
     }
 
     /**
@@ -61,12 +66,13 @@ public class User {
      * @param passwordHash       already-hashed password
      * @param email              account address
      * @param dateOfRegistration registration instant
+     * @param profileImage       optional avatar shown for the account
      * @return a new active account with no failed attempts
      */
     public static User register(String idUser, String idPerson, PasswordHash passwordHash,
-                                Email email, Instant dateOfRegistration) {
+                                Email email, Instant dateOfRegistration, String profileImage) {
         return new User(idUser, idPerson, passwordHash, email, false, dateOfRegistration,
-                UserStatus.ACTIVE, 0, null);
+                UserStatus.ACTIVE, 0, null, profileImage);
     }
 
     /** @return the identifier */
@@ -133,6 +139,23 @@ public class User {
     /** Replaces the password hash, e.g. after a reset. */
     public void changePassword(PasswordHash newHash) {
         this.passwordHash = Preconditions.notNull(newHash, "passwordHash");
+    }
+
+    /** @return profile image URL or path, empty when not provided */
+    public Optional<String> profileImage() {
+        return Optional.ofNullable(profileImage);
+    }
+
+    /**
+     * Replaces the avatar shown for this account.
+     *
+     * <p>The image is an attribute of the account rather than of the person behind it, which is
+     * why it lives here and not on {@link Person}. Passing {@code null} clears it.
+     *
+     * @param profileImage new image location or {@code null}
+     */
+    public void changeProfileImage(String profileImage) {
+        this.profileImage = Preconditions.optionalText(profileImage, PROFILE_IMAGE_MAX, "profileImage");
     }
 
     /** Replaces the account address. Uniqueness is checked by the persistence layer (INV-003). */
