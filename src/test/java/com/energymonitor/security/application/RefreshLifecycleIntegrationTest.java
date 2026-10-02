@@ -107,7 +107,7 @@ class RefreshLifecycleIntegrationTest {
         rootSecret = "raiz-" + suffix;
         Instant now = Instant.now();
 
-        persons.save(new Person(personId, "Ada", "Lovelace", null));
+        persons.save(new Person(personId, "Ada", "Lovelace"));
         users.save(new User(userId, personId,
                 PasswordHash.of("$2a$10$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"),
                 Email.of("ciclo-" + suffix + "@example.com"), true, REGISTRATION,

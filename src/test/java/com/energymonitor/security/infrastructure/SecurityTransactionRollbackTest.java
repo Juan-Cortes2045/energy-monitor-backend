@@ -84,7 +84,7 @@ class SecurityTransactionRollbackTest {
         personId = "per" + suffix;
         userId = "use" + suffix;
         email = Email.of("rollback-" + suffix + "@example.com");
-        persons.save(new Person(personId, "Ada", "Lovelace", null));
+        persons.save(new Person(personId, "Ada", "Lovelace"));
         users.save(new User(userId, personId, PasswordHash.of(PASSWORD), email, true,
                 REGISTRATION, UserStatus.ACTIVE, 0, null, null));
     }

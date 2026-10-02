@@ -14,7 +14,6 @@ import jakarta.validation.constraints.Size;
  * @param password     plain-text candidate, hashed by the password hasher port
  * @param name         first name
  * @param lastName     last name
- * @param cellphone    optional phone
  * @param profileImage optional profile image location
  */
 public record RegisterRequest(
@@ -22,6 +21,5 @@ public record RegisterRequest(
         @NotBlank @Size(max = 255) String password,
         @NotBlank @Size(max = 100) String name,
         @NotBlank @Size(max = 100) String lastName,
-        @Size(max = 15) String cellphone,
         @Size(max = 255) String profileImage) {
 }

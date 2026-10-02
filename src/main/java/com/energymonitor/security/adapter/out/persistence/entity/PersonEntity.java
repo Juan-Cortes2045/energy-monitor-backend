@@ -25,9 +25,6 @@ public class PersonEntity extends BaseAuditEntity {
     @Column(name = "last_name", nullable = false, length = 100)
     private String lastName;
 
-    @Column(name = "cellphone", length = 15)
-    private String cellphone;
-
     public PersonEntity() {
     }
 
@@ -53,14 +50,6 @@ public class PersonEntity extends BaseAuditEntity {
 
     public void setLastName(String lastName) {
         this.lastName = lastName;
-    }
-
-    public String getCellphone() {
-        return cellphone;
-    }
-
-    public void setCellphone(String cellphone) {
-        this.cellphone = cellphone;
     }
 
 }

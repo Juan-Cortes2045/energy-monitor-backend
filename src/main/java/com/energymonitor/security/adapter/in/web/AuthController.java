@@ -122,7 +122,7 @@ public class AuthController {
     public ResponseEntity<AccountResponse> register(@Valid @RequestBody RegisterRequest request,
                                                     HttpServletRequest servlet) {
         var account = registerUser.register(new RegisterUserCommand(request.email(),
-                request.password(), request.name(), request.lastName(), request.cellphone(),
+                request.password(), request.name(), request.lastName(),
                 request.profileImage(), clientIp(servlet)));
         return ResponseEntity.status(HttpStatus.CREATED).body(AccountResponse.from(account));
     }

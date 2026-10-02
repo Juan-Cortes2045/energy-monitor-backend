@@ -1,7 +1,6 @@
 package com.energymonitor.security.domain.model;
 
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * Personal identity of a human being. Aggregate root of its own small aggregate.
@@ -16,31 +15,30 @@ import java.util.Optional;
  * outright: it duplicated {@code home.address}, which the home module owns and where the
  * address a user actually occupies belongs.
  *
- * <p>What is left is what can only ever describe the person: their name and their phone.
+ * <p>What is left is what can only ever describe the person: their name.
+ *
+ * <p>The phone number was removed alongside it. Notifications are email only, so a contact
+ * channel that nothing delivers to has no reason to be stored against a person.
  *
  * <p>Maps to the {@code person} table.
  */
 public class Person {
 
     private static final int NAME_MAX = 100;
-    private static final int CELLPHONE_MAX = 15;
 
     private final String idPerson;
     private String name;
     private String lastName;
-    private String cellphone;
 
     /**
-     * @param idPerson  identifier, {@code VARCHAR(10)}
-     * @param name      first name, required (INV-001)
-     * @param lastName  last name, required (INV-001)
-     * @param cellphone optional
+     * @param idPerson identifier, {@code VARCHAR(10)}
+     * @param name     first name, required (INV-001)
+     * @param lastName last name, required (INV-001)
      */
-    public Person(String idPerson, String name, String lastName, String cellphone) {
+    public Person(String idPerson, String name, String lastName) {
         this.idPerson = Preconditions.text(idPerson, "idPerson");
         this.name = Preconditions.text(name, NAME_MAX, "name");
         this.lastName = Preconditions.text(lastName, NAME_MAX, "lastName");
-        this.cellphone = Preconditions.optionalText(cellphone, CELLPHONE_MAX, "cellphone");
     }
 
     /** @return the identifier */
@@ -58,11 +56,6 @@ public class Person {
         return lastName;
     }
 
-    /** @return phone number, empty when not provided */
-    public Optional<String> cellphone() {
-        return Optional.ofNullable(cellphone);
-    }
-
     /**
      * Replaces the first and last name.
      *
@@ -72,15 +65,6 @@ public class Person {
     public void rename(String name, String lastName) {
         this.name = Preconditions.text(name, NAME_MAX, "name");
         this.lastName = Preconditions.text(lastName, NAME_MAX, "lastName");
-    }
-
-    /**
-     * Replaces the phone number. Passing {@code null} clears it.
-     *
-     * @param cellphone new phone number or {@code null}
-     */
-    public void updateCellphone(String cellphone) {
-        this.cellphone = Preconditions.optionalText(cellphone, CELLPHONE_MAX, "cellphone");
     }
 
     @Override

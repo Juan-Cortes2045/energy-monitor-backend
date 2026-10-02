@@ -59,8 +59,7 @@ public class RegisterUserService implements RegisterUser {
             throw new EmailAlreadyRegisteredException("an account already exists for " + email);
         }
 
-        Person person = new Person(identifiers.generate(), command.name(), command.lastName(),
-                command.cellphone());
+        Person person = new Person(identifiers.generate(), command.name(), command.lastName());
         personPort.save(person);
 
         // The avatar belongs to the account, not to the person: person only describes the human.
