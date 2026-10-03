@@ -16,7 +16,7 @@ class SecuritySupportModelTest {
     class PersonBehaviour {
 
         private Person person() {
-            return new Person("PER0000001", "Ana", "Restrepo", "3001234567");
+            return new Person("PER0000001", "Ana", "Restrepo");
         }
 
         @Test
@@ -27,24 +27,23 @@ class SecuritySupportModelTest {
             assertThat(person.idPerson()).isEqualTo("PER0000001");
             assertThat(person.name()).isEqualTo("Ana");
             assertThat(person.lastName()).isEqualTo("Restrepo");
-            assertThat(person.cellphone()).contains("3001234567");
         }
 
         @Test
-        @DisplayName("optional fields may be absent")
-        void optionalFieldsMayBeAbsent() {
-            Person person = new Person("PER0000001", "Ana", "Restrepo", null);
-
-            assertThat(person.cellphone()).isEmpty();
+        @DisplayName("refuses a name longer than the column")
+        void refusesAnOverlongName() {
+            assertThatThrownBy(() -> new Person("PER0000001", "a".repeat(101), "Restrepo"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("name");
         }
 
         @Test
         @DisplayName("refuses a missing first or last name")
         void refusesMissingNames() {
-            assertThatThrownBy(() -> new Person("PER0000001", " ", "Restrepo", null))
+            assertThatThrownBy(() -> new Person("PER0000001", " ", "Restrepo"))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("name");
-            assertThatThrownBy(() -> new Person("PER0000001", "Ana", null, null))
+            assertThatThrownBy(() -> new Person("PER0000001", "Ana", null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("lastName");
         }
@@ -58,20 +57,6 @@ class SecuritySupportModelTest {
 
             assertThat(person.name()).isEqualTo("Ana María");
             assertThat(person.lastName()).isEqualTo("Restrepo Vega");
-        }
-
-        @Test
-        @DisplayName("updateCellphone replaces or clears the phone number")
-        void updateCellphoneReplacesFields() {
-            Person person = person();
-
-            person.updateCellphone("3109876543");
-            assertThat(person.cellphone()).contains("3109876543");
-
-            person.updateCellphone(null);
-
-            assertThat(person.cellphone()).isEmpty();
-            assertThat(person.cellphone()).isEmpty();
         }
     }
 
