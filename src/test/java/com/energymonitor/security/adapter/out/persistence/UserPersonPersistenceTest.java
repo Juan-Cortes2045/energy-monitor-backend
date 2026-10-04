@@ -49,22 +49,22 @@ class UserPersonPersistenceTest {
     }
 
     @Test
-    void personWithAndWithoutOptionalFieldsRoundTrips() {
-        Person incomplete = new Person(PERSON_ID, "Ada", "Lovelace", null);
-        persons.save(incomplete);
+    void personNameRoundTripsAndRenamesPersist() {
+        Person person = new Person(PERSON_ID, "Ada", "Lovelace");
+        persons.save(person);
         flushAndClear();
 
         Person read = persons.findActive(PERSON_ID).orElseThrow();
         assertEquals("Ada", read.name());
         assertEquals("Lovelace", read.lastName());
-        assertTrue(read.cellphone().isEmpty());
 
-        Person complete = new Person(PERSON_ID, "Ada", "Lovelace", "3001234567");
-        persons.save(complete);
+        read.rename("Ada", "King");
+        persons.save(read);
         flushAndClear();
 
-        Person updated = persons.findActive(PERSON_ID).orElseThrow();
-        assertEquals("3001234567", updated.cellphone().orElseThrow());
+        Person renamed = persons.findActive(PERSON_ID).orElseThrow();
+        assertEquals("Ada", renamed.name());
+        assertEquals("King", renamed.lastName());
     }
 
     @Test

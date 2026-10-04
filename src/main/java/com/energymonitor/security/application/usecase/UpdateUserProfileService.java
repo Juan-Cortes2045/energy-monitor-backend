@@ -19,9 +19,10 @@ import java.time.Instant;
 /**
  * Edits the personal data of a user and, optionally, the account email and avatar.
  *
- * <p>The split follows ownership: name, last name and cellphone belong to {@code person}, while the
- * email and the profile image belong to {@code user}. No residential address is edited here, because
- * that value is the {@code home} module's to own.
+ * <p>The split follows ownership: name and last name belong to {@code person}, while the email and
+ * the profile image belong to {@code user}. No residential address is edited here, because that
+ * value is the {@code home} module's to own, and no phone number either, since notifications are
+ * email only.
  */
 public class UpdateUserProfileService implements UpdateUserProfile {
 
@@ -49,11 +50,15 @@ public class UpdateUserProfileService implements UpdateUserProfile {
         Person person = personPort.findActive(user.idPerson())
                 .orElseThrow(() -> new UserNotFoundException("no active person " + user.idPerson()));
 
+        // Saved once, after every personal attribute has been applied. Saving inside each branch
+        // would persist the person when only one field changed, and skip it entirely when the
+        // other did, which is how a rename used to be lost.
+        boolean personChanged = false;
         if (command.name() != null && command.lastName() != null) {
             person.rename(command.name(), command.lastName());
+            personChanged = true;
         }
-        if (command.cellphone() != null) {
-            person.updateCellphone(command.cellphone());
+        if (personChanged) {
             personPort.save(person);
         }
 

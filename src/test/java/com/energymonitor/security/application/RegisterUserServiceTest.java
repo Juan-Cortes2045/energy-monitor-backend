@@ -41,7 +41,7 @@ class RegisterUserServiceTest {
 
     private RegisterUserCommand command(String email, String password) {
         return new RegisterUserCommand(email, password, "Ada", "Lovelace",
-                null, null, "10.0.0.1");
+                null, "10.0.0.1");
     }
 
     @Test

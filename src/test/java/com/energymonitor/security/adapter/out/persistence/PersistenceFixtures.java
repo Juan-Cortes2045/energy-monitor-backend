@@ -31,7 +31,7 @@ final class PersistenceFixtures {
     }
 
     static void seedPerson(PersonPersistenceAdapter persons) {
-        persons.save(new Person(PERSON_ID, "Ada", "Lovelace", null));
+        persons.save(new Person(PERSON_ID, "Ada", "Lovelace"));
     }
 
     /** Seeds {@code person} and {@code user}, the two roots most rows depend on. */

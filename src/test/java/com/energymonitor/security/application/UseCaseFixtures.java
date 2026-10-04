@@ -106,7 +106,7 @@ public final class UseCaseFixtures {
         }
 
         public Person seed(String idPerson) {
-            Person person = new Person(idPerson, "Ada", "Lovelace", null);
+            Person person = new Person(idPerson, "Ada", "Lovelace");
             byId.put(idPerson, person);
             return person;
         }

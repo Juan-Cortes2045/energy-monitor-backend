@@ -92,7 +92,7 @@ class AuthControllerWebTest {
     private static String registrationBody() {
         return """
                 {"email":"someone@example.com","password":"StrongPass1!","name":"Ada",
-                 "lastName":"Lovelace","cellphone":"3001234567",
+                 "lastName":"Lovelace",
                  "profileImage":"https://example.com/a.png"}
                 """;
     }

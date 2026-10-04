@@ -58,11 +58,10 @@ class AccountLifecycleServiceTest {
         seedAda();
 
         Person updated = updateProfile.update(new UpdateUserProfileCommand("use0000001",
-                "Grace", "Hopper", "3001234567", null, null, "10.0.0.5"));
+                "Grace", "Hopper", null, null, "10.0.0.5"));
 
         assertEquals("Grace", persons.findActive(updated.idPerson()).orElseThrow().name());
         assertEquals("Hopper", updated.lastName());
-        assertEquals("3001234567", updated.cellphone().orElseThrow());
         assertEquals(AuditAction.UPDATE, audits.logs().getFirst().action());
     }
 
@@ -71,7 +70,7 @@ class AccountLifecycleServiceTest {
         seedAda();
 
         updateProfile.update(new UpdateUserProfileCommand("use0000001",
-                null, null, null, "https://cdn.example.com/grace.png", null, "10.0.0.5"));
+                null, null, "https://cdn.example.com/grace.png", null, "10.0.0.5"));
 
         // The avatar is account state. Losing it because only the person was saved is exactly
         // the failure this assertion guards.
@@ -84,7 +83,7 @@ class AccountLifecycleServiceTest {
         seedAda();
 
         updateProfile.update(new UpdateUserProfileCommand("use0000001",
-                null, null, null, null, "grace@example.com", null));
+                null, null, null, "grace@example.com", null));
 
         assertEquals("grace@example.com", users.findActive("use0000001").orElseThrow().email().value());
         assertFalse(users.findActive("use0000001").orElseThrow().isEmailVerified());
@@ -97,7 +96,7 @@ class AccountLifecycleServiceTest {
 
         assertThrows(EmailAlreadyRegisteredException.class,
                 () -> updateProfile.update(new UpdateUserProfileCommand("use0000001",
-                        null, null, null, null, "taken@example.com", null)));
+                        null, null, null, "taken@example.com", null)));
     }
 
     @Test
