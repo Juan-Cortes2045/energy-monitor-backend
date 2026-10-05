@@ -75,8 +75,7 @@ public class Home {
      * @param creationDate when the home was created
      * @return a new home
      */
-    public static Home create(String idHome, String name, String homeTypeId, String address,
-                              String accessCode, String description, Instant creationDate) {
+    public static Home create(String idHome, String name, String homeTypeId, String address,String accessCode, String description, Instant creationDate) {
         return new Home(idHome, name, homeTypeId, address, accessCode, description, creationDate);
     }
 
