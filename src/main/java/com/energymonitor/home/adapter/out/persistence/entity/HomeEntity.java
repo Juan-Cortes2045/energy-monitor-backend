@@ -38,8 +38,7 @@ public class HomeEntity extends BaseAuditEntity {
     public HomeEntity() {
     }
 
-    public HomeEntity(String idHome, String name, String homeTypeId, String address,
-                     String accessCode, String description, Instant creationDate) {
+    public HomeEntity(String idHome, String name, String homeTypeId, String address,String accessCode, String description, Instant creationDate) {
         this.idHome = idHome;
         this.name = name;
         this.homeTypeId = homeTypeId;
