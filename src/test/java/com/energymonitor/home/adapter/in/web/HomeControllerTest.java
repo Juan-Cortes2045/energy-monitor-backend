@@ -13,6 +13,7 @@ import com.energymonitor.home.application.command.CreateHomeCommand;
 import com.energymonitor.home.application.command.JoinHomeCommand;
 import com.energymonitor.home.application.command.LeaveHomeCommand;
 import com.energymonitor.home.application.command.ListHomesQuery;
+import com.energymonitor.home.application.command.ListMembersQuery;
 import com.energymonitor.home.application.command.RemoveUserCommand;
 import com.energymonitor.home.application.command.ToggleFavoriteCommand;
 import com.energymonitor.home.application.exception.AccessCodeNotFoundException;
@@ -24,6 +25,7 @@ import com.energymonitor.home.application.port.in.CreateHome;
 import com.energymonitor.home.application.port.in.JoinHome;
 import com.energymonitor.home.application.port.in.LeaveHome;
 import com.energymonitor.home.application.port.in.ListHomes;
+import com.energymonitor.home.application.port.in.ListMembers;
 import com.energymonitor.home.application.port.in.RemoveUser;
 import com.energymonitor.home.application.port.in.ToggleFavorite;
 import com.energymonitor.home.application.result.HomeMembershipResult;
@@ -53,6 +55,9 @@ class HomeControllerTest {
 
     @MockitoBean
     private ListHomes listHomes;
+
+    @MockitoBean
+    private ListMembers listMembers;
 
     @MockitoBean
     private ToggleFavorite toggleFavorite;
@@ -116,6 +121,30 @@ class HomeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].idHome").value(HOME_ID))
                 .andExpect(jsonPath("$[0].role").value("OWNER"));
+    }
+
+    @Test
+    void listMembersReturns200() throws Exception {
+        when(currentUser.resolveCurrentUserId()).thenReturn(USER_ID);
+        when(listMembers.list(any(ListMembersQuery.class)))
+                .thenReturn(List.of(new UserHomeResult("use0000002", HOME_ID, Role.MEMBER, false)));
+
+        mockMvc.perform(get("/api/v1/homes/" + HOME_ID + "/members")
+                        .header("X-User-Id", USER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].userId").value("use0000002"))
+                .andExpect(jsonPath("$[0].role").value("MEMBER"));
+    }
+
+    @Test
+    void listMembersReturns404WhenNotMember() throws Exception {
+        when(currentUser.resolveCurrentUserId()).thenReturn(USER_ID);
+        when(listMembers.list(any(ListMembersQuery.class)))
+                .thenThrow(new HomeNotFoundException("no active membership"));
+
+        mockMvc.perform(get("/api/v1/homes/" + HOME_ID + "/members")
+                        .header("X-User-Id", USER_ID))
+                .andExpect(status().isNotFound());
     }
 
     @Test
