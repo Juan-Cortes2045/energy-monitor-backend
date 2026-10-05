@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.energymonitor.security.application.port.out.PasswordPolicyPersistencePort;
 import com.energymonitor.security.domain.model.PasswordPolicy;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import jakarta.persistence.EntityManager;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -28,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
  * startup, not a state this test set up itself.
  */
 @SpringBootTest
-class PasswordPolicySeedTest {
+class PasswordPolicySeedTest extends JwtKeyedTest {
 
     private static final String SEEDED_POLICY_ID = "pol0000001";
 

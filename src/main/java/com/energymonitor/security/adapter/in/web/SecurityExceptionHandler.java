@@ -17,9 +17,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -41,6 +43,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *   <li>401 - the presented password did not match.</li>
  *   <li>403 - the account is blocked or inactive.</li>
  *   <li>422 - the password was well-formed but breaks the configured policy.</li>
+ *   <li>405 - the route exists, but not for the verb the request used.</li>
  *   <li>500 - anything unexpected, reported without detail.</li>
  * </ul>
  */
@@ -198,7 +201,7 @@ public class SecurityExceptionHandler {
         return respond(HttpStatus.BAD_REQUEST, "The request could not be processed.", request);
     }
 
-    /**
+/**
      * A domain guard rejected the input, for example a malformed address or a blank field.
      *
      * @param exception the domain failure
@@ -210,6 +213,37 @@ public class SecurityExceptionHandler {
                                                           HttpServletRequest request) {
         LOG.debug("Rejected input on {}", request.getRequestURI(), exception);
         return respond(HttpStatus.BAD_REQUEST, exception.getMessage(), request);
+    }
+
+    /**
+     * The route exists but not for the verb that was used.
+     *
+     * <p>Handled explicitly because the fallback below would otherwise answer 500: a client that
+     * posts to a route that only accepts PUT has made a request the server understood perfectly
+     * well, and reporting it as a server failure hides the one fact that fixes it. The allowed
+     * methods are published in the {@code Allow} header, which is the machine-readable half of
+     * the same answer.
+     *
+     * @param exception the framework failure carrying the supported methods
+     * @param request   the failed request
+     * @return 405
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiError> handleMethodNotAllowed(
+            HttpRequestMethodNotSupportedException exception, HttpServletRequest request) {
+        LOG.debug("Rejected {} on {}", request.getMethod(), request.getRequestURI());
+        String allowed = exception.getSupportedHttpMethods() == null ? ""
+                : String.join(", ", exception.getSupportedHttpMethods().stream()
+                        .map(method -> method.name()).toList());
+        HttpHeaders headers = new HttpHeaders();
+        if (!allowed.isEmpty()) {
+            headers.set(HttpHeaders.ALLOW, allowed);
+        }
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).headers(headers)
+                .body(ApiError.of(Instant.now(clock), HttpStatus.METHOD_NOT_ALLOWED.value(),
+                        HttpStatus.METHOD_NOT_ALLOWED.getReasonPhrase(),
+                        "Method " + request.getMethod() + " is not supported for this resource.",
+                        request.getRequestURI()));
     }
 
     /**

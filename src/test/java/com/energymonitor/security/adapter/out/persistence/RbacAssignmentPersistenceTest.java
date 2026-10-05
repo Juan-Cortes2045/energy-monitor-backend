@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.energymonitor.security.domain.model.SystemRolePermission;
 import com.energymonitor.security.domain.model.UserSystemRole;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @SpringBootTest
 @Transactional
-class RbacAssignmentPersistenceTest {
+class RbacAssignmentPersistenceTest extends JwtKeyedTest {
 
     private static final String USER_ID = "use0000001";
     private static final String ROLE_ID = "rls0000001";

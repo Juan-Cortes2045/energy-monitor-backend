@@ -10,6 +10,7 @@ import com.energymonitor.security.domain.model.AuditAction;
 import com.energymonitor.security.domain.model.AuditLog;
 import com.energymonitor.security.domain.model.LoginErrorLog;
 import com.energymonitor.security.domain.model.LoginErrorType;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @SpringBootTest
 @Transactional
-class LogPersistenceTest {
+class LogPersistenceTest extends JwtKeyedTest {
 
     private static final String USER_ID = "use0000001";
     private static final String AUDIT_ID = "aud0000001";

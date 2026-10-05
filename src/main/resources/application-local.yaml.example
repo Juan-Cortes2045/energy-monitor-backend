@@ -6,9 +6,17 @@ spring:
 
 security:
   jwt:
-    # Copy this file to application-local.yaml, which git ignores, and replace the value with
-    # a random secret of at least 32 bytes. Generate one with:
-    #   openssl rand -base64 48
-    # Anyone holding this secret can mint tokens for any account, so it must never be
-    # committed and must be rotated per environment.
-    secret: "CHANGE_ME_AT_LEAST_32_BYTES_LONG"
+    issuer: https://energy-monitor-backend
+    access-token-ttl: 15m
+    # Generate the pair locally, then point these at it. Never commit the files.
+    #   openssl genpkey -algorithm RSA -out ~/.energy-monitor/keys/private.pem -pkeyopt rsa_keygen_bits:2048
+    #   openssl rsa -in ~/.energy-monitor/keys/private.pem -pubout -out ~/.energy-monitor/keys/public.pem
+    private-key-path: ${SECURITY_JWT_PRIVATE_KEY_PATH:/path/to/private.pem}
+    public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:/path/to/public.pem}
+
+  cors:
+    # Origins allowed to call this API from a browser. Comma separated; leave empty to answer no
+    # cross-origin caller at all. The React Native client does not go through CORS, so it is
+    # unaffected by this list.
+    allowed-origins: "http://localhost:5173,http://127.0.0.1:5173"
+    allow-credentials: false

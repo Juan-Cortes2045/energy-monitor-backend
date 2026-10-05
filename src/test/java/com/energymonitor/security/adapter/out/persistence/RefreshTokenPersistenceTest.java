@@ -8,6 +8,7 @@ import com.energymonitor.security.domain.model.RefreshToken;
 import com.energymonitor.security.domain.model.RefreshTokenStatus;
 import com.energymonitor.security.domain.model.RevocationReason;
 import com.energymonitor.security.domain.model.UserSession;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
@@ -26,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @SpringBootTest
 @Transactional
-class RefreshTokenPersistenceTest {
+class RefreshTokenPersistenceTest extends JwtKeyedTest {
 
     private static final String SESSION_ID = "ses0000001";
     private static final Instant OPENED_AT = Instant.parse("2026-05-01T10:00:00Z");

@@ -34,12 +34,15 @@ public interface PasswordResetTokenPersistencePort {
     Optional<PasswordResetToken> findActive(String idResetToken);
 
     /**
-     * Finds the active token by its opaque value.
+     * Finds the active token by the hash of its secret.
      *
-     * @param resetToken the value
+     * <p>The port takes a hash and not a secret: a caller that has a secret hashes it first
+     * through {@link PasswordResetTokenHasherPort}, so no clear value ever reaches the store.
+     *
+     * @param resetTokenHash the hash to resolve
      * @return the domain object, empty when soft-deleted or unknown
      */
-    Optional<PasswordResetToken> findActiveByValue(String resetToken);
+    Optional<PasswordResetToken> findActiveByHash(String resetTokenHash);
 
     /**
      * Lists the active tokens of a user, newest first.

@@ -3,71 +3,119 @@ package com.energymonitor.security.domain.model;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Single-use token allowing a {@link User} to recover their password.
  *
- * <p>The domain tracks validity only. Generating the random token and mailing it belong to
- * the security adapter, which will arrive at this object already populated.
+ * <p>The domain tracks validity only. Generating the random token, hashing it and handing it to
+ * a delivery channel belong to the application and its adapters, which arrive here with a token
+ * already populated.
+ *
+ * <h2>Only the hash is stored</h2>
+ *
+ * <p>What reaches the database is {@link #resetTokenHash()}, the digest of the secret, and
+ * nothing else. A disclosure of {@code password_reset_token} therefore hands over no credential
+ * that could be redeemed, which is the whole reason for the column being named
+ * {@code reset_token_hash}.
+ *
+ * <p>The clear secret is nevertheless present on a freshly issued token, as
+ * {@link #clearToken()}, because someone has to deliver it to the account owner and this is the
+ * last place it exists outside the request that generated it. It is transient by construction:
+ * the persistence mapping has no field for it, so it cannot be written to a column even by
+ * mistake, and a token read back from the database carries none. That is the difference from
+ * {@link RefreshToken}, which never sees its secret at all - a refresh token is handed straight
+ * back to the client that asked, while a reset token has to be pushed somewhere the client is
+ * not holding.
  *
  * <p>Maps to the {@code password_reset_token} table.
  */
 public class PasswordResetToken {
 
-    private static final int TOKEN_MAX = 100;
+    /** Matches {@code password_reset_token.id_reset_token VARCHAR(10)}. */
+    private static final int ID_MAX = 10;
+
+    /** Lowercase hex SHA-256 renders 32 bytes as 64 characters. */
+    private static final int TOKEN_HASH_MAX = 64;
 
     private final String idResetToken;
     private final String idUser;
-    private final String resetToken;
+    private final String resetTokenHash;
     private final Instant createdAt;
     private final Instant expirationAt;
+
+    /**
+     * The secret in clear text, in memory only. {@code null} on a rehydrated token, which is
+     * why it is exposed as an {@link Optional}: a caller that needs it has to ask, and the
+     * empty case is a fact about the token rather than an accident.
+     */
+    private final String clearToken;
+
     private boolean used;
 
     /**
      * Issues a token. It starts unused and, provided the expiration is in the future, valid.
      *
-     * @param idResetToken identifier, {@code VARCHAR(10)}
-     * @param idUser       user the token was issued to
-     * @param resetToken   the random token value
-     * @param createdAt    issue instant
-     * @param expirationAt expiry instant, must be after {@code createdAt}
-     * @throws IllegalStateException if the expiration is not after the creation
+     * @param idResetToken   identifier, {@code VARCHAR(10)}
+     * @param idUser         user the token was issued to
+     * @param clearToken     the random secret, held in memory for delivery and never stored
+     * @param resetTokenHash hash of {@code clearToken}, the only part that is persisted
+     * @param createdAt      issue instant
+     * @param expirationAt   expiry instant, must be after {@code createdAt}
+     * @return the issued token
+     * @throws IllegalArgumentException if the identifier, the secret or the hash is missing
+     * @throws IllegalStateException    if the expiration is not after the creation
      */
-    public PasswordResetToken(String idResetToken, String idUser, String resetToken,
-                              Instant createdAt, Instant expirationAt) {
-        this.idResetToken = Preconditions.text(idResetToken, "idResetToken");
-        this.idUser = Preconditions.text(idUser, "idUser");
-        this.resetToken = Preconditions.text(resetToken, TOKEN_MAX, "resetToken");
-        this.createdAt = Preconditions.notNull(createdAt, "createdAt");
-        this.expirationAt = Preconditions.notNull(expirationAt, "expirationAt");
-        Preconditions.expirationAfter(createdAt, expirationAt);
-        this.used = false;
+    public static PasswordResetToken issue(String idResetToken, String idUser, String clearToken,
+                                          String resetTokenHash, Instant createdAt,
+                                          Instant expirationAt) {
+        return new PasswordResetToken(idResetToken, idUser, resetTokenHash, createdAt,
+                expirationAt, clearToken, false);
     }
 
     /**
      * Rehydrates a stored token, used state included.
      *
-     * <p>Enforces the same validity window as {@link #PasswordResetToken(String, String, String,
+     * <p>Enforces the same validity window as {@link #issue(String, String, String, String,
      * Instant, Instant)}. Coming from the database does not excuse an impossible state: a row
      * whose expiry precedes its creation is corrupt, and the domain refuses to represent it
      * rather than letting it travel through the application.
      *
-     * @param idResetToken identifier
-     * @param idUser       user the token belongs to
-     * @param resetToken   the token value
-     * @param createdAt    issue instant
-     * @param expirationAt expiry instant
-     * @param used         whether it has already been used
-     * @throws IllegalStateException if the expiration is not after the creation
+     * <p>There is no clear secret to restore, because none was ever stored.
+     *
+     * @param idResetToken   identifier
+     * @param idUser         user the token belongs to
+     * @param resetTokenHash the stored hash
+     * @param createdAt      issue instant
+     * @param expirationAt   expiry instant
+     * @param used           whether it has already been used
+     * @return the rehydrated token
+     * @throws IllegalArgumentException if the identifier or the hash is missing
+     * @throws IllegalStateException    if the expiration is not after the creation
      */
-    public PasswordResetToken(String idResetToken, String idUser, String resetToken,
-                              Instant createdAt, Instant expirationAt, boolean used) {
-        this.idResetToken = Preconditions.text(idResetToken, "idResetToken");
-        this.idUser = Preconditions.text(idUser, "idUser");
-        this.resetToken = Preconditions.text(resetToken, TOKEN_MAX, "resetToken");
+    public static PasswordResetToken rehydrate(String idResetToken, String idUser,
+                                               String resetTokenHash, Instant createdAt,
+                                               Instant expirationAt, boolean used) {
+        return new PasswordResetToken(idResetToken, idUser, resetTokenHash, createdAt,
+                expirationAt, null, used);
+    }
+
+    /**
+     * @param clearToken the secret to keep for delivery, or {@code null} when there is none,
+     *                   which is the case for every token that came from the database
+     */
+    private PasswordResetToken(String idResetToken, String idUser, String resetTokenHash,
+                               Instant createdAt, Instant expirationAt, String clearToken,
+                               boolean used) {
+        this.idResetToken = Preconditions.text(idResetToken, ID_MAX, "idResetToken");
+        this.idUser = Preconditions.text(idUser, ID_MAX, "idUser");
+        this.resetTokenHash = Preconditions.text(resetTokenHash, TOKEN_HASH_MAX, "resetTokenHash");
         this.createdAt = Preconditions.notNull(createdAt, "createdAt");
         this.expirationAt = Preconditions.notNull(expirationAt, "expirationAt");
         Preconditions.expirationAfter(createdAt, expirationAt);
+        this.clearToken = clearToken == null
+                ? null
+                : Preconditions.text(clearToken, "clearToken");
         this.used = used;
     }
 
@@ -81,9 +129,19 @@ public class PasswordResetToken {
         return idUser;
     }
 
-    /** @return the token value */
-    public String resetToken() {
-        return resetToken;
+    /** @return the stored hash, never the secret */
+    public String resetTokenHash() {
+        return resetTokenHash;
+    }
+
+    /**
+     * The clear secret, for the delivery channel that has to hand it to the account owner.
+     *
+     * @return the secret while the issuing request is still in flight, empty on a token that
+     *         came from the database
+     */
+    public Optional<String> clearToken() {
+        return Optional.ofNullable(clearToken);
     }
 
     /** @return issue instant */

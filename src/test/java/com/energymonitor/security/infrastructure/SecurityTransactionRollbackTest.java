@@ -43,7 +43,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
  * behaviour under test; it plants and removes its own rows instead.
  */
 @SpringBootTest
-class SecurityTransactionRollbackTest {
+class SecurityTransactionRollbackTest extends JwtKeyedTest {
 
     private static final String PASSWORD =
             "$2a$10$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

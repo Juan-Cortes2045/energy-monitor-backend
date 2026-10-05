@@ -19,14 +19,28 @@ spring:
 
 security:
   jwt:
-    # Required. The application refuses to start without it, so a deployment can never fall
-    # back to a well-known signing key. Supply it through the SECURITY_JWT_SECRET environment
-    # variable, or through application-local.yaml which is not tracked by git.
-    secret: ${SECURITY_JWT_SECRET:}
     # The iss claim. A URI rather than a bare name, as RFC 7519 expects, and validated on
     # every incoming token so a token minted for another service is rejected.
     issuer: https://energy-monitor-backend
     access-token-ttl: 15m
+    private-key-path: ${SECURITY_JWT_PRIVATE_KEY_PATH:}
+    public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:}
+
+  cors:
+    # The origins allowed to call this API from a browser, comma separated. Empty by default,
+    # which means no cross-origin caller is answered at all: fail closed until a deployment
+    # states its own. '*' is deliberately not offered as a default and is refused together with
+    # allow-credentials, because the Fetch specification rejects that combination outright.
+    #
+    # CORS is browser-only. The React web frontend needs this; the React Native client does not.
+    # No cookie and no HTTP session is ever created, so allow-credentials stays false: the
+    # Authorization header a browser client sends is a request header and does not depend on it.
+    allowed-origins: ${SECURITY_CORS_ALLOWED_ORIGINS:}
+    # Wildcard origin patterns, kept separate from allowed-origins because Spring only tolerates a
+    # wildcard in this list and echoes the concrete origin back rather than the pattern itself.
+    allowed-origin-patterns: ${SECURITY_CORS_ALLOWED_ORIGIN_PATTERNS:}
+    allow-credentials: false
+    max-age: 30m
 
 management:
   endpoints:

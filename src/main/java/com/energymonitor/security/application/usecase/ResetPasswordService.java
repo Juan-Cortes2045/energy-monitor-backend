@@ -9,6 +9,7 @@ import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.PasswordHasherPort;
 import com.energymonitor.security.application.port.out.PasswordPolicyPersistencePort;
+import com.energymonitor.security.application.port.out.PasswordResetTokenHasherPort;
 import com.energymonitor.security.application.port.out.PasswordResetTokenPersistencePort;
 import com.energymonitor.security.application.port.out.UserPersistencePort;
 import com.energymonitor.security.domain.model.AuditAction;
@@ -21,11 +22,18 @@ import java.time.Instant;
 
 /**
  * Redeems a password-reset token and replaces the account password.
+ *
+ * <p>The caller presents the secret it received through the reset channel; the store holds only
+ * its hash. Resolving one from the other is the first thing this does, and every rejection after
+ * that is the same {@link InvalidResetTokenException}: an unknown hash, an expired window and an
+ * already consumed token are indistinguishable from out here, so the endpoint cannot be used to
+ * probe which of the three happened.
  */
 public class ResetPasswordService implements ResetPassword {
 
     private final UserPersistencePort userPort;
     private final PasswordResetTokenPersistencePort tokenPort;
+    private final PasswordResetTokenHasherPort hasher;
     private final PasswordHasherPort passwordHasher;
     private final PasswordPolicyPersistencePort passwordPolicyPort;
     private final AuditLogPersistencePort auditLogPort;
@@ -34,12 +42,14 @@ public class ResetPasswordService implements ResetPassword {
 
     public ResetPasswordService(UserPersistencePort userPort,
                                 PasswordResetTokenPersistencePort tokenPort,
+                                PasswordResetTokenHasherPort hasher,
                                 PasswordHasherPort passwordHasher,
                                 PasswordPolicyPersistencePort passwordPolicyPort,
                                 AuditLogPersistencePort auditLogPort,
                                 IdentifierGeneratorPort identifiers, Clock clock) {
         this.userPort = userPort;
         this.tokenPort = tokenPort;
+        this.hasher = hasher;
         this.passwordHasher = passwordHasher;
         this.passwordPolicyPort = passwordPolicyPort;
         this.auditLogPort = auditLogPort;
@@ -50,7 +60,7 @@ public class ResetPasswordService implements ResetPassword {
     @Override
     public void reset(ResetPasswordCommand command) {
         Instant now = clock.instant();
-        PasswordResetToken token = tokenPort.findActiveByValue(command.resetToken())
+        PasswordResetToken token = tokenPort.findActiveByHash(hasher.hash(command.resetToken()))
                 .orElseThrow(() -> new InvalidResetTokenException("unknown or inactive reset token"));
         if (!token.isValid(now)) {
             throw new InvalidResetTokenException("reset token is expired or already used");

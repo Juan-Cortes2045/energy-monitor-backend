@@ -16,11 +16,12 @@ import com.energymonitor.security.domain.model.Email;
 import com.energymonitor.security.domain.model.PasswordHash;
 import com.energymonitor.security.domain.model.Person;
 import com.energymonitor.security.domain.model.RefreshToken;
-import com.energymonitor.security.domain.model.RevocationReason;
 import com.energymonitor.security.domain.model.RefreshTokenStatus;
+import com.energymonitor.security.domain.model.RevocationReason;
 import com.energymonitor.security.domain.model.User;
 import com.energymonitor.security.domain.model.UserSession;
 import com.energymonitor.security.domain.model.UserStatus;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -46,7 +47,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
  * untraceable.
  */
 @SpringBootTest
-class RefreshSessionTransactionTest {
+class RefreshSessionTransactionTest extends JwtKeyedTest {
 
     private static final Instant REGISTRATION = Instant.parse("2026-01-02T03:04:05Z");
     private static final Duration WEEK = Duration.ofDays(7);

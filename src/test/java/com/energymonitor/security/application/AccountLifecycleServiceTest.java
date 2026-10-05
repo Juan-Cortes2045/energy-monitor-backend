@@ -17,6 +17,7 @@ import com.energymonitor.security.domain.model.UserStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -63,6 +64,35 @@ class AccountLifecycleServiceTest {
         assertEquals("Grace", persons.findActive(updated.idPerson()).orElseThrow().name());
         assertEquals("Hopper", updated.lastName());
         assertEquals(AuditAction.UPDATE, audits.logs().getFirst().action());
+    }
+
+    @Test
+    void writesTheRenameThroughThePersonPort() {
+        // Reading the person back is not proof on its own: the fake hands back the very instance
+        // the use case mutated, so a rename that was never saved would still look applied. Only
+        // the recorded save proves the row was written, and it also shows what it was written
+        // with, which is the pair the endpoint's response is built from.
+        seedAda();
+        assertTrue(persons.savedNames().isEmpty(), "The fixture started with an unsaved person");
+
+        updateProfile.update(new UpdateUserProfileCommand("use0000001",
+                "Grace", "Hopper", null, null, "10.0.0.5"));
+
+        assertEquals(List.of("Grace Hopper"), persons.savedNames());
+    }
+
+    @Test
+    void writesNoPersonWhenTheRequestCarriesNoName() {
+        // An avatar-only or email-only edit must not touch the person: absent means unchanged,
+        // so writing the row here would be the only way the name could be lost.
+        seedAda();
+
+        updateProfile.update(new UpdateUserProfileCommand("use0000001",
+                null, null, "https://cdn.example.com/grace.png", null, "10.0.0.5"));
+
+        assertTrue(persons.savedNames().isEmpty(),
+                "A profile edit with no name wrote to the person anyway");
+        assertEquals("Ada", persons.findActive("per0000001").orElseThrow().name());
     }
 
     @Test

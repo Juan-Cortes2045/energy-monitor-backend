@@ -11,6 +11,8 @@ import com.energymonitor.security.application.command.LogoutUserSessionCommand;
 import com.energymonitor.security.application.command.RefreshSessionCommand;
 import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.RefreshSession;
+import com.energymonitor.security.application.port.out.RefreshTokenPersistencePort;
+import com.energymonitor.security.application.port.out.UserSessionPersistencePort;
 import com.energymonitor.security.application.result.RefreshStatus;
 import com.energymonitor.security.domain.model.Email;
 import com.energymonitor.security.domain.model.PasswordHash;
@@ -21,8 +23,7 @@ import com.energymonitor.security.domain.model.RevocationReason;
 import com.energymonitor.security.domain.model.User;
 import com.energymonitor.security.domain.model.UserSession;
 import com.energymonitor.security.domain.model.UserStatus;
-import com.energymonitor.security.application.port.out.RefreshTokenPersistencePort;
-import com.energymonitor.security.application.port.out.UserSessionPersistencePort;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -43,7 +44,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * because that state is what an incident investigation would read.
  */
 @SpringBootTest
-class RefreshLifecycleIntegrationTest {
+class RefreshLifecycleIntegrationTest extends JwtKeyedTest {
 
     private static final Instant REGISTRATION = Instant.parse("2026-01-02T03:04:05Z");
     private static final Duration WEEK = Duration.ofDays(7);
