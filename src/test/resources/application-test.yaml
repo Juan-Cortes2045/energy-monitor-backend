@@ -7,3 +7,7 @@ spring:
 security:
   jwt:
     secret: "test-secret-key-that-is-at-least-32-bytes-long-for-tests"
+    # The JWT beans need an RSA pair on disk. Each machine generates its own once
+    # (see application-local.yaml.example); the environment variables win when set.
+    private-key-path: ${SECURITY_JWT_PRIVATE_KEY_PATH:${user.home}/.energy-monitor/keys/private.pem}
+    public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:${user.home}/.energy-monitor/keys/public.pem}
