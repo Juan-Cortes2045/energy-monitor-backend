@@ -36,9 +36,6 @@ public class PersonMapper {
         entity.setIdPerson(person.idPerson());
         entity.setName(person.name());
         entity.setLastName(person.lastName());
-        entity.setCellphone(person.cellphone().orElse(null));
-        entity.setAddress(person.address().orElse(null));
-        entity.setProfileImage(person.profileImage().orElse(null));
     }
 
     /**
@@ -48,7 +45,6 @@ public class PersonMapper {
      * @return the domain object
      */
     public Person toDomain(PersonEntity entity) {
-        return new Person(entity.getIdPerson(), entity.getName(), entity.getLastName(),
-                entity.getCellphone(), entity.getAddress(), entity.getProfileImage());
+        return new Person(entity.getIdPerson(), entity.getName(), entity.getLastName());
     }
 }

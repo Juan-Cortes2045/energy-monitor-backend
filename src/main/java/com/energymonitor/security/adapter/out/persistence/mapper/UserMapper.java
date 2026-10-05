@@ -53,6 +53,7 @@ public class UserMapper {
         entity.setStatus(user.status());
         entity.setFailedLoginAttempts(user.failedLoginAttempts());
         entity.setLastLoginAt(Instants.truncate(user.lastLoginAt().orElse(null)));
+        entity.setProfileImage(user.profileImage().orElse(null));
     }
 
     /**
@@ -71,6 +72,7 @@ public class UserMapper {
                 entity.getRegistrationDate(),
                 entity.getStatus(),
                 entity.getFailedLoginAttempts(),
-                entity.getLastLoginAt());
+                entity.getLastLoginAt(),
+                entity.getProfileImage());
     }
 }

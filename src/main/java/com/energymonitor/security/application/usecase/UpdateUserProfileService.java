@@ -17,7 +17,12 @@ import java.time.Clock;
 import java.time.Instant;
 
 /**
- * Edits the personal and contact data of a user and, optionally, the account address.
+ * Edits the personal data of a user and, optionally, the account email and avatar.
+ *
+ * <p>The split follows ownership: name and last name belong to {@code person}, while the email and
+ * the profile image belong to {@code user}. No residential address is edited here, because that
+ * value is the {@code home} module's to own, and no phone number either, since notifications are
+ * email only.
  */
 public class UpdateUserProfileService implements UpdateUserProfile {
 
@@ -45,14 +50,20 @@ public class UpdateUserProfileService implements UpdateUserProfile {
         Person person = personPort.findActive(user.idPerson())
                 .orElseThrow(() -> new UserNotFoundException("no active person " + user.idPerson()));
 
+        // Saved once, after every personal attribute has been applied. Saving inside each branch
+        // would persist the person when only one field changed, and skip it entirely when the
+        // other did, which is how a rename used to be lost.
+        boolean personChanged = false;
         if (command.name() != null && command.lastName() != null) {
             person.rename(command.name(), command.lastName());
+            personChanged = true;
         }
-        if (command.cellphone() != null || command.address() != null || command.profileImage() != null) {
-            person.updateContactData(command.cellphone(), command.address(), command.profileImage());
+        if (personChanged) {
+            personPort.save(person);
         }
-        personPort.save(person);
 
+        // The avatar is account state, so it changes on the User and not on the Person.
+        boolean accountChanged = false;
         if (command.newEmail() != null) {
             Email newEmail = Email.of(command.newEmail());
             userPort.findActiveByEmail(newEmail).ifPresent(existing -> {
@@ -61,6 +72,16 @@ public class UpdateUserProfileService implements UpdateUserProfile {
                 }
             });
             user.changeEmail(newEmail);
+            accountChanged = true;
+        }
+        if (command.profileImage() != null) {
+            user.changeProfileImage(command.profileImage());
+            accountChanged = true;
+        }
+        // Saved once, after every account attribute has been applied. Saving inside each branch
+        // would persist the account when only the address changed was intended, and skip it
+        // entirely when only the avatar was, which is how an avatar change used to be lost.
+        if (accountChanged) {
             userPort.save(user);
         }
 

@@ -13,30 +13,31 @@ package com.energymonitor.security.adapter.in.web.dto;
  * an HttpOnly cookie. The earlier Javadoc of this record claimed a cookie, which never
  * matched the implementation.
  *
- * <p>Consequences of the current state, recorded so nobody has to infer them:
+ * <p>Consequences of that choice, recorded so nobody has to infer them:
  *
  * <ul>
  *   <li>The refresh token is a seven-day credential, so a client that stores this body in
  *       script-accessible storage (localStorage, sessionStorage, plain JS state) exposes it
  *       to any XSS on the page. A client that keeps it in memory only narrows the window but
  *       does not remove it.</li>
- *   <li>There is no {@code POST /api/v1/auth/refresh} endpoint yet, so the refresh token
- *       cannot be exchanged for a new access token. It is issued, returned and currently
- *       unusable by the client; only {@code POST /api/v1/auth/logout} acts on a session.</li>
- *   <li>Because the token travels in the body and the client sends it back in a header rather
- *       than relying on an ambient cookie, CSRF does not apply to it today. Disabling CSRF in
- *       {@code SecurityFilterChainConfiguration} is correct for that reason.</li>
+ *   <li>It is presented back at {@code POST /api/v1/auth/refresh}, in the request body, and
+ *       the answer is a new access token and a new secret in the same shape.</li>
+ *   <li>Because the token travels in the body and the client sends it back explicitly rather
+ *       than relying on an ambient cookie, there is nothing for a cross-site request to ride
+ *       on. Disabling CSRF in {@code SecurityFilterChainConfiguration} is correct for that
+ *       reason, and would stop being correct if the token ever moved into a cookie.</li>
  * </ul>
  *
- * <p>The final transport, and with it the CSRF posture, must be settled when the refresh flow
- * is implemented. Moving the token to an HttpOnly cookie is a candidate, not a decision taken
- * here: it would make the token immune to XSS but would make it ambient and therefore require
- * CSRF protection on the refresh endpoint. Both properties are security-relevant, so the
- * choice belongs with the refresh flow, not with this record.
+ * <p>An HttpOnly cookie was considered and rejected: it would make the token unreachable by
+ * script, but it would also make it ambient, and an ambient credential needs CSRF protection on
+ * the refresh endpoint in exchange. The exchange is a contract with the frontend, not a
+ * detail to settle unilaterally here, so the body was kept and the reasoning is recorded for
+ * whoever revisits it.
  *
  * @param accessToken  the signed JWT to send as {@code Authorization: Bearer <token>}
- * @param refreshToken the opaque session token, currently returned in this body; see the
- *                     class documentation for its transport and its lack of a renewal flow
+ * @param refreshToken the opaque session token, returned in this body and presented at
+ *                     {@code POST /api/v1/auth/refresh}; see the class documentation for the
+ *                     transport decision
  * @param tokenType    always {@code Bearer}
  * @param expiresIn    access token lifetime in seconds
  * @param account      the authenticated account

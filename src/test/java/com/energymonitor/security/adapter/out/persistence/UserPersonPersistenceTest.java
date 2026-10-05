@@ -49,27 +49,48 @@ class UserPersonPersistenceTest {
     }
 
     @Test
-    void personWithAndWithoutOptionalFieldsRoundTrips() {
-        Person incomplete = new Person(PERSON_ID, "Ada", "Lovelace", null, null, null);
-        persons.save(incomplete);
+    void personNameRoundTripsAndRenamesPersist() {
+        Person person = new Person(PERSON_ID, "Ada", "Lovelace");
+        persons.save(person);
         flushAndClear();
 
         Person read = persons.findActive(PERSON_ID).orElseThrow();
         assertEquals("Ada", read.name());
         assertEquals("Lovelace", read.lastName());
-        assertTrue(read.cellphone().isEmpty());
-        assertTrue(read.address().isEmpty());
-        assertTrue(read.profileImage().isEmpty());
 
-        Person complete = new Person(PERSON_ID, "Ada", "Lovelace",
-                "3001234567", "Main St 1", "https://img/ada.png");
-        persons.save(complete);
+        read.rename("Ada", "King");
+        persons.save(read);
         flushAndClear();
 
-        Person updated = persons.findActive(PERSON_ID).orElseThrow();
-        assertEquals("3001234567", updated.cellphone().orElseThrow());
-        assertEquals("Main St 1", updated.address().orElseThrow());
-        assertEquals("https://img/ada.png", updated.profileImage().orElseThrow());
+        Person renamed = persons.findActive(PERSON_ID).orElseThrow();
+        assertEquals("Ada", renamed.name());
+        assertEquals("King", renamed.lastName());
+    }
+
+    @Test
+    void theProfileImageRoundTripsOnTheAccount() {
+        // The avatar belongs to user, so this is the column that must carry it now. Reading it
+        // back through the persistence layer is what proves the column and the mapping agree.
+        PersistenceFixtures.seedPerson(persons);
+        User withAvatar = new User(USER_ID, PERSON_ID, PasswordHash.of(HASH),
+                Email.of("ada@example.com"), true, REGISTRATION,
+                UserStatus.ACTIVE, 0, null, "https://img/ada.png");
+        users.save(withAvatar);
+        flushAndClear();
+
+        User read = users.findActive(USER_ID).orElseThrow();
+        assertEquals("https://img/ada.png", read.profileImage().orElseThrow());
+    }
+
+    @Test
+    void anAccountWithoutAvatarRoundTripsAsAbsent() {
+        PersistenceFixtures.seedPerson(persons);
+        users.save(new User(USER_ID, PERSON_ID, PasswordHash.of(HASH),
+                Email.of("ada@example.com"), true, REGISTRATION,
+                UserStatus.ACTIVE, 0, null, null));
+        flushAndClear();
+
+        assertTrue(users.findActive(USER_ID).orElseThrow().profileImage().isEmpty());
     }
 
     @Test
@@ -77,7 +98,7 @@ class UserPersonPersistenceTest {
         PersistenceFixtures.seedPerson(persons);
         User fresh = new User(USER_ID, PERSON_ID, PasswordHash.of(HASH),
                 Email.of("ada@example.com"), false, REGISTRATION,
-                UserStatus.INACTIVE, 0, null);
+                UserStatus.INACTIVE, 0, null, null);
         users.save(fresh);
         flushAndClear();
 
@@ -94,7 +115,7 @@ class UserPersonPersistenceTest {
 
         User revived = new User(USER_ID, PERSON_ID, PasswordHash.of(HASH),
                 Email.of("ada@example.com"), true, REGISTRATION,
-                UserStatus.ACTIVE, 2, Instant.parse("2026-03-01T12:30:45Z"));
+                UserStatus.ACTIVE, 2, Instant.parse("2026-03-01T12:30:45Z"), null);
         users.save(revived);
         flushAndClear();
 
@@ -110,7 +131,7 @@ class UserPersonPersistenceTest {
         PersistenceFixtures.seedPerson(persons);
         users.save(new User(USER_ID, PERSON_ID, PasswordHash.of(HASH),
                 Email.of("ada@example.com"), true, REGISTRATION,
-                UserStatus.ACTIVE, 0, null));
+                UserStatus.ACTIVE, 0, null, null));
         flushAndClear();
 
         User read = users.findActiveByEmail("ada@example.com").orElseThrow();

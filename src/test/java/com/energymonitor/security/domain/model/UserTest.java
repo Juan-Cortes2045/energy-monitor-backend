@@ -19,7 +19,7 @@ class UserTest {
         return User.register(ID_USER, ID_PERSON,
                 PasswordHash.of("$2a$10$abcdefghijklmnopqrstuv"),
                 Email.of("ana@example.com"),
-                REGISTERED_AT);
+                REGISTERED_AT, null);
     }
 
     @Nested
@@ -54,7 +54,7 @@ class UserTest {
             assertThatThrownBy(() -> new User(ID_USER, ID_PERSON,
                     PasswordHash.of("$2a$10$abcdefghijklmnopqrstuv"),
                     Email.of("ana@example.com"), false, REGISTERED_AT,
-                    UserStatus.ACTIVE, -1, null))
+                    UserStatus.ACTIVE, -1, null, null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("failedLoginAttempts");
         }
@@ -280,7 +280,7 @@ class UserTest {
         User other = User.register(ID_USER, ID_PERSON,
                 PasswordHash.of("$2a$10$otrocambiodelhashdeusuario"),
                 Email.of("otro@example.com"),
-                REGISTERED_AT);
+                REGISTERED_AT, null);
 
         assertThat(one).isEqualTo(other).hasSameHashCodeAs(other);
     }

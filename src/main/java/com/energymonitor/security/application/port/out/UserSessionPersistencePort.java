@@ -6,6 +6,11 @@ import java.util.Optional;
 
 /**
  * Output port for persisting {@link UserSession}.
+ *
+ * <p>This port is about logins only. Refresh tokens used to be a column here, which made a
+ * session and a secret the same thing and left two sources of truth for one credential. They
+ * now live in {@link RefreshTokenPersistencePort} as one row per generation, resolved by hash,
+ * and this port keeps no operation that takes or returns a secret.
  */
 public interface UserSessionPersistencePort {
 
@@ -24,14 +29,6 @@ public interface UserSessionPersistencePort {
      * @return the domain object, empty when soft-deleted or missing
      */
     Optional<UserSession> findActive(String idUserSession);
-
-    /**
-     * Finds the active session by refresh token value.
-     *
-     * @param refreshToken the token value
-     * @return the domain object, empty when soft-deleted, revoked or unknown
-     */
-    Optional<UserSession> findActiveByRefreshToken(String refreshToken);
 
     /**
      * Lists the active sessions of a user, most recent first.

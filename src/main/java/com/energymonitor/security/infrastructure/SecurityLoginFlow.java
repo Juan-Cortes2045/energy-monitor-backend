@@ -4,8 +4,16 @@ import com.energymonitor.security.application.command.AuthenticateUserCommand;
 import com.energymonitor.security.application.command.CreateUserSessionCommand;
 import com.energymonitor.security.application.port.in.AuthenticateUser;
 import com.energymonitor.security.application.port.in.CreateUserSession;
+import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
+import com.energymonitor.security.application.port.out.RefreshTokenHasherPort;
+import com.energymonitor.security.application.port.out.RefreshTokenPersistencePort;
+import com.energymonitor.security.application.port.out.TokenGeneratorPort;
 import com.energymonitor.security.application.result.AuthenticatedUser;
+import com.energymonitor.security.domain.model.RefreshToken;
 import com.energymonitor.security.domain.model.UserSession;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
@@ -29,15 +37,30 @@ import org.springframework.stereotype.Component;
 @Component
 public class SecurityLoginFlow {
 
+    /** Matches the session window set by {@code CreateUserSessionService}. */
+    private static final Duration REFRESH_TOKEN_TTL = Duration.ofDays(7);
+
     private final AuthenticateUser authenticateUser;
     private final CreateUserSession createUserSession;
+    private final RefreshTokenPersistencePort refreshTokens;
+    private final RefreshTokenHasherPort hasher;
+    private final TokenGeneratorPort tokenGenerator;
+    private final IdentifierGeneratorPort identifiers;
     private final JwtTokenIssuer tokenIssuer;
+    private final Clock clock;
 
     public SecurityLoginFlow(AuthenticateUser authenticateUser, CreateUserSession createUserSession,
-                             JwtTokenIssuer tokenIssuer) {
+                             RefreshTokenPersistencePort refreshTokens, RefreshTokenHasherPort hasher,
+                             TokenGeneratorPort tokenGenerator, IdentifierGeneratorPort identifiers,
+                             JwtTokenIssuer tokenIssuer, Clock clock) {
         this.authenticateUser = authenticateUser;
         this.createUserSession = createUserSession;
+        this.refreshTokens = refreshTokens;
+        this.hasher = hasher;
+        this.tokenGenerator = tokenGenerator;
+        this.identifiers = identifiers;
         this.tokenIssuer = tokenIssuer;
+        this.clock = clock;
     }
 
     /**
@@ -75,7 +98,17 @@ public class SecurityLoginFlow {
         AuthenticatedUser identity = result.user().orElseThrow();
         UserSession session = createUserSession.create(
                 new CreateUserSessionCommand(identity.idUser(), ipAddress, userAgent));
-        return Optional.of(new LoginOutcome(tokenIssuer.issue(identity), session.refreshToken(),
+
+        // The session is a login and the token is a secret hanging off it, so the first
+        // generation is issued here rather than inside the session use case. The raw token
+        // exists only in this frame: it is hashed on the way in and returned on the way out.
+        Instant now = clock.instant();
+        String rawToken = tokenGenerator.generateToken();
+        String idRefreshToken = identifiers.generate();
+        refreshTokens.save(RefreshToken.root(idRefreshToken, session.idUserSession(),
+                hasher.hash(rawToken), now, now.plus(REFRESH_TOKEN_TTL)));
+
+        return Optional.of(new LoginOutcome(tokenIssuer.issue(identity), rawToken,
                 tokenIssuer.accessTokenTtl().toSeconds(), identity));
     }
 }

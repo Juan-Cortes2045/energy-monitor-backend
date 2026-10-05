@@ -16,8 +16,7 @@ class SecuritySupportModelTest {
     class PersonBehaviour {
 
         private Person person() {
-            return new Person("PER0000001", "Ana", "Restrepo", "3001234567",
-                    "Calle 5 #10-20", "https://cdn.example.com/ana.png");
+            return new Person("PER0000001", "Ana", "Restrepo");
         }
 
         @Test
@@ -28,28 +27,23 @@ class SecuritySupportModelTest {
             assertThat(person.idPerson()).isEqualTo("PER0000001");
             assertThat(person.name()).isEqualTo("Ana");
             assertThat(person.lastName()).isEqualTo("Restrepo");
-            assertThat(person.cellphone()).contains("3001234567");
-            assertThat(person.address()).contains("Calle 5 #10-20");
-            assertThat(person.profileImage()).contains("https://cdn.example.com/ana.png");
         }
 
         @Test
-        @DisplayName("optional fields may be absent")
-        void optionalFieldsMayBeAbsent() {
-            Person person = new Person("PER0000001", "Ana", "Restrepo", null, null, null);
-
-            assertThat(person.cellphone()).isEmpty();
-            assertThat(person.address()).isEmpty();
-            assertThat(person.profileImage()).isEmpty();
+        @DisplayName("refuses a name longer than the column")
+        void refusesAnOverlongName() {
+            assertThatThrownBy(() -> new Person("PER0000001", "a".repeat(101), "Restrepo"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("name");
         }
 
         @Test
         @DisplayName("refuses a missing first or last name")
         void refusesMissingNames() {
-            assertThatThrownBy(() -> new Person("PER0000001", " ", "Restrepo", null, null, null))
+            assertThatThrownBy(() -> new Person("PER0000001", " ", "Restrepo"))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("name");
-            assertThatThrownBy(() -> new Person("PER0000001", "Ana", null, null, null, null))
+            assertThatThrownBy(() -> new Person("PER0000001", "Ana", null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("lastName");
         }
@@ -63,18 +57,6 @@ class SecuritySupportModelTest {
 
             assertThat(person.name()).isEqualTo("Ana María");
             assertThat(person.lastName()).isEqualTo("Restrepo Vega");
-        }
-
-        @Test
-        @DisplayName("updateContactData can clear an optional field with null")
-        void updateContactDataClearsFields() {
-            Person person = person();
-
-            person.updateContactData(null, "Nueva direccion", null);
-
-            assertThat(person.cellphone()).isEmpty();
-            assertThat(person.address()).contains("Nueva direccion");
-            assertThat(person.profileImage()).isEmpty();
         }
     }
 

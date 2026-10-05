@@ -17,12 +17,16 @@ import java.time.Instant;
  * @param email       the account address
  * @param status      the account status at the moment of authentication
  * @param lastLoginAt when this successful login was recorded
+ * @param profileImage the avatar shown for the account, {@code null} when none was set. It is
+ *                     account state rather than a credential, so it travels here while the
+ *                     password hash deliberately does not
  */
 public record AuthenticatedUser(
         String idUser,
         String idPerson,
         Email email,
         UserStatus status,
-        Instant lastLoginAt
+        Instant lastLoginAt,
+        String profileImage
 ) {
 }
