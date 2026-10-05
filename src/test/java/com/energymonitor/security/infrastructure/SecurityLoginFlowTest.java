@@ -97,13 +97,20 @@ class SecurityLoginFlowTest {
                 NOW.plus(Duration.ofDays(7)), "10.0.0.1", "JUnit");
     }
 
-    private static JwtTokenIssuer realIssuer(Duration ttl) {
-        return new JwtTokenIssuer(
-                NimbusJwtEncoder.withSecretKey(new javax.crypto.spec.SecretKeySpec(
-                        SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"))
-                        .algorithm(MacAlgorithm.HS256)
-                        .build(),
-                new SecurityJwtProperties(SECRET, "https://energy-monitor-backend", ttl),
+    private static JwtTokenIssuer realIssuer(Duration ttl) throws Exception {
+        java.security.KeyPairGenerator kpg = java.security.KeyPairGenerator.getInstance("RSA");
+        kpg.initialize(2048);
+        java.security.KeyPair kp = kpg.generateKeyPair();
+        java.nio.file.Path priv = java.nio.file.Files.createTempFile("priv", ".pem");
+        java.nio.file.Path pub = java.nio.file.Files.createTempFile("pub", ".pem");
+        writePem(priv, kp.getPrivate().getEncoded(), "PRIVATE KEY");
+        writePem(pub, kp.getPublic().getEncoded(), "PUBLIC KEY");
+        com.energymonitor.security.infrastructure.SecurityJwtProperties props =
+                new com.energymonitor.security.infrastructure.SecurityJwtProperties(
+                        "https://energy-monitor-backend", ttl, priv.toString(), pub.toString());
+        com.energymonitor.security.infrastructure.JwtConfiguration cfg =
+                new com.energymonitor.security.infrastructure.JwtConfiguration();
+        return new JwtTokenIssuer(cfg.jwtEncoder(props), props,
                 java.time.Clock.fixed(NOW, java.time.ZoneOffset.UTC));
     }
 
@@ -118,7 +125,7 @@ class SecurityLoginFlowTest {
     }
 
     @Test
-    void issuesBothTokensAndTheAccountOnSuccess() {
+    void issuesBothTokensAndTheAccountOnSuccess() throws Exception {
         givenSuccessfulAuthentication();
         SecurityLoginFlow realFlow = flowWith(realIssuer(Duration.ofMinutes(15)));
 
@@ -240,5 +247,15 @@ class SecurityLoginFlowTest {
 
     private void reset(Object... mocks) {
         org.mockito.Mockito.reset(mocks);
+    }
+    private static void writePem(java.nio.file.Path path, byte[] encoded, String type) throws Exception {
+        String base64 = java.util.Base64.getEncoder().encodeToString(encoded);
+        StringBuilder sb = new StringBuilder();
+        sb.append("-----BEGIN ").append(type).append("-----\n");
+        for (int i = 0; i < base64.length(); i += 64) {
+            sb.append(base64.substring(i, Math.min(i + 64, base64.length()))).append('\n');
+        }
+        sb.append("-----END ").append(type).append("-----\n");
+        java.nio.file.Files.writeString(path, sb.toString());
     }
 }

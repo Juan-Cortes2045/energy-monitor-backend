@@ -12,22 +12,6 @@ import org.springframework.stereotype.Component;
 
 /**
  * Issues the JWT access token for an authenticated caller.
- *
- * <p>Everything JWT-specific lives here: the application layer neither builds nor reads a
- * token, and controllers only ever pass the resulting opaque string around.
- *
- * <p>The claim set is deliberately minimal and carries no credential material:
- *
- * <ul>
- *   <li>{@code sub} - the account identifier, the stable handle every other module uses.</li>
- *   <li>{@code pid} - the owning person identifier.</li>
- *   <li>{@code email} - the account address the caller needs to render itself.</li>
- *   <li>{@code iss}, {@code iat}, {@code exp}, {@code jti} - registered standard claims.</li>
- * </ul>
- *
- * <p>Roles and permission codes are intentionally absent. Authorization is answered by the
- * {@code CheckPermission} input port against live state, so baking a permission list into a
- * token would let a stale claim keep granting access after a revocation.
  */
 @Component
 public class JwtTokenIssuer {

@@ -10,11 +10,11 @@ import com.energymonitor.security.application.port.in.CheckPermission;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
 import com.energymonitor.security.application.port.in.CreateUserSession;
 import com.energymonitor.security.application.port.in.FindUser;
+import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.ManageUserStatus;
 import com.energymonitor.security.application.port.in.RegisterUser;
 import com.energymonitor.security.application.port.in.ResetPassword;
 import com.energymonitor.security.application.port.in.RevokeRole;
-import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.UpdateUserProfile;
 import java.util.List;
 import org.aopalliance.aop.Advice;
@@ -35,7 +35,7 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
  * a later change cannot quietly add a transaction where there is nothing to make atomic.
  */
 @SpringBootTest
-class SecurityTransactionBoundaryTest {
+class SecurityTransactionBoundaryTest extends JwtKeyedTest {
 
     @Autowired
     private RegisterUser registerUser;
