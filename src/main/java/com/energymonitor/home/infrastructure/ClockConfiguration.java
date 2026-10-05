@@ -3,6 +3,7 @@ package com.energymonitor.home.infrastructure;
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 /**
  * Configuration for the {@link Clock} bean.
@@ -14,6 +15,7 @@ import org.springframework.context.annotation.Configuration;
 public class ClockConfiguration {
 
     @Bean
+    @Primary
     public Clock clock() {
         return Clock.systemUTC();
     }
