@@ -1,9 +1,6 @@
 package com.energymonitor.measurement.adapter.out.persistence;
 
-import com.energymonitor.measurement.adapter.out.persistence.entity.ConsumptionLevelEntity;
-import com.energymonitor.measurement.api.RiskConsumption;
 import com.energymonitor.measurement.domain.model.Measurement;
-import jakarta.persistence.EntityManager;
 import java.time.Instant;
 
 /**
@@ -25,11 +22,5 @@ final class MeasurementPersistenceFixtures {
                 activePower, storedEnergy);
         measurements.save(measurement);
         return measurement;
-    }
-
-    static void seedConsumptionLevel(EntityManager entityManager, String id,
-                                     RiskConsumption name, double min, double max) {
-        entityManager.persist(new ConsumptionLevelEntity(id, name, name + " level", min, max));
-        entityManager.flush();
     }
 }

@@ -3,6 +3,7 @@ package com.energymonitor.measurement.adapter.out.persistence;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.energymonitor.measurement.adapter.out.persistence.entity.ConsumptionLevelEntity;
 import com.energymonitor.measurement.api.RiskConsumption;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Round trips of the {@code consumption_level} catalog.
+ *
+ * <p>The catalog is not seeded by the test: the {@code measurement-003-seed-consumption-level}
+ * changeset already loads the four levels during migration, so these tests assert against
+ * that data (LOW 0–500, MEDIUM 500–1500, HIGH 1500–3000, CRITICAL 3000–1000000).
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -32,8 +37,6 @@ class ConsumptionLevelPersistenceTest {
 
     @Test
     void findByName() {
-        MeasurementPersistenceFixtures.seedConsumptionLevel(entityManager,
-                "low0000001", RiskConsumption.LOW, 0, 500);
         flushAndClear();
 
         var read = levels.findActiveByName(RiskConsumption.LOW).orElseThrow();
@@ -44,27 +47,31 @@ class ConsumptionLevelPersistenceTest {
     }
 
     @Test
-    void listActiveReturnsTheCatalog() {
-        MeasurementPersistenceFixtures.seedConsumptionLevel(entityManager,
-                "low0000001", RiskConsumption.LOW, 0, 500);
-        MeasurementPersistenceFixtures.seedConsumptionLevel(entityManager,
-                "medi000001", RiskConsumption.MEDIUM, 500, 1500);
+    void listActiveReturnsTheSeededCatalog() {
         flushAndClear();
 
-        assertEquals(2, levels.listActive().size());
+        assertEquals(4, levels.listActive().size());
     }
 
     @Test
     void findLevelForClassifiesByRange() {
-        MeasurementPersistenceFixtures.seedConsumptionLevel(entityManager,
-                "low0000001", RiskConsumption.LOW, 0, 500);
-        MeasurementPersistenceFixtures.seedConsumptionLevel(entityManager,
-                "medi000001", RiskConsumption.MEDIUM, 500, 1500);
         flushAndClear();
 
         assertEquals(RiskConsumption.LOW, levels.findLevelFor(250).orElseThrow().name());
         // The boundary belongs to the next level: [min, max)
         assertEquals(RiskConsumption.MEDIUM, levels.findLevelFor(500).orElseThrow().name());
-        assertTrue(levels.findLevelFor(999999).isEmpty());
+        assertEquals(RiskConsumption.CRITICAL, levels.findLevelFor(5000).orElseThrow().name());
+        // Beyond the CRITICAL sentinel upper bound no level applies
+        assertTrue(levels.findLevelFor(1_500_000).isEmpty());
+    }
+
+    @Test
+    void softDeletedLevelsAreExcluded() {
+        entityManager.find(ConsumptionLevelEntity.class, "low0000001")
+                .setDeletedAt(MeasurementPersistenceFixtures.T1);
+        flushAndClear();
+
+        assertTrue(levels.findActiveByName(RiskConsumption.LOW).isEmpty());
+        assertEquals(3, levels.listActive().size());
     }
 }
