@@ -65,10 +65,12 @@ import org.springframework.web.bind.annotation.RestController;
  * reading the code does not suggest otherwise:
  *
  * <ul>
- *   <li><strong>Password recovery is not completable.</strong> {@code POST /password/forgot}
- *       persists a reset token that no channel delivers to anyone, so {@code POST /password/reset}
- *       cannot currently be reached by a real user. The missing piece is an outbound
- *       notification adapter, which is out of scope for this phase.</li>
+ *   <li><strong>Password recovery cannot be completed by a real user.</strong>
+ *       {@code POST /password/forgot} mints a token, stores its hash and hands the secret to
+ *       {@link com.energymonitor.security.application.port.out.PasswordResetDeliveryPort}, but
+ *       the only implementation shipped records the delivery instead of performing it, so
+ *       {@code POST /password/reset} has no token to redeem yet. The missing piece is an
+ *       outbound notification adapter, which is out of scope for this phase.</li>
  * </ul>
  */
 @RestController
@@ -76,16 +78,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private static final String BEARER = "Bearer";
-
-    /**
-     * Neutral acknowledgement for the reset request. Deliberately identical whether or not
-     * the account exists, so the endpoint cannot be used to discover registered addresses.
-     *
-     * <p>The wording also hides the fact that the token is currently undeliverable, which is
-     * deliberate and correct: the caller has no way to act on that knowledge either way.
-     */
-    private static final String RESET_REQUESTED =
-            "If the account exists, a password reset has been requested.";
 
     private final RegisterUser registerUser;
     private final SecurityLoginFlow loginFlow;
@@ -208,46 +200,50 @@ public class AuthController {
     /**
      * Requests a password reset.
      *
-     * <p>What this endpoint does: looks the account up, mints a reset token, persists it, and
-     * answers 202 without revealing whether the account exists.
+     * <p>What this endpoint does: looks the account up, mints a reset token, hashes it, stores
+     * the hash, and answers 202. The response carries no body at all - not a message, and
+     * certainly not the token.
      *
-     * <p><strong>The flow is not completable by a real user today.</strong> The token is
-     * persisted but never returned, and no delivery channel exists for it: this application
-     * has no mail sender, no SMS sender and no notification adapter, and no endpoint that
-     * would let a caller obtain the token. A user calling this endpoint therefore receives an
-     * acknowledgement and no token, and cannot reach {@code POST /password/reset}.
+     * <p>Silence is the point. An acknowledgement whose wording is the same for every caller
+     * says nothing about whether the address is registered, and an empty body says even less
+     * than a fixed sentence could. What the caller learns is that the request was received,
+     * which is all the endpoint is ever allowed to tell them.
      *
-     * <p>Not returning
-     * the token is the correct security decision and is not the defect. Echoing
-     * it would hand a working credential to whoever asked, turning this endpoint into an
-     * account-takeover primitive. The gap is the missing delivery channel, not the absence of
-     * the token in this response.
+     * <p>The token never comes back here. Returning it would hand a working credential to
+     * whoever asked and turn this endpoint into an account-takeover primitive. It leaves the
+     * server through {@link com.energymonitor.security.application.port.out.PasswordResetDeliveryPort}
+     * instead, an outbound channel the use case hands the secret to, and the database keeps
+     * only its hash. The controller never sees the secret at all: the use case's return value is
+     * discarded rather than translated into a DTO.
      *
-     * <p>Building that channel is out of scope for this phase. It requires an outbound
-     * notification adapter and a decision about the message content and the link format, and
-     * it belongs to a later phase; this endpoint is complete as far as token issuance goes and
-     * is expected to be paired with that adapter rather than altered by it.
+     * <p>The delivery itself is not built yet: the shipped
+     * {@link com.energymonitor.security.application.port.out.PasswordResetDeliveryPort}
+     * implementation records the attempt instead of sending anything, so the handler is complete
+     * while the recovery flow is not. Making the flow work means implementing that port against
+     * the deployment's mail, SMS or push infrastructure; it does not mean changing this handler,
+     * and it must not mean echoing the token to get around the missing channel.
      *
      * @param request the account address
-     * @return the same acknowledgement whether or not the account exists
+     * @return 202 with an empty body, whether or not the account exists
      */
     @PostMapping("/password/forgot")
-    public ResponseEntity<MessageResponse> forgotPassword(
+    public ResponseEntity<Void> forgotPassword(
             @Valid @RequestBody ForgotPasswordRequest request) {
         try {
             createPasswordResetToken.create(new CreatePasswordResetTokenCommand(request.email()));
         } catch (UserNotFoundException unknownAccount) {
             // Swallowed on purpose: reporting it would reveal which addresses are registered.
         }
-        return ResponseEntity.accepted().body(new MessageResponse(RESET_REQUESTED));
+        return ResponseEntity.accepted().build();
     }
 
     /**
      * Completes a password reset with a token obtained through the reset channel.
      *
-     * <p>This endpoint works: it looks the token up, rejects it when it is unknown, expired or
-     * already used, checks the replacement against the configured policy, and commits the new
-     * hash, the token consumption and the audit row in one transaction.
+     * <p>This endpoint works: it hashes the presented token, looks the hash up, rejects it when
+     * it is unknown, expired or already used, checks the replacement against the configured
+     * policy, and commits the new hash, the token consumption and the audit row in one
+     * transaction.
      *
      * <p>It is reachable only by a caller who already holds a valid token, and today no such
      * token can reach a user, because {@code POST /password/forgot} has no delivery channel
@@ -256,7 +252,7 @@ public class AuthController {
      * delivery, not this handler.
      *
      * <p>The token is accepted here because completing a reset is the entire purpose of the
-     * request, and it is never echoed in the response.
+     * request. It is hashed before anything else touches it and is never echoed in the response.
      *
      * @param request the token and the replacement password
      * @param servlet used for the caller's address

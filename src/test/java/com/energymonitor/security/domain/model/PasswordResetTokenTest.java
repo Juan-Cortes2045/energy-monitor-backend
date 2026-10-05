@@ -14,11 +14,14 @@ class PasswordResetTokenTest {
 
     private static final String ID = "PRT0000001";
     private static final String ID_USER = "USR0000001";
+    private static final String CLEAR_TOKEN = "secreto-de-recuperacion";
+    private static final String HASH =
+            "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
     private static final Instant CREATED_AT = Instant.parse("2026-03-01T09:00:00Z");
     private static final Instant EXPIRATION_AT = Instant.parse("2026-03-01T10:00:00Z");
 
     private static PasswordResetToken token() {
-        return new PasswordResetToken(ID, ID_USER, "token-de-recuperacion", CREATED_AT, EXPIRATION_AT);
+        return PasswordResetToken.issue(ID, ID_USER, CLEAR_TOKEN, HASH, CREATED_AT, EXPIRATION_AT);
     }
 
     @Test
@@ -90,7 +93,8 @@ class PasswordResetTokenTest {
     @Test
     @DisplayName("refuses an expiration that is not after the creation")
     void refusesInconsistentWindow() {
-        assertThatThrownBy(() -> new PasswordResetToken(ID, ID_USER, "token", EXPIRATION_AT, CREATED_AT))
+        assertThatThrownBy(() -> PasswordResetToken.issue(ID, ID_USER, CLEAR_TOKEN, HASH,
+                EXPIRATION_AT, CREATED_AT))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("expirationAt");
     }
@@ -98,7 +102,7 @@ class PasswordResetTokenTest {
     @Test
     @DisplayName("rehydration keeps the used state of a stored token")
     void rehydrationKeepsUsedState() {
-        PasswordResetToken token = new PasswordResetToken(ID, ID_USER, "token", CREATED_AT,
+        PasswordResetToken token = PasswordResetToken.rehydrate(ID, ID_USER, HASH, CREATED_AT,
                 EXPIRATION_AT, true);
 
         assertThat(token.isUsed()).isTrue();
@@ -109,7 +113,8 @@ class PasswordResetTokenTest {
     @Test
     @DisplayName("rehydration refuses an expiration that is not after the creation")
     void rehydrationRefusesInconsistentWindow() {
-        assertThatThrownBy(() -> new PasswordResetToken(ID, ID_USER, "token", EXPIRATION_AT, CREATED_AT, false))
+        assertThatThrownBy(() -> PasswordResetToken.rehydrate(ID, ID_USER, HASH, EXPIRATION_AT,
+                CREATED_AT, false))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("expirationAt");
     }
@@ -117,18 +122,21 @@ class PasswordResetTokenTest {
     @Test
     @DisplayName("rehydration refuses a window whose ends coincide")
     void rehydrationRefusesEmptyWindow() {
-        assertThatThrownBy(() -> new PasswordResetToken(ID, ID_USER, "token", CREATED_AT, CREATED_AT, true))
+        assertThatThrownBy(() -> PasswordResetToken.rehydrate(ID, ID_USER, HASH, CREATED_AT,
+                CREATED_AT, true))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("expirationAt");
     }
 
     @Test
     @DisplayName("issuing and rehydrating enforce the same validity window")
-    void bothConstructorsShareTheWindowRule() {
+    void bothFactoriesShareTheWindowRule() {
         Throwable issued = catchThrowable(
-                () -> new PasswordResetToken(ID, ID_USER, "token", EXPIRATION_AT, CREATED_AT));
+                () -> PasswordResetToken.issue(ID, ID_USER, CLEAR_TOKEN, HASH, EXPIRATION_AT,
+                        CREATED_AT));
         Throwable rehydrated = catchThrowable(
-                () -> new PasswordResetToken(ID, ID_USER, "token", EXPIRATION_AT, CREATED_AT, false));
+                () -> PasswordResetToken.rehydrate(ID, ID_USER, HASH, EXPIRATION_AT, CREATED_AT,
+                        false));
 
         assertThat(issued)
                 .isInstanceOf(IllegalStateException.class)
@@ -139,11 +147,50 @@ class PasswordResetTokenTest {
     }
 
     @Test
-    @DisplayName("refuses a blank token value")
-    void refusesBlankToken() {
-        assertThatThrownBy(() -> new PasswordResetToken(ID, ID_USER, "   ", CREATED_AT, EXPIRATION_AT))
+    @DisplayName("refuses a blank secret to deliver")
+    void refusesBlankClearToken() {
+        assertThatThrownBy(() -> PasswordResetToken.issue(ID, ID_USER, "   ", HASH, CREATED_AT,
+                EXPIRATION_AT))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("resetToken");
+                .hasMessageContaining("clearToken");
+    }
+
+    @Test
+    @DisplayName("refuses a blank hash, because a token that cannot be found is not a token")
+    void refusesBlankHash() {
+        assertThatThrownBy(() -> PasswordResetToken.issue(ID, ID_USER, CLEAR_TOKEN, "  ",
+                CREATED_AT, EXPIRATION_AT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("resetTokenHash");
+    }
+
+    @Test
+    @DisplayName("refuses a hash longer than the column it has to fit in")
+    void refusesOversizedHash() {
+        assertThatThrownBy(() -> PasswordResetToken.rehydrate(ID, ID_USER, "a".repeat(65),
+                CREATED_AT, EXPIRATION_AT, false))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("resetTokenHash");
+    }
+
+    @Test
+    @DisplayName("keeps the hash and the secret side by side without confusing them")
+    void holdsTheHashAndTheSecretSeparately() {
+        PasswordResetToken token = token();
+
+        assertThat(token.resetTokenHash()).isEqualTo(HASH);
+        assertThat(token.clearToken()).contains(CLEAR_TOKEN);
+        assertThat(token.resetTokenHash()).doesNotContain(CLEAR_TOKEN);
+    }
+
+    @Test
+    @DisplayName("a rehydrated token has no secret, because none was ever stored")
+    void rehydrationCarriesNoSecret() {
+        PasswordResetToken token = PasswordResetToken.rehydrate(ID, ID_USER, HASH, CREATED_AT,
+                EXPIRATION_AT, false);
+
+        assertThat(token.clearToken()).isEmpty();
+        assertThat(token.resetTokenHash()).isEqualTo(HASH);
     }
 
     @Test
@@ -153,5 +200,11 @@ class PasswordResetTokenTest {
 
         assertThat(token.createdAt()).isEqualTo(CREATED_AT);
         assertThat(token.expirationAt()).isEqualTo(EXPIRATION_AT);
+    }
+
+    @Test
+    @DisplayName("does not print the secret in its string form")
+    void toStringHidesTheSecret() {
+        assertThat(token().toString()).doesNotContain(CLEAR_TOKEN).doesNotContain(HASH);
     }
 }

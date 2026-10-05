@@ -18,6 +18,8 @@ import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.LoginErrorLogPersistencePort;
 import com.energymonitor.security.application.port.out.PasswordHasherPort;
+import com.energymonitor.security.application.port.out.PasswordResetDeliveryPort;
+import com.energymonitor.security.application.port.out.PasswordResetTokenHasherPort;
 import com.energymonitor.security.application.port.out.RefreshTokenHasherPort;
 import com.energymonitor.security.application.port.out.RefreshTokenPersistencePort;
 import com.energymonitor.security.application.port.out.PasswordPolicyPersistencePort;
@@ -202,23 +204,32 @@ public class SecurityApplicationWiring {
     @Bean
     public ResetPassword resetPassword(UserPersistencePort users,
                                        PasswordResetTokenPersistencePort tokens,
+                                       PasswordResetTokenHasherPort tokenHasher,
                                        PasswordHasherPort hasher,
                                        PasswordPolicyPersistencePort policies,
                                        AuditLogPersistencePort audits,
                                        IdentifierGeneratorPort identifiers, Clock clock,
                                        PlatformTransactionManager transactions) {
         return transactional(transactions,
-                new ResetPasswordService(users, tokens, hasher, policies, audits, identifiers,
-                        clock),
+                new ResetPasswordService(users, tokens, tokenHasher, hasher, policies, audits,
+                        identifiers, clock),
                 ResetPassword.class);
     }
 
     /**
      * Writes a single row, so a transaction would add nothing but a second connection.
      *
+     * <p>There is a second side effect here, the delivery of the secret, and it is deliberately
+     * outside any boundary: a transaction cannot roll back a message that already left the
+     * process, so wrapping the pair would only promise an atomicity that does not exist. The
+     * row is committed first and the secret delivered afterwards, which is also the order that
+     * keeps a delivery from pointing at a token that was never stored.
+     *
      * @param users          account storage
      * @param tokens         reset token storage
      * @param tokenGenerator token generation port
+     * @param tokenHasher    digest of the generated and presented secrets
+     * @param delivery       the channel the clear secret leaves through
      * @param identifiers    identifier port
      * @param clock          time source
      * @return the use case
@@ -226,8 +237,10 @@ public class SecurityApplicationWiring {
     @Bean
     public CreatePasswordResetToken createPasswordResetToken(
             UserPersistencePort users, PasswordResetTokenPersistencePort tokens,
-            TokenGeneratorPort tokenGenerator, IdentifierGeneratorPort identifiers, Clock clock) {
-        return new CreatePasswordResetTokenService(users, tokens, tokenGenerator, identifiers, clock);
+            TokenGeneratorPort tokenGenerator, PasswordResetTokenHasherPort tokenHasher,
+            PasswordResetDeliveryPort delivery, IdentifierGeneratorPort identifiers, Clock clock) {
+        return new CreatePasswordResetTokenService(users, tokens, tokenGenerator, tokenHasher,
+                delivery, identifiers, clock);
     }
 
     /**

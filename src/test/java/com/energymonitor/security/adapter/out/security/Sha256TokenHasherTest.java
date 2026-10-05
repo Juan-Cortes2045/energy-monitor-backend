@@ -3,6 +3,8 @@ package com.energymonitor.security.adapter.out.security;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.energymonitor.security.application.port.out.PasswordResetTokenHasherPort;
+import com.energymonitor.security.application.port.out.RefreshTokenHasherPort;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -10,12 +12,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * Contract of the refresh token hasher: deterministic, SHA-256, and never reversible.
+ * Contract of the token hasher: deterministic, SHA-256, and never reversible.
+ *
+ * <p>One adapter serves both token ports, so the behaviour asserted here is what a refresh
+ * token and a password-reset token each depend on.
  */
-@DisplayName("SHA-256 refresh token hasher")
-class Sha256RefreshTokenHasherTest {
+@DisplayName("SHA-256 token hasher")
+class Sha256TokenHasherTest {
 
-    private final Sha256RefreshTokenHasher hasher = new Sha256RefreshTokenHasher();
+    private final Sha256TokenHasher hasher = new Sha256TokenHasher();
 
     @Test
     @DisplayName("the same secret always produces the same hash")
@@ -78,5 +83,17 @@ class Sha256RefreshTokenHasherTest {
     void isNotATrivialEncoding() {
         // A concatenation or truncation bug would collapse these two.
         assertThat(hasher.hash("a".repeat(43))).isNotEqualTo(hasher.hash("a".repeat(44)));
+    }
+
+    @Test
+    @DisplayName("serves the refresh-token port and the password-reset-token port alike")
+    void backsBothTokenPorts() {
+        // The same adapter answers for both credentials, so a change to one port cannot be
+        // satisfied by a digest the other does not produce.
+        Sha256TokenHasher adapter = new Sha256TokenHasher();
+        RefreshTokenHasherPort refreshPort = adapter;
+        PasswordResetTokenHasherPort resetPort = adapter;
+
+        assertThat(resetPort.hash("secreto")).isEqualTo(refreshPort.hash("secreto"));
     }
 }

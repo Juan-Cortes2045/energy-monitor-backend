@@ -19,21 +19,19 @@ import com.energymonitor.security.application.result.RefreshSessionResult;
 import com.energymonitor.security.application.result.RefreshStatus;
 import com.energymonitor.security.domain.model.Email;
 import com.energymonitor.security.domain.model.UserStatus;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import com.energymonitor.security.infrastructure.SecurityJwtProperties;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 
 /**
  * The HTTP contract of {@code POST /api/v1/auth/refresh}.
@@ -45,7 +43,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-class AuthRefreshEndpointWebTest {
+class AuthRefreshEndpointWebTest extends JwtKeyedTest {
 
     private static final String SESSION = "SES0000001";
     private static final String REFRESHED_TOKEN = "refresh-token-renovado";
@@ -79,11 +77,8 @@ class AuthRefreshEndpointWebTest {
      * The test never hard-codes a signing key.
      */
     private Jwt decode(String accessToken) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(
-                        new SecretKeySpec(
-                                properties.secret().getBytes(StandardCharsets.UTF_8),
-                                "HmacSHA256"))
-                .macAlgorithm(MacAlgorithm.HS256)
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey((java.security.interfaces.RSAPublicKey) keys().keyPair().getPublic())
+                .signatureAlgorithm(org.springframework.security.oauth2.jose.jws.SignatureAlgorithm.RS256)
                 .build();
         decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
         return decoder.decode(accessToken);

@@ -9,6 +9,7 @@ import com.energymonitor.security.application.port.out.UserConfigurationPersiste
 import com.energymonitor.security.domain.model.PasswordPolicy;
 import com.energymonitor.security.domain.model.SecurityConfiguration;
 import com.energymonitor.security.domain.model.UserConfiguration;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @SpringBootTest
 @Transactional
-class ConfigurationPolicyPersistenceTest {
+class ConfigurationPolicyPersistenceTest extends JwtKeyedTest {
 
     private static final String USER_ID = "use0000001";
     private static final String POLICY_ID = "pol0000001";

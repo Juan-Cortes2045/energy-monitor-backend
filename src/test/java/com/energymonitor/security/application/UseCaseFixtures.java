@@ -5,6 +5,8 @@ import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.LoginErrorLogPersistencePort;
 import com.energymonitor.security.application.port.out.PasswordHasherPort;
 import com.energymonitor.security.application.port.out.PasswordPolicyPersistencePort;
+import com.energymonitor.security.application.port.out.PasswordResetDeliveryPort;
+import com.energymonitor.security.application.port.out.PasswordResetTokenHasherPort;
 import com.energymonitor.security.application.port.out.PasswordResetTokenPersistencePort;
 import com.energymonitor.security.application.port.out.PermissionPersistencePort;
 import com.energymonitor.security.application.port.out.PersonPersistencePort;
@@ -247,14 +249,22 @@ public final class UseCaseFixtures {
         }
     }
 
+    /**
+     * Keeps tokens in a map keyed by hash, exactly as the real store resolves them, so a test
+     * that passes here would pass against MySQL for the same reason.
+     *
+     * <p>The clear secret is not a key and there is no finder that takes one: the only way into
+     * this fake is a hash, which is what makes a use case that forgets to hash before looking
+     * up fail here instead of quietly working.
+     */
     public static final class FakePasswordResetTokenPersistencePort
             implements PasswordResetTokenPersistencePort {
 
-        private final Map<String, PasswordResetToken> byValue = new LinkedHashMap<>();
+        private final Map<String, PasswordResetToken> byHash = new LinkedHashMap<>();
 
         @Override
         public PasswordResetToken save(PasswordResetToken token) {
-            byValue.put(token.resetToken(), token);
+            byHash.put(token.resetTokenHash(), token);
             return token;
         }
 
@@ -265,26 +275,77 @@ public final class UseCaseFixtures {
 
         @Override
         public Optional<PasswordResetToken> findActive(String idResetToken) {
-            return byValue.values().stream()
+            return byHash.values().stream()
                     .filter(token -> token.idResetToken().equals(idResetToken))
                     .findFirst();
         }
 
         @Override
-        public Optional<PasswordResetToken> findActiveByValue(String resetToken) {
-            return Optional.ofNullable(byValue.get(resetToken));
+        public Optional<PasswordResetToken> findActiveByHash(String resetTokenHash) {
+            return Optional.ofNullable(byHash.get(resetTokenHash));
         }
 
         @Override
         public List<PasswordResetToken> listActiveByUser(String idUser) {
-            return byValue.values().stream()
+            return byHash.values().stream()
                     .filter(token -> token.idUser().equals(idUser))
                     .toList();
         }
 
+        /** Stores a token as if it had been read back from the database: no clear secret. */
         public FakePasswordResetTokenPersistencePort store(PasswordResetToken token) {
-            byValue.put(token.resetToken(), token);
+            byHash.put(token.resetTokenHash(), token);
             return this;
+        }
+    }
+
+    /**
+     * Stands in for the SHA-256 adapter with a reversible prefix, so a test can say which
+     * stored hash a secret resolves to without reproducing a digest in test code.
+     */
+    public static final class FakePasswordResetTokenHasherPort
+            implements PasswordResetTokenHasherPort {
+
+        private static final String PREFIX = "hash:";
+
+        @Override
+        public String hash(String rawToken) {
+            if (rawToken == null || rawToken.isBlank()) {
+                throw new IllegalArgumentException("rawToken must not be null or blank");
+            }
+            return PREFIX + rawToken;
+        }
+    }
+
+    /**
+     * Records what would have been sent, and can be told to fail the way a transport would.
+     */
+    public static final class FakePasswordResetDeliveryPort
+            implements PasswordResetDeliveryPort {
+
+        private final List<Delivery> deliveries = new ArrayList<>();
+
+        /** When set, {@link #deliver} throws it, to simulate an undeliverable channel. */
+        private RuntimeException failOnDeliver;
+
+        @Override
+        public void deliver(Email recipient, String clearToken, Instant validUntil) {
+            if (failOnDeliver != null) {
+                throw failOnDeliver;
+            }
+            deliveries.add(new Delivery(recipient, clearToken, validUntil));
+        }
+
+        public void failWith(RuntimeException failure) {
+            this.failOnDeliver = failure;
+        }
+
+        public List<Delivery> deliveries() {
+            return deliveries;
+        }
+
+        /** One recorded delivery. */
+        public record Delivery(Email recipient, String clearToken, Instant validUntil) {
         }
     }
 

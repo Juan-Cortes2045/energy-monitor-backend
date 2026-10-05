@@ -9,6 +9,11 @@ import java.time.Instant;
 /**
  * JPA mapping of the {@code password_reset_token} table.
  *
+ * <p>There is deliberately no field for the clear secret: only {@code reset_token_hash} is
+ * mapped, so the mapping offers no way to persist a redeemable credential even if a caller
+ * handed one over. The domain holds that value in memory for delivery and the entity never sees
+ * it.
+ *
  * <p>{@code used} is stored as a real column and never inferred. Rehydration has to hand the
  * domain the flag exactly as persisted, otherwise a consumed token would come back looking
  * fresh and could be redeemed twice.
@@ -24,8 +29,9 @@ public class PasswordResetTokenEntity extends BaseAuditEntity {
     @Column(name = "user_id", nullable = false, length = 10)
     private String userId;
 
-    @Column(name = "reset_token", nullable = false, length = 100)
-    private String resetToken;
+    /** Lowercase hex SHA-256: 32 bytes rendered as 64 characters. */
+    @Column(name = "reset_token_hash", nullable = false, length = 64)
+    private String resetTokenHash;
 
     @Column(name = "used", nullable = false)
     @TinyIntBoolean
@@ -53,12 +59,12 @@ public class PasswordResetTokenEntity extends BaseAuditEntity {
         this.userId = userId;
     }
 
-    public String getResetToken() {
-        return resetToken;
+    public String getResetTokenHash() {
+        return resetTokenHash;
     }
 
-    public void setResetToken(String resetToken) {
-        this.resetToken = resetToken;
+    public void setResetTokenHash(String resetTokenHash) {
+        this.resetTokenHash = resetTokenHash;
     }
 
     public boolean isUsed() {

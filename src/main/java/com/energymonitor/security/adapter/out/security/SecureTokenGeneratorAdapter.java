@@ -10,9 +10,11 @@ import org.springframework.stereotype.Component;
  *
  * <p>One adapter serves both consumers of the port, password-reset tokens and session
  * refresh tokens, so the generated length is the smaller of the two budgets: 32 random
- * bytes encoded as Base64URL give 43 characters, which fits the stricter
- * {@code password_reset_token.reset_token VARCHAR(100)} as well as the roomier
- * {@code user_session.refresh_token VARCHAR(255)}.
+ * bytes encoded as Base64URL give 43 characters, which fits the roomier
+ * {@code user_session.refresh_token VARCHAR(255)}. No column holds a reset token at all
+ * any more - only its hash - so that budget is no longer the binding one, and the length is
+ * kept uniform because a secret that varies in size with its purpose is one more thing to get
+ * wrong.
  *
  * <p>Base64URL is used rather than the standard alphabet because these values travel in
  * URLs, cookies and headers, where {@code +}, {@code /} and {@code =} would need escaping.

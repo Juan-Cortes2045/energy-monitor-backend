@@ -17,8 +17,12 @@ import org.junit.jupiter.api.Test;
  */
 class SecureTokenGeneratorAdapterTest {
 
-    /** {@code password_reset_token.reset_token} is the stricter of the two token columns. */
-    private static final int NARROWEST_TOKEN_COLUMN = 100;
+    /**
+     * No column holds a generated token any more: only hashes are persisted. The narrowest
+     * place a secret still has to fit is {@code ResetPasswordRequest.resetToken}, the field a
+     * redeemed token arrives in.
+     */
+    private static final int NARROWEST_TOKEN_BUDGET = 100;
 
     private static final int SAMPLES = 500;
 
@@ -35,8 +39,8 @@ class SecureTokenGeneratorAdapterTest {
     }
 
     @Test
-    void producesAValueThatFitsTheNarrowestTokenColumn() {
-        assertTrue(generator.generateToken().length() <= NARROWEST_TOKEN_COLUMN);
+    void producesAValueThatFitsTheNarrowestTokenBudget() {
+        assertTrue(generator.generateToken().length() <= NARROWEST_TOKEN_BUDGET);
     }
 
     @Test

@@ -16,15 +16,16 @@ import com.energymonitor.security.application.exception.PasswordPolicyViolationE
 import com.energymonitor.security.application.exception.UserNotFoundException;
 import com.energymonitor.security.application.port.in.ChangePassword;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
-import com.energymonitor.security.application.port.in.RegisterUser;
-import com.energymonitor.security.application.port.in.RefreshSession;
-import com.energymonitor.security.application.port.in.ResetPassword;
 import com.energymonitor.security.application.port.in.LogoutUserSession;
+import com.energymonitor.security.application.port.in.RefreshSession;
+import com.energymonitor.security.application.port.in.RegisterUser;
+import com.energymonitor.security.application.port.in.ResetPassword;
 import com.energymonitor.security.application.result.AuthenticatedUser;
 import com.energymonitor.security.domain.model.Email;
 import com.energymonitor.security.domain.model.PasswordHash;
 import com.energymonitor.security.domain.model.User;
 import com.energymonitor.security.domain.model.UserStatus;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import com.energymonitor.security.infrastructure.JwtTokenIssuer;
 import com.energymonitor.security.infrastructure.SecurityLoginFlow;
 import java.time.Instant;
@@ -46,7 +47,7 @@ import org.springframework.test.web.servlet.MockMvc;
  */
 @SpringBootTest
 @org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
-class AuthControllerWebTest {
+class AuthControllerWebTest extends JwtKeyedTest {
 
     private static final String EMAIL = "someone@example.com";
     private static final String PASSWORD = "StrongPass1!";
@@ -261,13 +262,12 @@ class AuthControllerWebTest {
     // ------------------------------------------------------------- password reset
 
     @Test
-    void answersTheSameAcknowledgementForAKnownAccount() throws Exception {
+    void answersAnEmptyAcceptedForAKnownAccount() throws Exception {
         mvc.perform(post("/api/v1/auth/password/forgot")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"someone@example.com\"}"))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.message").value(
-                        "If the account exists, a password reset has been requested."));
+                .andExpect(content().string(""));
     }
 
     @Test
@@ -279,18 +279,18 @@ class AuthControllerWebTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"nobody@example.com\"}"))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.message").value(
-                        "If the account exists, a password reset has been requested."));
+                .andExpect(content().string(""));
     }
 
     @Test
     void neverReturnsTheResetTokenItJustMinted() throws Exception {
-        // Delivering the token belongs to the reset channel, which this phase does not build.
+        // The token leaves through the delivery channel, which is a use case concern; the
+        // response carries nothing at all, so there is nothing here to leak even by accident.
         Instant now = Instant.now();
         given(createPasswordResetToken.create(any()))
-                .willReturn(new com.energymonitor.security.domain.model.PasswordResetToken(
-                        "rst0000001", "USR0000001", "the-secret-reset-token-value", now,
-                        now.plusSeconds(900)));
+                .willReturn(com.energymonitor.security.domain.model.PasswordResetToken.issue(
+                        "rst0000001", "USR0000001", "the-secret-reset-token-value",
+                        "0".repeat(64), now, now.plusSeconds(900)));
 
         String body = mvc.perform(post("/api/v1/auth/password/forgot")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -298,6 +298,8 @@ class AuthControllerWebTest {
                 .andExpect(status().isAccepted())
                 .andReturn().getResponse().getContentAsString();
 
+        org.junit.jupiter.api.Assertions.assertTrue(body.isEmpty(),
+                "The reset endpoint answered with a body instead of nothing");
         org.junit.jupiter.api.Assertions.assertFalse(body.contains("rst0000001"),
                 "The reset endpoint leaked the reset token");
         org.junit.jupiter.api.Assertions.assertFalse(

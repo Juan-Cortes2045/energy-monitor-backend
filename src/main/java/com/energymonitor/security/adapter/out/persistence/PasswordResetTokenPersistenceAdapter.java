@@ -12,6 +12,10 @@ import org.springframework.stereotype.Component;
 /**
  * Persistence adapter for {@link PasswordResetToken}.
  *
+ * <p>What reaches the database is the token hash and its lifecycle, never the clear secret the
+ * domain holds in memory while the issuing request is in flight: the mapper has no field for it,
+ * so there is nothing here that could write one.
+ *
  * <p>Tokens are one-shot: the domain mutates {@code used} and the adapter updates the row by
  * mapping the full domain state onto the existing one. Because the rehydrated domain carries
  * {@code used}, the stored flag is the only source of truth and can never be overridden by a
@@ -71,13 +75,13 @@ public class PasswordResetTokenPersistenceAdapter implements PasswordResetTokenP
     }
 
     /**
-     * Finds the active token by its opaque value.
+     * Finds the active token by the hash of its secret.
      *
-     * @param resetToken the value
+     * @param resetTokenHash the hash to resolve
      * @return the domain object, empty when soft-deleted or unknown
      */
-    public Optional<PasswordResetToken> findActiveByValue(String resetToken) {
-        return repository.findByResetTokenAndDeletedAtIsNull(resetToken)
+    public Optional<PasswordResetToken> findActiveByHash(String resetTokenHash) {
+        return repository.findByResetTokenHashAndDeletedAtIsNull(resetTokenHash)
                 .map(mapper::toDomain);
     }
 
