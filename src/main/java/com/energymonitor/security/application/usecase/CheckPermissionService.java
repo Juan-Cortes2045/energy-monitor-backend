@@ -10,14 +10,20 @@ import com.energymonitor.security.application.port.out.UserPersistencePort;
 import com.energymonitor.security.application.port.out.UserSystemRolePersistencePort;
 import com.energymonitor.security.domain.model.Permission;
 import com.energymonitor.security.domain.model.SystemRole;
+import com.energymonitor.security.domain.model.SystemRolePermission;
 import com.energymonitor.security.domain.model.User;
 import com.energymonitor.security.domain.model.UserSystemRole;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
  * Authorizes a user against a permission code through the RBAC chain
  * {@code User → UserSystemRole → SystemRole → SystemRolePermission → Permission}.
+ *
+ * <p>Both the single-code check and the full list of granted codes come out of the same walk of
+ * that chain, so the list a client is handed always agrees with what an enforcement point would
+ * decide for any code in it.
  */
 public class CheckPermissionService implements CheckPermission {
 
@@ -41,27 +47,49 @@ public class CheckPermissionService implements CheckPermission {
 
     @Override
     public boolean check(CheckPermissionQuery query) {
-        User user = userPort.findActive(query.idUser())
-                .orElseThrow(() -> new UserNotFoundException("no active user " + query.idUser()));
-        if (!user.canAuthenticate()) {
-            return false;
-        }
+        Set<String> granted = grantedPermissionIds(query.idUser());
         Permission permission = permissionPort.findActiveByCode(query.permissionCode()).orElse(null);
-        if (permission == null) {
-            return false;
+        return permission != null && granted.contains(permission.idPermission());
+    }
+
+    @Override
+    public List<String> listGrantedCodes(String idUser) {
+        Set<String> granted = grantedPermissionIds(idUser);
+        return permissionPort.findAllActive().stream()
+                .filter(permission -> granted.contains(permission.idPermission()))
+                .map(Permission::code)
+                .sorted()
+                .toList();
+    }
+
+    /**
+     * Resolves the RBAC chain once and answers with the permission identifiers the user holds.
+     *
+     * <p>This is the single place the chain is walked, so {@link #check} and
+     * {@link #listGrantedCodes} cannot drift apart: two implementations of one authorization rule
+     * would eventually disagree, and the one that says "granted" is the one that opens a door.
+     *
+     * <p>An account that cannot authenticate is refused by returning nothing rather than by
+     * throwing: the caller is authenticated, but not entitled to anything, and "holds no
+     * permission" is the honest answer for a blocked account.
+     *
+     * @param idUser the user
+     * @return the granted permission identifiers, empty when the account holds none or cannot
+     *         authenticate
+     * @throws UserNotFoundException when no active account carries that identifier
+     */
+    private Set<String> grantedPermissionIds(String idUser) {
+        User user = userPort.findActive(idUser)
+                .orElseThrow(() -> new UserNotFoundException("no active user " + idUser));
+        if (!user.canAuthenticate()) {
+            return Set.of();
         }
-        Set<String> roleIds = userSystemRolePort.listActiveByUser(user.idUser()).stream()
+        return userSystemRolePort.listActiveByUser(user.idUser()).stream()
                 .map(UserSystemRole::idSystemRole)
                 .filter(this::isAssignedRoleEnabled)
+                .flatMap(roleId -> systemRolePermissionPort.listActiveBySystemRole(roleId).stream())
+                .map(SystemRolePermission::idPermission)
                 .collect(Collectors.toSet());
-        for (String roleId : roleIds) {
-            boolean granted = systemRolePermissionPort.listActiveBySystemRole(roleId).stream()
-                    .anyMatch(grant -> grant.idPermission().equals(permission.idPermission()));
-            if (granted) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private boolean isAssignedRoleEnabled(String idSystemRole) {

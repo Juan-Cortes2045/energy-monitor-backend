@@ -1,11 +1,14 @@
 package com.energymonitor.security.adapter.in.web;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -15,20 +18,26 @@ import com.energymonitor.security.application.exception.EmailAlreadyRegisteredEx
 import com.energymonitor.security.application.exception.PasswordPolicyViolationException;
 import com.energymonitor.security.application.exception.UserNotFoundException;
 import com.energymonitor.security.application.port.in.ChangePassword;
+import com.energymonitor.security.application.port.in.CheckPermission;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
 import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.RefreshSession;
 import com.energymonitor.security.application.port.in.RegisterUser;
 import com.energymonitor.security.application.port.in.ResetPassword;
+import com.energymonitor.security.application.port.in.UpdateUserProfile;
 import com.energymonitor.security.application.result.AuthenticatedUser;
 import com.energymonitor.security.domain.model.Email;
 import com.energymonitor.security.domain.model.PasswordHash;
+import com.energymonitor.security.domain.model.Person;
 import com.energymonitor.security.domain.model.User;
 import com.energymonitor.security.domain.model.UserStatus;
 import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import com.energymonitor.security.infrastructure.JwtTokenIssuer;
 import com.energymonitor.security.infrastructure.SecurityLoginFlow;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +68,9 @@ class AuthControllerWebTest extends JwtKeyedTest {
     @Autowired
     private JwtTokenIssuer tokenIssuer;
 
+    /** Reads the published description. Not a bean: nothing in the application needs one. */
+    private final ObjectMapper json = new ObjectMapper();
+
     @MockitoBean
     private RegisterUser registerUser;
 
@@ -79,6 +91,12 @@ class AuthControllerWebTest extends JwtKeyedTest {
 
     @MockitoBean
     private RefreshSession refreshSession;
+
+    @MockitoBean
+    private CheckPermission checkPermission;
+
+    @MockitoBean
+    private UpdateUserProfile updateUserProfile;
 
     private static User newAccount() {
         return User.register("USR0000001", "PER0000001", PasswordHash.of("$2a$10$abcdefghij"),
@@ -463,5 +481,406 @@ class AuthControllerWebTest extends JwtKeyedTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // --------------------------------------------------------------- permissions
+
+    @Test
+    void listsThePermissionCodesOfTheAuthenticatedCaller() throws Exception {
+        given(checkPermission.listGrantedCodes(anyString()))
+                .willReturn(List.of("ALERT.READ", "METER.READ"));
+
+        mvc.perform(get("/api/v1/auth/permissions")
+                        .header("Authorization", bearerFor(identity())))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.permissions.length()").value(2))
+                .andExpect(jsonPath("$.permissions[0]").value("ALERT.READ"))
+                .andExpect(jsonPath("$.permissions[1]").value("METER.READ"));
+    }
+
+    @Test
+    void readsThePermissionsOfTheTokenSubjectAndNotFromTheRequest() throws Exception {
+        // The endpoint takes no parameter at all, so there is nothing for a caller to point
+        // somewhere else: the subject of the validated token is the only input.
+        given(checkPermission.listGrantedCodes(anyString())).willReturn(List.of());
+
+        mvc.perform(get("/api/v1/auth/permissions")
+                        .header("Authorization", bearerFor(identity()))
+                        .param("idUser", "USR9999999"))
+                .andExpect(status().isOk());
+
+        verify(checkPermission).listGrantedCodes("USR0000001");
+    }
+
+    @Test
+    void answersAnEmptyListWhenTheCallerHoldsNoPermission() throws Exception {
+        // An authenticated account entitled to nothing is not an error: the client stays on one
+        // code path instead of having to treat 200-with-nothing and 403 as two different cases.
+        given(checkPermission.listGrantedCodes(anyString())).willReturn(List.of());
+
+        mvc.perform(get("/api/v1/auth/permissions")
+                        .header("Authorization", bearerFor(identity())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.permissions").isEmpty());
+    }
+
+    @Test
+    void answersNotFoundWhenTheTokenNamesAnAccountThatNoLongerExists() throws Exception {
+        willThrow(new UserNotFoundException("no active user USR0000001"))
+                .given(checkPermission).listGrantedCodes(anyString());
+
+        mvc.perform(get("/api/v1/auth/permissions")
+                        .header("Authorization", bearerFor(identity())))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.path").value("/api/v1/auth/permissions"));
+    }
+
+    @Test
+    void refusesToListPermissionsWithoutAToken() throws Exception {
+        mvc.perform(get("/api/v1/auth/permissions"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.message").value("A valid access token is required."));
+
+        verify(checkPermission, never()).listGrantedCodes(anyString());
+    }
+
+    @Test
+    void refusesToListPermissionsWithAMalformedToken() throws Exception {
+        mvc.perform(get("/api/v1/auth/permissions")
+                        .header("Authorization", "Bearer not-a-jwt"))
+                .andExpect(status().isUnauthorized());
+
+        verify(checkPermission, never()).listGrantedCodes(anyString());
+    }
+
+    @Test
+    void refusesToListPermissionsWithATokenSignedWithAnotherKey() throws Exception {
+        String forged = "eyJhbGciOiJIUzI1NiJ9"
+                + ".eyJzdWIiOiJVU1IwMDAwMDAxIn0"
+                + ".ZmFrZS1zaWduYXR1cmUtdGhhdC13aWxsLW5vdC12ZXJpZnk";
+
+        mvc.perform(get("/api/v1/auth/permissions")
+                        .header("Authorization", "Bearer " + forged))
+                .andExpect(status().isUnauthorized());
+
+        verify(checkPermission, never()).listGrantedCodes(anyString());
+    }
+
+    // -------------------------------------------------------------------- profile
+
+    private static String profileBody() {
+        return """
+                {"name":"Grace","lastName":"Hopper","profileImage":"https://cdn.example.com/g.png",
+                 "newEmail":"grace@example.com"}
+                """;
+    }
+
+    /** The use case reports the profile it persisted, which is what the response must publish. */
+    private void givenProfileSavedAs(String name, String lastName) {
+        given(updateUserProfile.update(any()))
+                .willReturn(new Person("PER0000001", name, lastName));
+    }
+
+    @Test
+    void updatesTheProfileOfTheAuthenticatedCaller() throws Exception {
+        givenProfileSavedAs("Grace", "Hopper");
+
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(profileBody()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.idPerson").value("PER0000001"))
+                .andExpect(jsonPath("$.name").value("Grace"))
+                .andExpect(jsonPath("$.lastName").value("Hopper"));
+    }
+
+    @Test
+    void reportsTheProfileAsStoredRatherThanTheBodyThatWasSent() throws Exception {
+        // The 200 body exists to separate a rename that was written from one that was merely
+        // accepted, so it has to be built from what came back out of the use case.
+        givenProfileSavedAs("Grace", "Hopper");
+
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Hopper","lastName":"Grace"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Grace"))
+                .andExpect(jsonPath("$.lastName").value("Hopper"));
+    }
+
+    @Test
+    void handsTheNameToTheUseCaseSoTheRenameIsActuallyWritten() throws Exception {
+        // The delivery layer's whole job here: a rename that never reaches the use case would
+        // still answer 200, so the values crossing the boundary are asserted rather than the code.
+        givenProfileSavedAs("Grace", "Hopper");
+
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(profileBody()))
+                .andExpect(status().isOk());
+
+        verify(updateUserProfile).update(
+                org.mockito.ArgumentMatchers.argThat(command ->
+                        "Grace".equals(command.name())
+                                && "Hopper".equals(command.lastName())));
+    }
+
+    @Test
+    void readsTheAccountToEditFromTheTokenAndNotFromTheBody() throws Exception {
+        // There is no identity parameter on this endpoint at all. A body that names another
+        // account is ignored as an unknown property, so the subject of the token stays the only
+        // input and a caller cannot aim the edit at somebody else.
+        givenProfileSavedAs("Grace", "Hopper");
+
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idUser":"USR9999999","name":"Grace","lastName":"Hopper"}
+                                """))
+                .andExpect(status().isOk());
+
+        verify(updateUserProfile).update(
+                org.mockito.ArgumentMatchers.argThat(command ->
+                        "USR0000001".equals(command.idUser())));
+    }
+
+    @Test
+    void leavesAnAbsentFieldUnchangedRatherThanClearingIt() throws Exception {
+        // An avatar-only request must not blank the name: absent arrives as null, which the use
+        // case reads as "keep what is stored".
+        givenProfileSavedAs("Ada", "Lovelace");
+
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"profileImage":"https://cdn.example.com/g.png"}
+                                """))
+                .andExpect(status().isOk());
+
+        verify(updateUserProfile).update(
+                org.mockito.ArgumentMatchers.argThat(command ->
+                        command.name() == null
+                                && command.lastName() == null
+                                && command.newEmail() == null
+                                && "https://cdn.example.com/g.png".equals(command.profileImage())));
+    }
+
+    @Test
+    void ignoresAPhoneNumberAnOlderClientStillSends() throws Exception {
+        // The field was removed from the model, the table and the contract. Accepting the body
+        // rather than rejecting it keeps those clients working, and nothing from it is stored:
+        // the response carries no contact number and the command has nowhere to put one.
+        givenProfileSavedAs("Grace", "Hopper");
+
+        String body = mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Grace","lastName":"Hopper","phone":"+573001234567",
+                                 "cellphone":"3001234567"}
+                                """))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        org.junit.jupiter.api.Assertions.assertFalse(body.toLowerCase().contains("phone"),
+                "The profile response still carries a phone number: " + body);
+        org.junit.jupiter.api.Assertions.assertFalse(body.contains("+573001234567"),
+                "The profile response echoed a phone number: " + body);
+        verify(updateUserProfile).update(any());
+    }
+
+    @Test
+    void refusesToUpdateTheProfileWithoutAToken() throws Exception {
+        mvc.perform(put("/api/v1/auth/profile")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(profileBody()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.message").value("A valid access token is required."));
+
+        verify(updateUserProfile, never()).update(any());
+    }
+
+    @Test
+    void refusesToUpdateTheProfileWithAMalformedToken() throws Exception {
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", "Bearer not-a-jwt")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(profileBody()))
+                .andExpect(status().isUnauthorized());
+
+        verify(updateUserProfile, never()).update(any());
+    }
+
+    @Test
+    void refusesToUpdateTheProfileWithATokenSignedWithAnotherKey() throws Exception {
+        String forged = "eyJhbGciOiJIUzI1NiJ9"
+                + ".eyJzdWIiOiJVU1IwMDAwMDAxIn0"
+                + ".ZmFrZS1zaWduYXR1cmUtdGhhdC13aWxsLW5vdC12ZXJpZnk";
+
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", "Bearer " + forged)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(profileBody()))
+                .andExpect(status().isUnauthorized());
+
+        verify(updateUserProfile, never()).update(any());
+    }
+
+    @Test
+    void answersNotFoundWhenTheAccountBehindTheTokenIsGone() throws Exception {
+        willThrow(new UserNotFoundException("no active user USR0000001"))
+                .given(updateUserProfile).update(any());
+
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(profileBody()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.path").value("/api/v1/auth/profile"));
+    }
+
+    @Test
+    void answersConflictWhenTheNewAddressAlreadyBelongsToAnotherAccount() throws Exception {
+        willThrow(new EmailAlreadyRegisteredException(
+                "an account already exists for grace@example.com"))
+                .given(updateUserProfile).update(any());
+
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(profileBody()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
+    }
+
+    @Test
+    void rejectsANameTooLongForItsColumn() throws Exception {
+        String tooLong = "a".repeat(101);
+
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"%s","lastName":"Hopper"}
+                                """.formatted(tooLong)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.name").exists());
+
+        verify(updateUserProfile, never()).update(any());
+    }
+
+    @Test
+    void rejectsAMalformedNewAddress() throws Exception {
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"newEmail":"not-an-address"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.newEmail").exists());
+
+        verify(updateUserProfile, never()).update(any());
+    }
+
+    @Test
+    void rejectsAProfileUpdateWithNoBody() throws Exception {
+        mvc.perform(put("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+
+        verify(updateUserProfile, never()).update(any());
+    }
+
+    @Test
+    void refusesTheProfileEditOnAVerbOtherThanPut() throws Exception {
+        // The resource is replaced, not appended to: a POST would leave the previous name
+        // undefined, so the mapping answers 405 instead of quietly accepting the body.
+        givenProfileSavedAs("Grace", "Hopper");
+
+        mvc.perform(post("/api/v1/auth/profile")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(profileBody()))
+                .andExpect(status().isMethodNotAllowed());
+
+        verify(updateUserProfile, never()).update(any());
+    }
+
+    @Test
+    void publishesTheProfileEditAsAnAuthenticatedRouteInTheApiDescription() throws Exception {
+        // A missing @SecurityRequirement does not break the filter chain, so nothing else would
+        // notice: the endpoint would stay protected and the published document would quietly call
+        // it public. The description is part of the contract, so it is asserted like one.
+        JsonNode security = profileRoute().path("security");
+
+        org.junit.jupiter.api.Assertions.assertFalse(security.isMissingNode(),
+                "The published description shows the profile edit as reachable without a token");
+        org.junit.jupiter.api.Assertions.assertTrue(
+                security.path(0).has("bearerAuth"),
+                "The profile edit is not published as a bearer-token route: " + security);
+    }
+
+    @Test
+    void publishesExactlyTheResponseCodesTheProfileEditActuallyProduces() throws Exception {
+        // A documented code that cannot occur is a promise the server does not keep, and the
+        // handler is the only place that knows which ones do. 403 is the notable absence: the
+        // use case asks for an account that is not deleted, not for one that can sign in.
+        JsonNode responses = profileRoute().path("responses");
+        List<String> documented = new java.util.ArrayList<>();
+        responses.fieldNames().forEachRemaining(documented::add);
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                List.of("200", "400", "401", "404", "405", "409"),
+                documented.stream().sorted().toList(),
+                "The published codes for the profile edit do not match what it produces");
+    }
+
+    @Test
+    void publishesAProfileBodyWithNoPhoneNumberInIt() throws Exception {
+        // The removal is a contract fact and not only a schema one: a client reading the
+        // published description must not find a contact number offered for editing.
+        JsonNode properties = apiDescription()
+                .at("/components/schemas/UpdateProfileRequest/properties");
+        List<String> fields = new java.util.ArrayList<>();
+        properties.fieldNames().forEachRemaining(fields::add);
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                List.of("name", "lastName", "profileImage", "newEmail"), fields,
+                "The published profile body does not match the contract");
+        org.junit.jupiter.api.Assertions.assertTrue(
+                apiDescription().at("/components/schemas/UpdateProfileRequest/required")
+                        .isMissingNode() || apiDescription()
+                        .at("/components/schemas/UpdateProfileRequest/required").isEmpty(),
+                "The published profile body claims a field is required, so an absent one is "
+                        + "not an unchanged one");
+    }
+
+    /** The {@code put} operation of the profile route, as the description publishes it. */
+    private JsonNode profileRoute() throws Exception {
+        return apiDescription().at("/paths/~1api~1v1~1auth~1profile/put");
+    }
+
+    private JsonNode apiDescription() throws Exception {
+        String document = mvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return json.readTree(document);
     }
 }

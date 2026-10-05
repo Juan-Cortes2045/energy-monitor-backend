@@ -96,9 +96,18 @@ public final class UseCaseFixtures {
 
         private final Map<String, Person> byId = new LinkedHashMap<>();
 
+        /**
+         * Snapshots of every person handed to {@link #save}, kept because reading the map back is
+         * not enough on its own: the fake stores the very instance the use case mutated, so a
+         * read-back would show a rename that was never written. Only a use case that actually
+         * called the port leaves an entry here.
+         */
+        private final List<Person> saved = new ArrayList<>();
+
         @Override
         public Person save(Person person) {
             byId.put(person.idPerson(), person);
+            saved.add(new Person(person.idPerson(), person.name(), person.lastName()));
             return person;
         }
 
@@ -111,6 +120,11 @@ public final class UseCaseFixtures {
             Person person = new Person(idPerson, "Ada", "Lovelace");
             byId.put(idPerson, person);
             return person;
+        }
+
+        /** @return the name and last name of each saved person, in call order */
+        public List<String> savedNames() {
+            return saved.stream().map(person -> person.name() + " " + person.lastName()).toList();
         }
     }
 
