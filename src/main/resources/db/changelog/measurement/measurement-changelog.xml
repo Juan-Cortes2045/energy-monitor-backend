@@ -12,5 +12,6 @@
 
     <include file="changes/measurement-001-create-measurement.xml" relativeToChangelogFile="true"/>
     <include file="changes/measurement-002-create-consumption-level.xml" relativeToChangelogFile="true"/>
+    <include file="changes/measurement-003-seed-consumption-level.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
