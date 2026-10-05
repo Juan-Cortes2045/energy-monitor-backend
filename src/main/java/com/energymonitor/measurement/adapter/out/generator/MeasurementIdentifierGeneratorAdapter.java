@@ -13,9 +13,13 @@ import org.springframework.stereotype.Component;
  * <p>Collision risk: 32^10 ≈ 1.1 × 10^15 possible values. With 1000 existing rows,
  * the probability of collision is approximately 1 in 1.1 × 10^12 per generation.
  * The primary key is the final guarantee: a collision would cause a constraint violation.
+ *
+ * <p>The class name carries the module prefix because Spring derives the bean name from
+ * the simple class name and the home module already registers its own generator adapter;
+ * an unprefixed duplicate would clash at context startup.
  */
 @Component
-public class IdentifierGeneratorAdapter implements IdentifierGeneratorPort {
+public class MeasurementIdentifierGeneratorAdapter implements IdentifierGeneratorPort {
 
     private static final String ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
     private static final int LENGTH = 10;
