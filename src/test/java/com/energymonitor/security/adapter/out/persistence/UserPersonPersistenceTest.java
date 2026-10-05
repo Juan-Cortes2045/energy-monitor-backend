@@ -9,6 +9,7 @@ import com.energymonitor.security.domain.model.PasswordHash;
 import com.energymonitor.security.domain.model.Person;
 import com.energymonitor.security.domain.model.User;
 import com.energymonitor.security.domain.model.UserStatus;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.Optional;
@@ -26,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @SpringBootTest
 @Transactional
-class UserPersonPersistenceTest {
+class UserPersonPersistenceTest extends JwtKeyedTest {
 
     private static final Instant REGISTRATION = Instant.parse("2026-01-02T03:04:05Z");
     private static final String PERSON_ID = "per0000001";

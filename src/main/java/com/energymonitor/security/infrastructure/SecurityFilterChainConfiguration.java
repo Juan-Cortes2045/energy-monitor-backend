@@ -34,28 +34,21 @@ import org.springframework.security.web.SecurityFilterChain;
  * <p>Everything else is denied by default: a new endpoint is protected unless it is added to
  * the permit list on purpose.
  *
- * <h2>CORS is not configured</h2>
+ * <h2>CORS</h2>
  *
- * <p>{@code cors(Customizer.withDefaults())} below is <strong>not</strong> a project CORS
- * policy. No {@code CorsConfigurationSource} bean exists anywhere in this application, so
- * Spring Security falls back to a same-origin-only source and the server emits no CORS
- * headers for any allowed origin.
+ * <p>{@code cors(Customizer.withDefaults())} below resolves to the
+ * {@code CorsConfigurationSource} bean published by {@link SecurityCorsConfiguration}. That bean
+ * exists, so this is a real policy rather than the same-origin fallback Spring Security would
+ * otherwise substitute: the server emits CORS headers for the origins the deployment names and
+ * for no others.
  *
- * <p>What that means in practice:
+ * <p>It matters to the React web frontend, which is served from a different origin and would
+ * otherwise be blocked by the browser. It does not affect React Native, because CORS is a browser
+ * enforcement mechanism and a native HTTP client never applies it.
  *
- * <ul>
- *   <li>The React web frontend, served from a different origin, will fail its preflight and be
- *       blocked by the browser when this API is integrated. The failure is visible at
- *       integration time, not now, because no frontend consumes this API yet.</li>
- *   <li>The React Native client is not affected: CORS is a browser enforcement mechanism and
- *       a native HTTP client does not apply it.</li>
- * </ul>
- *
- * <p>An explicit {@code CorsConfigurationSource} is required before the web frontend is
- * integrated, and is deliberately not defined here: allowed origins, permitted methods,
- * headers and whether credentials are allowed are decisions that depend on the deployment, and
- * guessing them would be worse than failing closed. Until then the behaviour is fail-closed,
- * which is the safe direction.
+ * <p>Which origins are allowed, whether credentials may ride along and why no wildcard exists
+ * are argued in {@link SecurityCorsConfiguration}. The short version: the origins come from
+ * configuration, they default to none, and credentials are off.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
@@ -116,10 +109,10 @@ public class SecurityFilterChainConfiguration {
             throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
-                // No CorsConfigurationSource bean exists, so this resolves to same-origin
-                // only and no CORS header is ever emitted. The React web frontend will be
-                // blocked on cross-origin requests until an explicit policy is defined. See
-                // the class documentation. React Native is unaffected.
+                // Resolves to the CorsConfigurationSource published by
+                // SecurityCorsConfiguration: the origins named in configuration, no wildcard,
+                // and no credentials. Without that bean this call would silently fall back to
+                // same-origin-only and emit no CORS header at all.
                 .cors(Customizer.withDefaults())
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)

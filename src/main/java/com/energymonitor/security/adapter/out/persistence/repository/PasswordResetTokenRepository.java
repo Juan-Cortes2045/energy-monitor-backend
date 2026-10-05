@@ -8,17 +8,21 @@ import org.springframework.stereotype.Repository;
 
 /**
  * Spring Data repository over {@code password_reset_token}.
+ *
+ * <p>Every lookup is by hash. There is deliberately no finder taking a raw secret, so there is
+ * no code path that could query the table with a usable credential, the same rule
+ * {@code RefreshTokenRepository} follows.
  */
 @Repository
 public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetTokenEntity, String> {
 
     /**
-     * Finds the active token with the given value.
+     * Finds the active token whose stored hash matches.
      *
-     * @param resetToken the opaque token value
+     * @param resetTokenHash the hash of the secret to resolve
      * @return the row, empty when soft-deleted or unknown
      */
-    Optional<PasswordResetTokenEntity> findByResetTokenAndDeletedAtIsNull(String resetToken);
+    Optional<PasswordResetTokenEntity> findByResetTokenHashAndDeletedAtIsNull(String resetTokenHash);
 
     /**
      * Lists the active tokens issued to a user, newest first.
