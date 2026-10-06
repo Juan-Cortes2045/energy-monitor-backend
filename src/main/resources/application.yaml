@@ -103,12 +103,6 @@ app:
   mail:
     # The address outgoing mail is sent from, which is the same account that owns the app password.
     from: ${MAIL_FROM:}
-    # Delivery queue. Each worker is one blocking SMTP conversation, so the count is small on
-    # purpose. The queue is bounded rather than unbounded so a mail outage becomes refused
-    # deliveries, recorded as failed, instead of memory pressure behind an endpoint that keeps
-    # answering 202.
-    worker-threads: 2
-    queue-capacity: 100
     # A record left PENDING claims a delivery that a previous run started and never finished. The
     # sweep closes those as failed once they are older than this. Generous compared with any real
     # SMTP conversation, so a slow send is not mistaken for a dead one; nothing is ever resent,
