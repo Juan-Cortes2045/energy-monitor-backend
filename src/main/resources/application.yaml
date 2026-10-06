@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: energy-monitor-backend
 
@@ -17,6 +19,28 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
 
+  # Email delivery. Every value comes from the environment: no credential is ever written here.
+  # The username and password default to empty on purpose, so the application still starts with
+  # no mail configured and a send attempt is recorded as failed in the notification log rather
+  # than breaking the whole context. The host is required for Spring to build a JavaMailSender
+  # at all, so it keeps a default.
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          # A silent SMTP server must not hold the request thread: bounded waits, then give up.
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 security:
   jwt:
     # The iss claim. A URI rather than a bare name, as RFC 7519 expects, and validated on
@@ -25,6 +49,39 @@ security:
     access-token-ttl: 15m
     private-key-path: ${SECURITY_JWT_PRIVATE_KEY_PATH:}
     public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:}
+
+  reset:
+    # Pepper for the password-recovery code, as HMAC-SHA256(code, pepper). The recovery code is
+    # six digits, so a plain digest of it is reversible from a database dump in seconds: one
+    # million candidates, all cheap to hash. The pepper is what stops that, because it lives in
+    # the configuration rather than in the table, so a leaked dump yields nothing usable.
+    #
+    # The application refuses to start without it, exactly as it does for the signing key: a
+    # recovery secret protected by a guessable pepper is not protected.
+    #
+    # Changing it invalidates every code already issued. Generate with:
+    #   openssl rand -hex 32
+    pepper: ${SECURITY_RESET_PEPPER:}
+    # Six digits: what a person can read off a screen and type back without an error. Fewer
+    # digits would be more comfortable to type and no safer, because the rate limit is what
+    # bounds guessing, not the size of the space.
+    code-digits: 6
+    # How long a freshly issued code stays redeemable.
+    code-validity: 15m
+    # How many redemption attempts one caller address may make per window. This is the control
+    # that makes a six-digit code defensible: a million combinations is few enough to exhaust by
+    # brute force over the network, and the answer to that is to make the network slow.
+    max-attempts-per-window: 10
+    attempt-window: 15m
+    # Queue that recovery requests are dispatched onto. The endpoint answers 202 before this work
+    # runs, which is what removes the timing difference between a registered address and an
+    # unregistered one, so the queue is part of the endpoint's behaviour and not of mail delivery.
+    # Bounded, so pressure becomes refused work rather than memory behind an endpoint that keeps
+    # answering. A refusal is still answered 202: a full queue must not tell a caller whether the
+    # account exists.
+    executor:
+      worker-threads: 2
+      queue-capacity: 100
 
   cors:
     # The origins allowed to call this API from a browser, comma separated. Empty by default,
@@ -42,8 +99,29 @@ security:
     allow-credentials: false
     max-age: 30m
 
+app:
+  mail:
+    # The address outgoing mail is sent from, which is the same account that owns the app password.
+    from: ${MAIL_FROM:}
+    # Delivery queue. Each worker is one blocking SMTP conversation, so the count is small on
+    # purpose. The queue is bounded rather than unbounded so a mail outage becomes refused
+    # deliveries, recorded as failed, instead of memory pressure behind an endpoint that keeps
+    # answering 202.
+    worker-threads: 2
+    queue-capacity: 100
+    # A record left PENDING claims a delivery that a previous run started and never finished. The
+    # sweep closes those as failed once they are older than this. Generous compared with any real
+    # SMTP conversation, so a slow send is not mistaken for a dead one; nothing is ever resent,
+    # because only the security module holds the code and its hash.
+    pending-threshold: 30m
+    sweep-delay: 5m
+
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  health:
+    mail:
+      # A mail server that is down is not the application's health: it must not fail the probe.
+      enabled: false

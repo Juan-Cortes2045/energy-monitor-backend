@@ -1,19 +1,24 @@
 package com.energymonitor.security.adapter.in.web;
 
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.mockito.ArgumentCaptor;
 
 import com.energymonitor.security.application.command.RegisterUserCommand;
+import com.energymonitor.security.application.command.ResetPasswordCommand;
 import com.energymonitor.security.application.exception.EmailAlreadyRegisteredException;
 import com.energymonitor.security.application.exception.PasswordPolicyViolationException;
 import com.energymonitor.security.application.exception.UserNotFoundException;
@@ -334,7 +339,7 @@ class AuthControllerWebTest extends JwtKeyedTest {
         mvc.perform(post("/api/v1/auth/password/reset")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"resetToken":"bogus","newPassword":"NewStrong1!"}
+                                {"email":"ada@example.com","resetToken":"000000","newPassword":"NewStrong1!"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Reset token is invalid or expired"));
@@ -345,10 +350,48 @@ class AuthControllerWebTest extends JwtKeyedTest {
         mvc.perform(post("/api/v1/auth/password/reset")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"resetToken":"rst0000001","newPassword":"NewStrong1!"}
+                                {"email":"ada@example.com","resetToken":"123456","newPassword":"NewStrong1!"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Password updated."));
+    }
+
+    @Test
+    void rejectsACodeThatIsNotSixDigitsBeforeReachingTheUseCase() throws Exception {
+        // The shape is part of the design, not a formatting preference, so it is checked at the
+        // edge: hashing a value of the wrong length could only fail at the lookup.
+        mvc.perform(post("/api/v1/auth/password/reset")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"ada@example.com","resetToken":"12345","newPassword":"NewStrong1!"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.resetToken").exists());
+
+        verifyNoInteractions(resetPassword);
+    }
+
+    @Test
+    void ignoresAForwardedForHeaderAndRecordsTheRemoteAddress() throws Exception {
+        // The header used to be the recorded address, which meant the caller chose it: the
+        // password-recovery attempt limiter is keyed on this value, so a per-request header would
+        // hand out a fresh allowance every time. The container's own remote address is the only
+        // thing here that the client cannot set.
+        mvc.perform(post("/api/v1/auth/password/reset")
+                        .header("X-Forwarded-For", "203.0.113.99")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"ada@example.com","resetToken":"123456","newPassword":"NewStrong1!"}
+                                """))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ResetPasswordCommand> command =
+                ArgumentCaptor.forClass(ResetPasswordCommand.class);
+        verify(resetPassword).reset(command.capture());
+
+        String recorded = command.getValue().ipAddress();
+        assertNotNull(recorded, "the remote address should still be recorded");
+        assertNotEquals("203.0.113.99", recorded, "the spoofed header was recorded as the caller");
     }
 
     // --------------------------------------------------------- protected endpoints

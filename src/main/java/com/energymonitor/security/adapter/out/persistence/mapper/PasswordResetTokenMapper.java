@@ -34,6 +34,7 @@ public class PasswordResetTokenMapper {
         entity.setUserId(token.idUser());
         entity.setResetTokenHash(token.resetTokenHash());
         entity.setUsed(token.isUsed());
+        entity.setAttempts(token.attempts());
         entity.setExpirationAt(Instants.truncate(token.expirationAt()));
         entity.setCreatedAt(Instants.truncate(token.createdAt()));
         return entity;
@@ -46,6 +47,11 @@ public class PasswordResetTokenMapper {
      * stored on insert, and {@code updated_at} is refreshed by the audit callback. The hash is
      * rewritten from the domain rather than left alone, so the column and the object cannot
      * drift apart.
+     *
+     * <p>{@code attempts} is deliberately not written on this path. The count is spent by a
+     * conditional update in the repository, and a bulk write from a domain object read earlier
+     * could put back a value the database has already moved past, undoing a reservation that
+     * another request is relying on.
      *
      * @param entity the managed entity
      * @param token  the domain object holding the new state
@@ -73,6 +79,7 @@ public class PasswordResetTokenMapper {
                 entity.getResetTokenHash(),
                 entity.getCreatedAt(),
                 entity.getExpirationAt(),
-                entity.isUsed());
+                entity.isUsed(),
+                entity.getAttempts());
     }
 }

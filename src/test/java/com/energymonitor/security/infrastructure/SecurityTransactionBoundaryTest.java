@@ -33,6 +33,14 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
  * behind. These tests therefore check the runtime shape of the bean, not just the source
  * annotation, and they pin the deliberate omission on the single-write and read-only flows so
  * a later change cannot quietly add a transaction where there is nothing to make atomic.
+ *
+ * <p><strong>One flow moved to the transactional side, on purpose.</strong> Issuing a recovery
+ * code used to be asserted here as a single-write flow with no boundary, on the reasoning that a
+ * transaction cannot un-send a message. That was true while the mail left inside the call. Delivery
+ * is now queued and dispatched after the commit, so the boundary is what makes the ordering
+ * honest: without it the callback has no commit to wait for and the message would be built against
+ * a row a later failure could still remove. {@link #createPasswordResetTokenIsTransactionalBecauseItsDeliveryWaitsForTheCommit()}
+ * states the new invariant so the change cannot be reversed by accident.
  */
 @SpringBootTest
 class SecurityTransactionBoundaryTest extends JwtKeyedTest {
@@ -125,8 +133,15 @@ class SecurityTransactionBoundaryTest extends JwtKeyedTest {
 
     @Test
     void theSingleWriteFlowsCarryNoTransactionBoundary() {
-        assertHasNoBoundary(createPasswordResetToken);
         assertHasNoBoundary(createUserSession);
+    }
+
+    @Test
+    void createPasswordResetTokenIsTransactionalBecauseItsDeliveryWaitsForTheCommit() {
+        // A recovery code row and a message that quotes it have to agree: if the send were dispatched
+        // before the commit and the transaction then failed, the recipient would hold a code that does
+        // not exist. The boundary is what orders them, so this one single-write flow has one.
+        assertRunsInATransaction(createPasswordResetToken);
     }
 
     @Test

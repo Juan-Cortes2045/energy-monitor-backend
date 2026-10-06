@@ -1,6 +1,7 @@
 package com.energymonitor.security.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -19,6 +20,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -64,7 +66,50 @@ class PasswordResetServiceTest {
         PasswordResetToken token = createToken.create(new CreatePasswordResetTokenCommand("ada@example.com"));
 
         assertTrue(token.isValid(CLOCK.instant()));
-        assertEquals(CLOCK.instant().plus(Duration.ofMinutes(30)), token.expirationAt());
+        assertEquals(CLOCK.instant().plus(Duration.ofMinutes(15)), token.expirationAt());
+    }
+
+    @Test
+    void issuesASixDigitNumericCode() {
+        // The code has to survive being read off a screen and typed back, so its shape is part
+        // of the contract: the endpoint validates it as \d{6} before it ever hashes anything.
+        users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
+
+        PasswordResetToken token = createToken.create(new CreatePasswordResetTokenCommand("ada@example.com"));
+
+        assertTrue(token.clearToken().orElseThrow().matches("\\d{6}"),
+                "the delivered code was not six digits");
+    }
+
+    @Test
+    void supersedesTheCodeTheAccountAlreadyHeld() {
+        // One live code per account is what makes the redemption rate limit mean what it says:
+        // with several outstanding, the bound on guessing would be multiplied by how many an
+        // attacker could first arrange to have.
+        users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
+        PasswordResetToken first = createToken.create(
+                new CreatePasswordResetTokenCommand("ada@example.com"));
+        String firstCode = first.clearToken().orElseThrow();
+
+        PasswordResetToken second = createToken.create(
+                new CreatePasswordResetTokenCommand("ada@example.com"));
+
+        assertFalse(first.isValid(CLOCK.instant()), "the superseded code was still redeemable");
+        assertTrue(second.isValid(CLOCK.instant()));
+        assertNotEquals(firstCode, second.clearToken().orElseThrow());
+    }
+
+    @Test
+    void leavesAnotherAccountsCodeAlone() {
+        users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
+        users.seed("use0000002", "per0000002", "grace@example.com", UserStatus.ACTIVE);
+        PasswordResetToken ada = createToken.create(
+                new CreatePasswordResetTokenCommand("ada@example.com"));
+
+        createToken.create(new CreatePasswordResetTokenCommand("grace@example.com"));
+
+        assertTrue(ada.isValid(CLOCK.instant()),
+                "issuing a code for one account consumed another's");
     }
 
     @Test
@@ -76,11 +121,15 @@ class PasswordResetServiceTest {
         String clearToken = token.clearToken().orElseThrow();
         assertNotEquals(clearToken, token.resetTokenHash(), "The stored value must not be the secret");
         // What the store is keyed by is the hash, and the delivered value is what redeems it.
-        assertEquals(token, tokens.findActiveByHash(tokenHasher.hash(clearToken)).orElseThrow());
+        assertEquals(token, tokens.findActiveByHash(tokenHasher.hash("use0000001", clearToken)).orElseThrow());
         var sent = delivery.deliveries().getFirst();
         assertEquals(clearToken, sent.clearToken());
-        assertEquals("ada@example.com", sent.recipient().value());
+        assertEquals("ada@example.com", sent.recipient());
         assertEquals(token.expirationAt(), sent.validUntil());
+        // The channel is told which account and which token the message is about, so it can record
+        // the source without this module handing it anything from its own domain.
+        assertEquals("use0000001", sent.userId());
+        assertEquals(token.idResetToken(), sent.idResetToken());
     }
 
     @Test
@@ -112,17 +161,17 @@ class PasswordResetServiceTest {
         PasswordResetToken token = createToken.create(new CreatePasswordResetTokenCommand("ada@example.com"));
         String clearToken = token.clearToken().orElseThrow();
 
-        resetPassword.reset(new ResetPasswordCommand(clearToken, "NewStrong1!", "10.0.0.4"));
+        resetPassword.reset(new ResetPasswordCommand("ada@example.com", clearToken, "NewStrong1!", "10.0.0.4"));
 
         assertTrue(hasher.matches("NewStrong1!", users.findActive("use0000001").orElseThrow().passwordHash()));
-        assertTrue(tokens.findActiveByHash(tokenHasher.hash(clearToken)).orElseThrow().isUsed());
+        assertTrue(tokens.findActiveByHash(tokenHasher.hash("use0000001", clearToken)).orElseThrow().isUsed());
         assertEquals(AuditAction.UPDATE, audits.logs().getFirst().action());
     }
 
     @Test
     void abandonsTheAccountWhenTheTokenIsUnknown() {
         assertThrows(InvalidResetTokenException.class,
-                () -> resetPassword.reset(new ResetPasswordCommand("ghost", "NewStrong1!", null)));
+                () -> resetPassword.reset(new ResetPasswordCommand("ada@example.com", "ghost", "NewStrong1!", null)));
     }
 
     @Test
@@ -130,11 +179,11 @@ class PasswordResetServiceTest {
         users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
         Instant now = CLOCK.instant();
         tokens.store(PasswordResetToken.rehydrate("tok0000001", "use0000001",
-                tokenHasher.hash("stale-token"), now.minus(Duration.ofHours(1)),
-                now.minus(Duration.ofMinutes(30)), false));
+                tokenHasher.hash("use0000001", "stale-token"), now.minus(Duration.ofHours(1)),
+                now.minus(Duration.ofMinutes(30)), false, 0));
 
         assertThrows(InvalidResetTokenException.class,
-                () -> resetPassword.reset(new ResetPasswordCommand("stale-token", "NewStrong1!", null)));
+                () -> resetPassword.reset(new ResetPasswordCommand("ada@example.com", "stale-token", "NewStrong1!", null)));
     }
 
     @Test
@@ -142,11 +191,11 @@ class PasswordResetServiceTest {
         users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
         Instant now = CLOCK.instant();
         tokens.store(PasswordResetToken.rehydrate("tok0000001", "use0000001",
-                tokenHasher.hash("used-token"), now.minus(Duration.ofMinutes(10)),
-                now.plus(Duration.ofMinutes(20)), true));
+                tokenHasher.hash("use0000001", "used-token"), now.minus(Duration.ofMinutes(10)),
+                now.plus(Duration.ofMinutes(20)), true, 0));
 
         assertThrows(InvalidResetTokenException.class,
-                () -> resetPassword.reset(new ResetPasswordCommand("used-token", "NewStrong1!", null)));
+                () -> resetPassword.reset(new ResetPasswordCommand("ada@example.com", "used-token", "NewStrong1!", null)));
     }
 
     @Test
@@ -156,9 +205,95 @@ class PasswordResetServiceTest {
         String clearToken = token.clearToken().orElseThrow();
 
         assertThrows(PasswordPolicyViolationException.class,
-                () -> resetPassword.reset(new ResetPasswordCommand(clearToken, "weak", null)));
+                () -> resetPassword.reset(new ResetPasswordCommand("ada@example.com", clearToken, "weak", null)));
 
-        assertTrue(tokens.findActiveByHash(tokenHasher.hash(clearToken)).orElseThrow()
+        assertTrue(tokens.findActiveByHash(tokenHasher.hash("use0000001", clearToken)).orElseThrow()
                 .isValid(CLOCK.instant()));
+    }
+
+    @Test
+    @DisplayName("a code issued to another account cannot be redeemed, even when it is correct")
+    void refusesACodeThatBelongsToSomebodyElse() {
+        // The reason the address is in the request and in the digest. Presenting a stranger's valid
+        // code while naming this account must fail, because the comparison is against this
+        // account's digest and the two are not the same value.
+        users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
+        users.seed("use0000002", "per0000002", "grace@example.com", UserStatus.ACTIVE);
+        Instant now = CLOCK.instant();
+        String gracesCode = "246813";
+        tokens.store(PasswordResetToken.rehydrate("tok0000002", "use0000002",
+                tokenHasher.hash("use0000002", gracesCode), now, now.plus(Duration.ofMinutes(20)),
+                false, 0));
+
+        assertThrows(InvalidResetTokenException.class,
+                () -> resetPassword.reset(new ResetPasswordCommand("ada@example.com", gracesCode,
+                        "NewStrong1!", null)));
+
+        assertFalse(tokens.findActiveByHash(
+                tokenHasher.hash("use0000002", gracesCode)).orElseThrow().isUsed(),
+                "somebody else's code was consumed");
+    }
+
+    @Test
+    @DisplayName("the fifth attempt spends the budget and the sixth is refused")
+    void refusesOnceTheAttemptBudgetIsSpent() {
+        users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
+        PasswordResetToken token = createToken.create(
+                new CreatePasswordResetTokenCommand("ada@example.com"));
+        String correct = token.clearToken().orElseThrow();
+
+        // Four wrong guesses, all of which are refused but all of which spend an attempt.
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            assertThrows(InvalidResetTokenException.class,
+                    () -> resetPassword.reset(new ResetPasswordCommand("ada@example.com", "000000",
+                            "NewStrong1!", null)));
+        }
+
+        // The fifth is the last one the code will ever pay for, and the correct code spends it.
+        resetPassword.reset(new ResetPasswordCommand("ada@example.com", correct, "NewStrong1!", null));
+        assertTrue(tokens.findActiveByHash(
+                tokenHasher.hash("use0000001", correct)).orElseThrow().isUsed());
+
+        // A freshly issued code for the same account works again, which is what makes exhaustion a
+        // cost to the caller rather than a lockout.
+        PasswordResetToken replacement = createToken.create(
+                new CreatePasswordResetTokenCommand("ada@example.com"));
+        resetPassword.reset(new ResetPasswordCommand("ada@example.com",
+                replacement.clearToken().orElseThrow(), "AnotherStrong1!", null));
+    }
+
+    @Test
+    @DisplayName("an exhausted code is refused even when the code is correct")
+    void refusesACorrectCodeOnceTheBudgetIsSpent() {
+        users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
+        PasswordResetToken token = createToken.create(
+                new CreatePasswordResetTokenCommand("ada@example.com"));
+        String correct = token.clearToken().orElseThrow();
+        tokens.exhaust(token.idResetToken());
+
+        assertThrows(InvalidResetTokenException.class,
+                () -> resetPassword.reset(new ResetPasswordCommand("ada@example.com", correct,
+                        "NewStrong1!", null)));
+    }
+
+    @Test
+    @DisplayName("an unknown address and a wrong code are refused identically")
+    void everyRejectionCarriesTheSameMessage() {
+        users.seed("use0000001", "per0000001", "ada@example.com", UserStatus.ACTIVE);
+        createToken.create(new CreatePasswordResetTokenCommand("ada@example.com"));
+
+        String unknownAccount = assertThrows(InvalidResetTokenException.class,
+                () -> resetPassword.reset(new ResetPasswordCommand("nobody@example.com", "000000",
+                        "NewStrong1!", null))).getMessage();
+        String wrongCode = assertThrows(InvalidResetTokenException.class,
+                () -> resetPassword.reset(new ResetPasswordCommand("ada@example.com", "000000",
+                        "NewStrong1!", null))).getMessage();
+        String someoneElses = assertThrows(InvalidResetTokenException.class,
+                () -> resetPassword.reset(new ResetPasswordCommand("grace@example.com", "000000",
+                        "NewStrong1!", null))).getMessage();
+
+        // If these three ever differ, a caller can learn which addresses are registered.
+        assertEquals(unknownAccount, wrongCode);
+        assertEquals(unknownAccount, someoneElses);
     }
 }
