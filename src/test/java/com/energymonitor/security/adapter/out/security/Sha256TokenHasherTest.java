@@ -86,14 +86,16 @@ class Sha256TokenHasherTest {
     }
 
     @Test
-    @DisplayName("serves the refresh-token port and the password-reset-token port alike")
-    void backsBothTokenPorts() {
-        // The same adapter answers for both credentials, so a change to one port cannot be
-        // satisfied by a digest the other does not produce.
-        Sha256TokenHasher adapter = new Sha256TokenHasher();
-        RefreshTokenHasherPort refreshPort = adapter;
-        PasswordResetTokenHasherPort resetPort = adapter;
+    @DisplayName("serves the refresh-token port only")
+    void backsTheRefreshTokenPortOnly() {
+        // It used to answer for password-reset tokens as well, and deliberately no longer does: a
+        // six-digit recovery code has about a million candidates, so a fast digest of it can be
+        // reversed from a copy of the table. PepperedHmacResetCodeHasher serves that credential
+        // instead, and this assertion exists to catch someone re-widening this adapter.
+        RefreshTokenHasherPort refreshPort = new Sha256TokenHasher();
 
-        assertThat(resetPort.hash("secreto")).isEqualTo(refreshPort.hash("secreto"));
+        assertThat(refreshPort.hash("secreto")).hasSize(64);
+        assertThat(new Sha256TokenHasher())
+                .isNotInstanceOf(PasswordResetTokenHasherPort.class);
     }
 }

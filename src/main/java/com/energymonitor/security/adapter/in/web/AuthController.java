@@ -29,6 +29,7 @@ import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
 import com.energymonitor.security.application.port.in.FindUser;
 import com.energymonitor.security.application.port.in.RegisterUser;
 import com.energymonitor.security.application.port.in.ResetPassword;
+import com.energymonitor.security.application.port.out.ResetAttemptLimiterPort;
 import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.RefreshSession;
 import com.energymonitor.security.application.port.in.UpdateUserProfile;
@@ -38,6 +39,11 @@ import com.energymonitor.security.infrastructure.JwtTokenIssuer;
 import com.energymonitor.security.infrastructure.SecurityLoginFlow;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -87,7 +93,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * <ul>
  *   <li><strong>Password recovery cannot be completed by a real user.</strong>
  *       {@code POST /password/forgot} mints a token, stores its hash and hands the secret to
- *       {@link com.energymonitor.security.application.port.out.PasswordResetDeliveryPort}, but
+ *       {@link com.energymonitor.security.api.PasswordResetDeliveryPort}, but
  *       the only implementation shipped records the delivery instead of performing it, so
  *       {@code POST /password/reset} has no token to redeem yet. The missing piece is an
  *       outbound notification adapter, which is out of scope for this phase.</li>
@@ -103,6 +109,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
                 + "'Authorization: Bearer <JWT>'.")
 public class AuthController {
 
+    /**
+     * Only what the recovery flow needs to report. Delivery outcomes are logged by the module that
+     * records them, not here.
+     */
+    private static final Logger LOG = LoggerFactory.getLogger(AuthController.class);
+
+
     private static final String BEARER = "Bearer";
 
     private final RegisterUser registerUser;
@@ -111,6 +124,8 @@ public class AuthController {
     private final RefreshSession refreshSession;
     private final JwtTokenIssuer tokenIssuer;
     private final CreatePasswordResetToken createPasswordResetToken;
+    private final ResetAttemptLimiterPort attemptLimiter;
+    private final ThreadPoolExecutor recoveryExecutor;
     private final ResetPassword resetPassword;
     private final ChangePassword changePassword;
     private final FindUser findUser;
@@ -121,6 +136,8 @@ public class AuthController {
                           LogoutUserSession logoutUserSession, RefreshSession refreshSession,
                           JwtTokenIssuer tokenIssuer,
                           CreatePasswordResetToken createPasswordResetToken,
+                          ResetAttemptLimiterPort attemptLimiter,
+                          @Qualifier("passwordResetExecutor") ThreadPoolExecutor recoveryExecutor,
                           ResetPassword resetPassword, ChangePassword changePassword,
                           FindUser findUser, CheckPermission checkPermission,
                           UpdateUserProfile updateUserProfile) {
@@ -130,6 +147,8 @@ public class AuthController {
         this.refreshSession = refreshSession;
         this.tokenIssuer = tokenIssuer;
         this.createPasswordResetToken = createPasswordResetToken;
+        this.attemptLimiter = attemptLimiter;
+        this.recoveryExecutor = recoveryExecutor;
         this.resetPassword = resetPassword;
         this.changePassword = changePassword;
         this.findUser = findUser;
@@ -364,13 +383,13 @@ public class AuthController {
      *
      * <p>The token never comes back here. Returning it would hand a working credential to
      * whoever asked and turn this endpoint into an account-takeover primitive. It leaves the
-     * server through {@link com.energymonitor.security.application.port.out.PasswordResetDeliveryPort}
+     * server through {@link com.energymonitor.security.api.PasswordResetDeliveryPort}
      * instead, an outbound channel the use case hands the secret to, and the database keeps
      * only its hash. The controller never sees the secret at all: the use case's return value is
      * discarded rather than translated into a DTO.
      *
      * <p>The delivery itself is not built yet: the shipped
-     * {@link com.energymonitor.security.application.port.out.PasswordResetDeliveryPort}
+     * {@link com.energymonitor.security.api.PasswordResetDeliveryPort}
      * implementation records the attempt instead of sending anything, so the handler is complete
      * while the recovery flow is not. Making the flow work means implementing that port against
      * the deployment's mail, SMS or push infrastructure; it does not mean changing this handler,
@@ -395,13 +414,49 @@ public class AuthController {
     })
     @PostMapping("/password/forgot")
     public ResponseEntity<Void> forgotPassword(
-            @Valid @RequestBody ForgotPasswordRequest request) {
+            @Valid @RequestBody ForgotPasswordRequest request, HttpServletRequest servlet) {
+        String caller = clientIp(servlet);
+
+        // Charged here, on the request thread, before anything opens a transaction or takes a
+        // connection. The limiter keeps its counters in memory, so a caller that has spent its
+        // allowance is turned away without ever reaching the database.
+        attemptLimiter.checkAllowed(caller);
+
+        // The whole flow leaves the request thread: resolving the account, minting the code and
+        // writing its delivery record. What the caller is told must not depend on any of that, and
+        // measuring it showed a request for a registered address answered in about 70 ms against
+        // about 24 ms for an unregistered one, which is enough to tell them apart. Answering before
+        // any of it runs removes the difference by construction rather than by padding.
         try {
-            createPasswordResetToken.create(new CreatePasswordResetTokenCommand(request.email()));
-        } catch (UserNotFoundException unknownAccount) {
-            // Swallowed on purpose: reporting it would reveal which addresses are registered.
+            recoveryExecutor.execute(() -> issueCodeQuietly(request.email()));
+        } catch (RejectedExecutionException queueFull) {
+            // Still 202. The endpoint acknowledges every request identically whether or not the
+            // account exists, so a full queue must not become a way to tell a registered address
+            // from an unregistered one either.
+            LOG.warn("The recovery queue is full; a recovery request was not processed");
         }
         return ResponseEntity.accepted().build();
+    }
+
+    /**
+     * Issues a recovery code, reporting nothing about whether the account exists.
+     *
+     * <p>Runs off the request thread, so there is no caller left to leak anything to. The answer the
+     * request received was already sent.
+     *
+     * @param email the address the code was asked for
+     */
+    private void issueCodeQuietly(String email) {
+        try {
+            createPasswordResetToken.create(new CreatePasswordResetTokenCommand(email));
+        } catch (UserNotFoundException unknownAccount) {
+            // Swallowed on purpose: reporting it would reveal which addresses are registered.
+            LOG.debug("A recovery request named an account that does not exist");
+        } catch (RuntimeException failure) {
+            // Nothing above this point can turn a failed request into an error response, because the
+            // response was already sent. Logged so an operator can see the flow broke.
+            LOG.warn("A recovery request could not be processed", failure);
+        }
     }
 
     /**
@@ -451,8 +506,15 @@ public class AuthController {
     @PostMapping("/password/reset")
     public ResponseEntity<MessageResponse> resetPassword(
             @Valid @RequestBody ResetPasswordRequest request, HttpServletRequest servlet) {
-        resetPassword.reset(new ResetPasswordCommand(request.resetToken(), request.newPassword(),
-                clientIp(servlet)));
+        // Outside the transactional proxy on purpose. Everything the use case does happens inside a
+        // transaction, which means a connection is already held by the time its first statement
+        // runs; charging the limit inside would be too late to spare a caller the connection it is
+        // refusing. The limiter keeps its counters in memory, so it answers without touching the
+        // database at all.
+        attemptLimiter.checkAllowed(clientIp(servlet));
+
+        resetPassword.reset(new ResetPasswordCommand(request.email(), request.resetToken(),
+                request.newPassword(), clientIp(servlet)));
         return ResponseEntity.ok(new MessageResponse("Password updated."));
     }
 
@@ -724,19 +786,28 @@ public class AuthController {
     }
 
     /**
-     * The caller's address, forwarded headers included, or {@code null} when unknown.
+     * The address the connection actually came from.
      *
-     * <p>The use cases accept a nullable address precisely so they never have to care whether
-     * the deployment sits behind a proxy.
+     * <p><strong>{@code X-Forwarded-For} is deliberately ignored.</strong> It used to be read
+     * here, which meant the value recorded in the audit trail, and fed to the password-recovery
+     * attempt limiter, was whatever the caller put in a request header. Any client could therefore
+     * choose its own recorded address, and a limiter keyed on it could be sidestepped by sending a
+     * different value per request. A header is only trustworthy when something has already
+     * established which peers are allowed to set it, and nothing here does.
+     *
+     * <p>Behind a reverse proxy this records the proxy's address rather than the caller's, and
+     * that has a consequence worth stating: every request then shares one attempt allowance, so
+     * the password-recovery rate limit becomes the limit for all users together. A deployment in
+     * that position must configure the container's own trusted-proxy handling, which rewrites
+     * {@link HttpServletRequest#getRemoteAddr()} from the validated header
+     * ({@code server.forward-headers-strategy=native}). Doing it there rather than here is the
+     * point: the trust decision belongs to the deployment's configuration, not to a method that
+     * cannot know who is in front of it.
      *
      * @param servlet the current request
-     * @return the address to record in the audit trail
+     * @return the remote address, or {@code null} if the container reports none
      */
     private String clientIp(HttpServletRequest servlet) {
-        String forwarded = servlet.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
         return servlet.getRemoteAddr();
     }
 }

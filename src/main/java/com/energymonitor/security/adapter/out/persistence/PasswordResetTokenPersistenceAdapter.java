@@ -8,6 +8,8 @@ import com.energymonitor.security.domain.model.PasswordResetToken;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Persistence adapter for {@link PasswordResetToken}.
@@ -40,7 +42,10 @@ public class PasswordResetTokenPersistenceAdapter implements PasswordResetTokenP
      * @return the same domain object
      */
     public PasswordResetToken save(PasswordResetToken token) {
-        repository.save(mapper.toEntity(token));
+        // Flushed, not merely queued: the caller of save needs the unique constraint on
+        // reset_token_hash to be tested here, where its violation can still be translated, rather
+        // than at commit, where it would escape as a driver failure nobody was looking for.
+        repository.saveAndFlush(mapper.toEntity(token));
         return token;
     }
 
@@ -60,6 +65,33 @@ public class PasswordResetTokenPersistenceAdapter implements PasswordResetTokenP
         // an existing row's created_at must survive; the insert path presets it
         repository.save(entity);
         return token;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Its own transaction, which is the whole reason it works. The request that presents a code
+     * rejects it by raising an exception, and the transaction wrapping that request rolls back
+     * every write it made. A counter incremented inside it would be rolled back with it, so the
+     * fifth attempt would never be recorded and the limit would never arrive. Suspending the outer
+     * transaction for the duration of this one statement commits the count independently of what
+     * the caller goes on to do.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean reserveAttempt(String idResetToken) {
+        return repository.reserveAttempt(idResetToken) == 1;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Also its own transaction, and for a related reason: the redemption that consumed the code
+     * is about to commit a password change, and whether the flag survived must not depend on that
+     * commit succeeding.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean markUsedIfPending(String idResetToken) {
+        return repository.markUsedIfPending(idResetToken) == 1;
     }
 
     /**
@@ -95,5 +127,23 @@ public class PasswordResetTokenPersistenceAdapter implements PasswordResetTokenP
         return repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(idUser).stream()
                 .map(mapper::toDomain)
                 .toList();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Consumed through the domain rather than by writing the column directly, so the flag
+     * still passes the invariant that a token cannot be consumed twice. The rows are already
+     * managed, so the dirty checking of the surrounding transaction is what persists them.
+     */
+    public int consumeAllForUser(String idUser) {
+        List<PasswordResetTokenEntity> pending =
+                repository.findByUserIdAndUsedFalseAndDeletedAtIsNullOrderByCreatedAtDesc(idUser);
+        for (PasswordResetTokenEntity entity : pending) {
+            PasswordResetToken token = mapper.toDomain(entity);
+            token.markUsed();
+            mapper.applyTo(entity, token);
+        }
+        return pending.size();
     }
 }

@@ -2,6 +2,7 @@ package com.energymonitor.security.adapter.out.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.energymonitor.security.adapter.out.persistence.support.Instants;
@@ -12,10 +13,21 @@ import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import jakarta.persistence.EntityManager;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Round trips of the time-boxed credentials: password reset tokens and user sessions.
@@ -56,14 +68,21 @@ class TokenSessionPersistenceTest extends JwtKeyedTest {
 
     @Autowired
     private UserSessionPersistenceAdapter userSessions;
+    @Autowired
+    private PlatformTransactionManager transactions;
 
     private void flushAndClear() {
         entityManager.flush();
         entityManager.clear();
     }
 
+    /**
+     * The digest is bound to the account, so both arguments are needed to reproduce it. This is the
+     * form the production adapter receives too, which is why the helper exists rather than the test
+     * spelling the two arguments at every call site.
+     */
     private String hashOf(String clearToken) {
-        return resetTokenHasher.hash(clearToken);
+        return resetTokenHasher.hash(USER_ID, clearToken);
     }
 
     @Test
@@ -83,7 +102,7 @@ class TokenSessionPersistenceTest extends JwtKeyedTest {
         assertFalse(read.isUsed());
 
         PasswordResetToken consumed = PasswordResetToken.rehydrate(TOKEN_ID, USER_ID,
-                hashOf(CLEAR_TOKEN), OPENED_AT, EXPIRES_AT, true);
+                hashOf(CLEAR_TOKEN), OPENED_AT, EXPIRES_AT, true, 0);
         passwordResetTokens.update(consumed);
         flushAndClear();
 
