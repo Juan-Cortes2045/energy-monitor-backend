@@ -32,16 +32,34 @@ import com.energymonitor.home.application.result.HomeMembershipResult;
 import com.energymonitor.home.application.result.HomeResult;
 import com.energymonitor.home.application.result.UserHomeResult;
 import com.energymonitor.home.domain.model.Role;
+import com.energymonitor.home.infrastructure.ClockConfiguration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+/**
+ * A slice loads {@code @ControllerAdvice} beans but no {@code @Configuration}, so the
+ * {@link java.time.Clock} every advice constructor asks for is absent. Importing the module's
+ * own {@link ClockConfiguration} supplies it from production wiring instead of a test-only
+ * bean, which keeps the two definitions from drifting apart.
+ *
+ * <p>Filters are switched off because the slice excludes
+ * {@code SecurityFilterChainConfiguration} too, which leaves Spring Boot's auto-configured
+ * default chain in place: it demands authentication for every request and a CSRF token on every
+ * write, so it answered 401 and 403 before reaching the controller. These tests exercise the
+ * controller and its advice, taking the caller identity from the {@code X-User-Id} header via the
+ * mocked {@link CurrentUserResolver}; the real chain is covered by the Security module's tests.
+ */
 @WebMvcTest(HomeController.class)
+@Import(ClockConfiguration.class)
+@AutoConfigureMockMvc(addFilters = false)
 class HomeControllerTest {
 
     @Autowired

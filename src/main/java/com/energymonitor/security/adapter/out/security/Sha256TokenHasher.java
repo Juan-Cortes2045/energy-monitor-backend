@@ -8,32 +8,35 @@ import java.security.NoSuchAlgorithmException;
 import org.springframework.stereotype.Component;
 
 /**
- * SHA-256 implementation of {@link RefreshTokenHasherPort} and
- * {@link PasswordResetTokenHasherPort}.
+ * SHA-256 implementation of {@link RefreshTokenHasherPort}.
  *
- * <p>One adapter serves both ports because the two credentials are the same kind of thing: a
- * 32-byte secret from {@link java.security.SecureRandom} whose hash is the only part worth
- * storing. What differs is which aggregate holds the result, not how the digest is computed, so
- * one implementation is not a shortcut but the honest description of the capability.
+ * <p>This used to serve {@link PasswordResetTokenHasherPort} as well, and no longer does. The
+ * reasoning below is correct for a 32-byte refresh token and wrong for a six-digit recovery code,
+ * and that is the whole difference between them.
  *
  * <h2>Why SHA-256 and not BCrypt</h2>
  *
  * <p>The same codebase uses BCrypt for passwords, and reusing it here would look consistent
  * while being the wrong tool. BCrypt exists to make brute force expensive against a
  * <em>low-entropy</em> secret that a human chose and can be guessed from a dictionary. A refresh
- * token or a password-reset token here is 32 bytes from {@link java.security.SecureRandom}:
- * roughly 2^256 candidates, none of which any list covers. There is nothing for a slow KDF to
- * slow down, and a deliberate cost factor would only add latency to every single refresh.
+ * token here is 32 bytes from {@link java.security.SecureRandom}: roughly 2^256 candidates, none
+ * of which any list covers. There is nothing for a slow KDF to slow down, and a deliberate cost
+ * factor would only add latency to every single refresh.
  *
  * <p>SHA-256 is therefore the appropriate primitive, and the cost it does add is irrelevant
  * because lookups are bounded by how often a client refreshes rather than by how often an
  * attacker guesses: an attacker cannot brute force a hash they have to fetch over the network.
  *
+ * <p><strong>That last sentence is what stops applying to a recovery code.</strong> A code of six
+ * digits has a million candidates, all of which fit in memory and all of which are cheap to
+ * hash. Anyone holding a copy of the table recomputes the whole space in seconds, so a fast digest
+ * there protects nothing. {@link PepperedHmacResetCodeHasher} serves that credential instead, and
+ * keeps the deterministic output this class relies on for lookup.
+ *
  * <h2>Representation</h2>
  *
  * <p>Lowercase hexadecimal, 64 characters for the 32-byte digest, matching
- * {@code refresh_token.token_hash VARCHAR(64)} and
- * {@code password_reset_token.reset_token_hash VARCHAR(64)}.
+ * {@code refresh_token.token_hash VARCHAR(64)}.
  *
  * <p>Hex was chosen over Base64 for three reasons. It is the representation that survives the
  * most contexts unchanged, so a hash can be copied into a log, a support ticket or a manual
@@ -43,7 +46,7 @@ import org.springframework.stereotype.Component;
  * lower-case hex string has only one spelling.
  */
 @Component
-public class Sha256TokenHasher implements RefreshTokenHasherPort, PasswordResetTokenHasherPort {
+public class Sha256TokenHasher implements RefreshTokenHasherPort {
 
     private static final String ALGORITHM = "SHA-256";
     private static final char[] HEX = "0123456789abcdef".toCharArray();

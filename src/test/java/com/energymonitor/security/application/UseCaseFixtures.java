@@ -1,15 +1,16 @@
 package com.energymonitor.security.application;
 
+import com.energymonitor.security.api.PasswordResetDeliveryPort;
 import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.LoginErrorLogPersistencePort;
 import com.energymonitor.security.application.port.out.PasswordHasherPort;
 import com.energymonitor.security.application.port.out.PasswordPolicyPersistencePort;
-import com.energymonitor.security.application.port.out.PasswordResetDeliveryPort;
 import com.energymonitor.security.application.port.out.PasswordResetTokenHasherPort;
 import com.energymonitor.security.application.port.out.PasswordResetTokenPersistencePort;
 import com.energymonitor.security.application.port.out.PermissionPersistencePort;
 import com.energymonitor.security.application.port.out.PersonPersistencePort;
+import com.energymonitor.security.application.port.out.ResetAttemptLimiterPort;
 import com.energymonitor.security.application.port.out.SystemRolePermissionPersistencePort;
 import com.energymonitor.security.application.port.out.SystemRolePersistencePort;
 import com.energymonitor.security.application.port.out.TokenGeneratorPort;
@@ -33,9 +34,11 @@ import com.energymonitor.security.domain.model.UserSystemRole;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * In-memory fakes of the output ports, for application-layer tests only.
@@ -162,6 +165,16 @@ public final class UseCaseFixtures {
         public String generateToken() {
             sequence++;
             return "token-" + sequence;
+        }
+
+        /**
+         * A recognisable six-digit code rather than a random one, so a test can assert on the value
+         * it was handed without having to read it back out of a fixture.
+         */
+        @Override
+        public String generateNumericCode(int digits) {
+            sequence++;
+            return String.format("%0" + digits + "d", 100000 + sequence);
         }
     }
 
@@ -306,6 +319,70 @@ public final class UseCaseFixtures {
                     .toList();
         }
 
+        /** Codes this fake refuses to reserve against, standing in for exhausted or spent ones. */
+        private final Set<String> exhausted = new LinkedHashSet<>();
+
+        /**
+         * Counts the reservations, so a test can assert that a code was compared at most once per
+         * attempt spent rather than once per request received.
+         */
+        private int reservations;
+
+        /**
+         * Stands in for the atomic reservation: refuses when the code is unknown, already used,
+         * or listed as exhausted, and otherwise counts it.
+         */
+        @Override
+        public boolean reserveAttempt(String idResetToken) {
+            PasswordResetToken token = findActive(idResetToken).orElse(null);
+            if (token == null || token.isUsed() || exhausted.contains(idResetToken)) {
+                return false;
+            }
+            reservations++;
+            return true;
+        }
+
+        /** Marks a code exhausted so the next reservation against it is refused. */
+        public FakePasswordResetTokenPersistencePort exhaust(String idResetToken) {
+            exhausted.add(idResetToken);
+            return this;
+        }
+
+        /** @return how many reservations were granted */
+        public int reservations() {
+            return reservations;
+        }
+
+        /**
+         * A code is consumed once; a second request asking for the same redemption is told it lost,
+         * which is what the conditional update does under concurrency.
+         */
+        @Override
+        public boolean markUsedIfPending(String idResetToken) {
+            PasswordResetToken token = findActive(idResetToken).orElse(null);
+            if (token == null || token.isUsed()) {
+                return false;
+            }
+            token.markUsed();
+            return true;
+        }
+
+        /**
+         * Consumes every token the user still holds, mirroring what the adapter does before it
+         * issues a replacement.
+         */
+        @Override
+        public int consumeAllForUser(String idUser) {
+            int consumed = 0;
+            for (PasswordResetToken token : byHash.values()) {
+                if (token.idUser().equals(idUser) && !token.isUsed()) {
+                    token.markUsed();
+                    consumed++;
+                }
+            }
+            return consumed;
+        }
+
         /** Stores a token as if it had been read back from the database: no clear secret. */
         public FakePasswordResetTokenPersistencePort store(PasswordResetToken token) {
             byHash.put(token.resetTokenHash(), token);
@@ -322,12 +399,40 @@ public final class UseCaseFixtures {
 
         private static final String PREFIX = "hash:";
 
+        /**
+         * Reversible and prefixed with the account, so a test can assert which stored value a code
+         * resolves to and can see, by reading the string, that two accounts' identical codes do not
+         * produce the same digest.
+         */
         @Override
-        public String hash(String rawToken) {
-            if (rawToken == null || rawToken.isBlank()) {
-                throw new IllegalArgumentException("rawToken must not be null or blank");
+        public String hash(String idUser, String clearCode) {
+            if (idUser == null || idUser.isBlank()) {
+                throw new IllegalArgumentException("idUser must not be null or blank");
             }
-            return PREFIX + rawToken;
+            if (clearCode == null || clearCode.isBlank()) {
+                throw new IllegalArgumentException("clearCode must not be null or blank");
+            }
+            return PREFIX + idUser + ":" + clearCode;
+        }
+    }
+
+    /**
+     * Counts attempts instead of enforcing a limit, so a use-case test can assert that an attempt
+     * was charged without having to place the clock. A test about the limit itself builds the real
+     * {@code InMemoryResetAttemptLimiter}, which is where the arithmetic lives.
+     */
+    public static final class FakeResetAttemptLimiterPort implements ResetAttemptLimiterPort {
+
+        private int attempts;
+
+        @Override
+        public void checkAllowed(String clientIp) {
+            attempts++;
+        }
+
+        /** @return how many redemption attempts have been charged so far */
+        public int attempts() {
+            return attempts;
         }
     }
 
@@ -343,11 +448,12 @@ public final class UseCaseFixtures {
         private RuntimeException failOnDeliver;
 
         @Override
-        public void deliver(Email recipient, String clearToken, Instant validUntil) {
+        public void deliver(String userId, String recipient, String idResetToken, String clearToken,
+                Instant validUntil) {
             if (failOnDeliver != null) {
                 throw failOnDeliver;
             }
-            deliveries.add(new Delivery(recipient, clearToken, validUntil));
+            deliveries.add(new Delivery(userId, recipient, idResetToken, clearToken, validUntil));
         }
 
         public void failWith(RuntimeException failure) {
@@ -359,7 +465,12 @@ public final class UseCaseFixtures {
         }
 
         /** One recorded delivery. */
-        public record Delivery(Email recipient, String clearToken, Instant validUntil) {
+        /**
+         * What was handed to the channel, including the two references the port now carries so the
+         * channel can record where the message came from.
+         */
+        public record Delivery(String userId, String recipient, String idResetToken,
+                               String clearToken, Instant validUntil) {
         }
     }
 

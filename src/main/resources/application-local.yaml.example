@@ -8,11 +8,32 @@ security:
   jwt:
     issuer: https://energy-monitor-backend
     access-token-ttl: 15m
+    # Point these at your key pair, or leave them empty here and export the environment
+    # variables instead. Empty is deliberate: the application then refuses to start with a
+    # message naming the two variables, which beats failing on an unreadable placeholder.
     # Generate the pair locally, then point these at it. Never commit the files.
     #   openssl genpkey -algorithm RSA -out ~/.energy-monitor/keys/private.pem -pkeyopt rsa_keygen_bits:2048
     #   openssl rsa -in ~/.energy-monitor/keys/private.pem -pubout -out ~/.energy-monitor/keys/public.pem
-    private-key-path: ${SECURITY_JWT_PRIVATE_KEY_PATH:/path/to/private.pem}
-    public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:/path/to/public.pem}
+    #
+    # The path must be absolute. Java does not expand ~ , so "~/.energy-monitor/keys/private.pem"
+    # is taken literally and the key is reported as unreadable.
+    private-key-path: ${SECURITY_JWT_PRIVATE_KEY_PATH:}
+    public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:}
+
+  reset:
+    # Pepper for the password-recovery code. The code is six digits, so a plain digest of it is
+    # reversible from a database dump in seconds; this is what stops that, because the pepper
+    # lives here instead of in the table. Empty on purpose: the application then refuses to start
+    # with a message naming the variable, which beats silently protecting nothing.
+    #   openssl rand -hex 32
+    #
+    # Changing it invalidates every recovery code already issued.
+    pepper: ${SECURITY_RESET_PEPPER:}
+    code-digits: 6
+    code-validity: 15m
+    # What bounds guessing against a six-digit code, since the space itself is small.
+    max-attempts-per-window: 10
+    attempt-window: 15m
 
   cors:
     # Origins allowed to call this API from a browser. Comma separated; leave empty to answer no

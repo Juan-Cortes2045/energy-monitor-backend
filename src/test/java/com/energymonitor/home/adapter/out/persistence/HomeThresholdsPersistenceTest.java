@@ -5,20 +5,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.energymonitor.home.domain.model.HomeThresholds;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Round trips of the {@code home_thresholds} aggregate.
  */
 @SpringBootTest
-@ActiveProfiles("test")
 @Transactional
-class HomeThresholdsPersistenceTest {
+class HomeThresholdsPersistenceTest extends JwtKeyedTest {
 
     @Autowired
     private EntityManager entityManager;

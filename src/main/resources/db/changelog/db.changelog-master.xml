@@ -11,5 +11,5 @@
         <include file="measurement/measurement-changelog.xml" relativeToChangelogFile="true"/>
         <include file="alert/alert-changelog.xml" relativeToChangelogFile="true"/>
         <include file="recommendation/recommendation-changelog.xml" relativeToChangelogFile="true"/>
-
+        <include file="notification/notification-changelog.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

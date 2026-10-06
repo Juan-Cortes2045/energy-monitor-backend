@@ -37,6 +37,19 @@ public class PasswordResetTokenEntity extends BaseAuditEntity {
     @TinyIntBoolean
     private boolean used;
 
+    /**
+     * Redemption attempts already reserved for this code, spent by a conditional update.
+     *
+     * <p>A plain column rather than anything derived, because under concurrency the value the
+     * database increments is the authoritative one and this field is only a read of it.
+     *
+     * <p>No {@link TinyIntBoolean} here, unlike {@code used}: the flag stores a boolean, this
+     * stores a count, and a counter capped at five must not be squeezed into a single boolean
+     * column by a mapping convention meant for flags.
+     */
+    @Column(name = "attempts", nullable = false)
+    private int attempts;
+
     @Column(name = "expiration_at", nullable = false)
     private Instant expirationAt;
 
@@ -73,6 +86,15 @@ public class PasswordResetTokenEntity extends BaseAuditEntity {
 
     public void setUsed(boolean used) {
         this.used = used;
+    }
+
+    /** @return attempts already reserved against this code */
+    public int getAttempts() {
+        return attempts;
+    }
+
+    public void setAttempts(int attempts) {
+        this.attempts = attempts;
     }
 
     /** @return expiry instant, read from the column named in the changelog */

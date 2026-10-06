@@ -4,12 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.energymonitor.home.domain.model.HomeType;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import jakarta.persistence.EntityManager;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -19,9 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
  * in {@code home-changelog.xml}. Instead, it inserts its own data within the transaction.
  */
 @SpringBootTest
-@ActiveProfiles("test")
 @Transactional
-class HomeTypePersistenceTest {
+class HomeTypePersistenceTest extends JwtKeyedTest {
 
     @Autowired
     private EntityManager entityManager;

@@ -35,8 +35,18 @@ public class PasswordResetToken {
     /** Matches {@code password_reset_token.id_reset_token VARCHAR(10)}. */
     private static final int ID_MAX = 10;
 
-    /** Lowercase hex SHA-256 renders 32 bytes as 64 characters. */
+    /** Lowercase hex HMAC-SHA256 renders 32 bytes as 64 characters. */
     private static final int TOKEN_HASH_MAX = 64;
+
+    /**
+     * How many times a code may be presented before it stops being redeemable (INV-011).
+     *
+     * <p>This is what makes a six-digit code defensible. The space is small enough to exhaust by
+     * brute force over the network, so the bound has to exist somewhere; per code it is narrow
+     * enough that a caller who mistypes twice still has room, and wide enough that guessing five
+     * numbers is not a strategy.
+     */
+    private static final int MAX_ATTEMPTS = 5;
 
     private final String idResetToken;
     private final String idUser;
@@ -52,6 +62,14 @@ public class PasswordResetToken {
     private final String clearToken;
 
     private boolean used;
+
+    /**
+     * Redemption attempts already reserved for this code.
+     *
+     * <p>Written by a conditional update rather than by reading and writing this field, so the
+     * count cannot be lost to two requests arriving together. See the persistence adapter.
+     */
+    private int attempts;
 
     /**
      * Issues a token. It starts unused and, provided the expiration is in the future, valid.
@@ -70,7 +88,7 @@ public class PasswordResetToken {
                                           String resetTokenHash, Instant createdAt,
                                           Instant expirationAt) {
         return new PasswordResetToken(idResetToken, idUser, resetTokenHash, createdAt,
-                expirationAt, clearToken, false);
+                expirationAt, clearToken, false, 0);
     }
 
     /**
@@ -95,9 +113,9 @@ public class PasswordResetToken {
      */
     public static PasswordResetToken rehydrate(String idResetToken, String idUser,
                                                String resetTokenHash, Instant createdAt,
-                                               Instant expirationAt, boolean used) {
+                                               Instant expirationAt, boolean used, int attempts) {
         return new PasswordResetToken(idResetToken, idUser, resetTokenHash, createdAt,
-                expirationAt, null, used);
+                expirationAt, null, used, attempts);
     }
 
     /**
@@ -106,7 +124,7 @@ public class PasswordResetToken {
      */
     private PasswordResetToken(String idResetToken, String idUser, String resetTokenHash,
                                Instant createdAt, Instant expirationAt, String clearToken,
-                               boolean used) {
+                               boolean used, int attempts) {
         this.idResetToken = Preconditions.text(idResetToken, ID_MAX, "idResetToken");
         this.idUser = Preconditions.text(idUser, ID_MAX, "idUser");
         this.resetTokenHash = Preconditions.text(resetTokenHash, TOKEN_HASH_MAX, "resetTokenHash");
@@ -117,6 +135,10 @@ public class PasswordResetToken {
                 ? null
                 : Preconditions.text(clearToken, "clearToken");
         this.used = used;
+        if (attempts < 0) {
+            throw new IllegalArgumentException("attempts must not be negative, got " + attempts);
+        }
+        this.attempts = attempts;
     }
 
     /** @return the identifier */
@@ -183,13 +205,34 @@ public class PasswordResetToken {
     }
 
     /**
-     * Whether the token may still be redeemed: neither used nor expired.
+     * Whether the token may still be redeemed: neither used nor expired, and with attempts left.
+     *
+     * <p>A code that has exhausted its attempts is as unusable as a consumed one, and reports
+     * itself the same way, so that presenting it cannot be told apart from presenting it twice.
      *
      * @param now reference instant
      * @return {@code true} when the token is usable
      */
     public boolean isValid(Instant now) {
-        return !used && !isExpired(now);
+        return !used && !isExpired(now) && hasAttemptsLeft();
+    }
+
+    /**
+     * Attempts already reserved against this code.
+     *
+     * @return how many of {@value #MAX_ATTEMPTS} have been used
+     */
+    public int attempts() {
+        return attempts;
+    }
+
+    /**
+     * Whether the code still has an attempt to spend.
+     *
+     * @return {@code true} when fewer than {@value #MAX_ATTEMPTS} attempts are recorded
+     */
+    public boolean hasAttemptsLeft() {
+        return attempts < MAX_ATTEMPTS;
     }
 
     /**

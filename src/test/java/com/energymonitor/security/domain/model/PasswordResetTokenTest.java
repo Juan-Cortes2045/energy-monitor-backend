@@ -103,7 +103,7 @@ class PasswordResetTokenTest {
     @DisplayName("rehydration keeps the used state of a stored token")
     void rehydrationKeepsUsedState() {
         PasswordResetToken token = PasswordResetToken.rehydrate(ID, ID_USER, HASH, CREATED_AT,
-                EXPIRATION_AT, true);
+                EXPIRATION_AT, true, 0);
 
         assertThat(token.isUsed()).isTrue();
         assertThat(token.createdAt()).isEqualTo(CREATED_AT);
@@ -114,7 +114,7 @@ class PasswordResetTokenTest {
     @DisplayName("rehydration refuses an expiration that is not after the creation")
     void rehydrationRefusesInconsistentWindow() {
         assertThatThrownBy(() -> PasswordResetToken.rehydrate(ID, ID_USER, HASH, EXPIRATION_AT,
-                CREATED_AT, false))
+                CREATED_AT, false, 0))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("expirationAt");
     }
@@ -123,7 +123,7 @@ class PasswordResetTokenTest {
     @DisplayName("rehydration refuses a window whose ends coincide")
     void rehydrationRefusesEmptyWindow() {
         assertThatThrownBy(() -> PasswordResetToken.rehydrate(ID, ID_USER, HASH, CREATED_AT,
-                CREATED_AT, true))
+                CREATED_AT, true, 0))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("expirationAt");
     }
@@ -135,8 +135,7 @@ class PasswordResetTokenTest {
                 () -> PasswordResetToken.issue(ID, ID_USER, CLEAR_TOKEN, HASH, EXPIRATION_AT,
                         CREATED_AT));
         Throwable rehydrated = catchThrowable(
-                () -> PasswordResetToken.rehydrate(ID, ID_USER, HASH, EXPIRATION_AT, CREATED_AT,
-                        false));
+                () -> PasswordResetToken.rehydrate(ID, ID_USER, HASH, EXPIRATION_AT, CREATED_AT, false, 0));
 
         assertThat(issued)
                 .isInstanceOf(IllegalStateException.class)
@@ -168,7 +167,7 @@ class PasswordResetTokenTest {
     @DisplayName("refuses a hash longer than the column it has to fit in")
     void refusesOversizedHash() {
         assertThatThrownBy(() -> PasswordResetToken.rehydrate(ID, ID_USER, "a".repeat(65),
-                CREATED_AT, EXPIRATION_AT, false))
+                CREATED_AT, EXPIRATION_AT, false, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("resetTokenHash");
     }
@@ -187,7 +186,7 @@ class PasswordResetTokenTest {
     @DisplayName("a rehydrated token has no secret, because none was ever stored")
     void rehydrationCarriesNoSecret() {
         PasswordResetToken token = PasswordResetToken.rehydrate(ID, ID_USER, HASH, CREATED_AT,
-                EXPIRATION_AT, false);
+                EXPIRATION_AT, false, 0);
 
         assertThat(token.clearToken()).isEmpty();
         assertThat(token.resetTokenHash()).isEqualTo(HASH);

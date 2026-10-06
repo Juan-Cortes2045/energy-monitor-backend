@@ -1,5 +1,6 @@
 package com.energymonitor.security.infrastructure;
 
+import com.energymonitor.security.api.PasswordResetDeliveryPort;
 import com.energymonitor.security.application.port.in.AssignRole;
 import com.energymonitor.security.application.port.in.AuthenticateUser;
 import com.energymonitor.security.application.port.in.ChangePassword;
@@ -7,25 +8,27 @@ import com.energymonitor.security.application.port.in.CheckPermission;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
 import com.energymonitor.security.application.port.in.CreateUserSession;
 import com.energymonitor.security.application.port.in.FindUser;
+import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.ManageUserStatus;
-import com.energymonitor.security.application.port.in.RegisterUser;
 import com.energymonitor.security.application.port.in.RefreshSession;
+import com.energymonitor.security.application.port.in.RegisterUser;
 import com.energymonitor.security.application.port.in.ResetPassword;
 import com.energymonitor.security.application.port.in.RevokeRole;
-import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.UpdateUserProfile;
 import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.LoginErrorLogPersistencePort;
 import com.energymonitor.security.application.port.out.PasswordHasherPort;
-import com.energymonitor.security.application.port.out.PasswordResetDeliveryPort;
-import com.energymonitor.security.application.port.out.PasswordResetTokenHasherPort;
-import com.energymonitor.security.application.port.out.RefreshTokenHasherPort;
-import com.energymonitor.security.application.port.out.RefreshTokenPersistencePort;
 import com.energymonitor.security.application.port.out.PasswordPolicyPersistencePort;
+import com.energymonitor.security.application.port.out.PasswordResetTokenHasherPort;
 import com.energymonitor.security.application.port.out.PasswordResetTokenPersistencePort;
 import com.energymonitor.security.application.port.out.PermissionPersistencePort;
 import com.energymonitor.security.application.port.out.PersonPersistencePort;
+import com.energymonitor.security.application.port.out.RefreshTokenHasherPort;
+import com.energymonitor.security.adapter.out.security.InMemoryResetAttemptLimiter;
+import com.energymonitor.security.adapter.out.security.PepperedHmacResetCodeHasher;
+import com.energymonitor.security.application.port.out.ResetAttemptLimiterPort;
+import com.energymonitor.security.application.port.out.RefreshTokenPersistencePort;
 import com.energymonitor.security.application.port.out.SystemRolePermissionPersistencePort;
 import com.energymonitor.security.application.port.out.SystemRolePersistencePort;
 import com.energymonitor.security.application.port.out.TokenGeneratorPort;
@@ -39,16 +42,17 @@ import com.energymonitor.security.application.usecase.CheckPermissionService;
 import com.energymonitor.security.application.usecase.CreatePasswordResetTokenService;
 import com.energymonitor.security.application.usecase.CreateUserSessionService;
 import com.energymonitor.security.application.usecase.FindUserService;
+import com.energymonitor.security.application.usecase.LogoutUserSessionService;
 import com.energymonitor.security.application.usecase.ManageUserStatusService;
-import com.energymonitor.security.application.usecase.RegisterUserService;
 import com.energymonitor.security.application.usecase.RefreshSessionService;
+import com.energymonitor.security.application.usecase.RegisterUserService;
 import com.energymonitor.security.application.usecase.ResetPasswordService;
 import com.energymonitor.security.application.usecase.RevokeRoleService;
-import com.energymonitor.security.application.usecase.LogoutUserSessionService;
 import com.energymonitor.security.application.usecase.UpdateUserProfileService;
 import java.time.Clock;
 import org.aopalliance.aop.Advice;
 import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -102,6 +106,7 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
  * without a boundary.
  */
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(SecurityResetProperties.class)
 public class SecurityApplicationWiring {
 
     /**
@@ -113,6 +118,40 @@ public class SecurityApplicationWiring {
     @Bean
     public Clock securityClock() {
         return Clock.systemUTC();
+    }
+
+    /**
+     * The digest used for password-recovery codes, peppered rather than plain.
+     *
+     * <p>Built here rather than component-scanned because it needs the configured pepper, which
+     * is a value and not a type Spring can inject. The adapter refuses a missing or short pepper,
+     * so a deployment that forgot it fails at startup instead of storing recovery codes that a
+     * database dump could reverse in seconds.
+     *
+     * @param properties the bound {@code security.reset.*} settings
+     * @return the hasher for recovery codes
+     */
+    @Bean
+    public PasswordResetTokenHasherPort passwordResetTokenHasher(SecurityResetProperties properties) {
+        return new PepperedHmacResetCodeHasher(properties.pepper());
+    }
+
+    /**
+     * How often one caller address may attempt to redeem a recovery code.
+     *
+     * <p>The counter lives in memory, which means it is per instance and does not survive a
+     * restart. Both limits are the safe direction to fail: the cost is a fresh allowance rather
+     * than an account that cannot be recovered.
+     *
+     * @param properties the bound {@code security.reset.*} settings
+     * @param clock      time source the windows are measured against
+     * @return the limiter
+     */
+    @Bean
+    public ResetAttemptLimiterPort resetAttemptLimiter(SecurityResetProperties properties,
+                                                      Clock clock) {
+        return new InMemoryResetAttemptLimiter(
+                properties.maxAttemptsPerWindow(), properties.attemptWindow(), clock);
     }
 
     /**
@@ -217,13 +256,17 @@ public class SecurityApplicationWiring {
     }
 
     /**
-     * Writes a single row, so a transaction would add nothing but a second connection.
+     * Issues a recovery code inside a transaction, so that the message can wait for the commit.
      *
-     * <p>There is a second side effect here, the delivery of the secret, and it is deliberately
-     * outside any boundary: a transaction cannot roll back a message that already left the
-     * process, so wrapping the pair would only promise an atomicity that does not exist. The
-     * row is committed first and the secret delivered afterwards, which is also the order that
-     * keeps a delivery from pointing at a token that was never stored.
+     * <p>This used to be deliberately outside any boundary, on the reasoning that a transaction
+     * cannot roll back a message that already left the process, so wrapping the pair would promise
+     * an atomicity that does not exist. That reasoning was right while the send happened inside the
+     * call and is wrong now that it does not.
+     *
+     * <p>Delivery is queued and dispatched as an after-commit callback, so the boundary is what
+     * makes the ordering honest: the row carrying the code is durable before anything is sent, and a
+     * rollback sends nothing at all. Without the transaction the callback has no commit to wait for,
+     * and the message would be built against a row that a later failure could still remove.
      *
      * @param users          account storage
      * @param tokens         reset token storage
@@ -232,15 +275,19 @@ public class SecurityApplicationWiring {
      * @param delivery       the channel the clear secret leaves through
      * @param identifiers    identifier port
      * @param clock          time source
+     * @param transactions   the transaction manager
      * @return the use case
      */
     @Bean
     public CreatePasswordResetToken createPasswordResetToken(
             UserPersistencePort users, PasswordResetTokenPersistencePort tokens,
             TokenGeneratorPort tokenGenerator, PasswordResetTokenHasherPort tokenHasher,
-            PasswordResetDeliveryPort delivery, IdentifierGeneratorPort identifiers, Clock clock) {
-        return new CreatePasswordResetTokenService(users, tokens, tokenGenerator, tokenHasher,
-                delivery, identifiers, clock);
+            PasswordResetDeliveryPort delivery, IdentifierGeneratorPort identifiers, Clock clock,
+            PlatformTransactionManager transactions) {
+        return transactional(transactions,
+                new CreatePasswordResetTokenService(users, tokens, tokenGenerator, tokenHasher,
+                        delivery, identifiers, clock),
+                CreatePasswordResetToken.class);
     }
 
     /**

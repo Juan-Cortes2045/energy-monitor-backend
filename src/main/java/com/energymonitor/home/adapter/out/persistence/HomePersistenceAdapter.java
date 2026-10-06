@@ -35,7 +35,11 @@ public class HomePersistenceAdapter implements HomePersistencePort {
                         return existing;
                     })
                     .orElseGet(() -> mapper.toEntity(home));
-            repository.save(entity);
+            // Flushed here on purpose. The INSERT for a new row is otherwise deferred to
+            // commit, which happens outside this method and outside this catch, so a duplicate
+            // access code would escape as a raw Spring failure instead of the domain signal the
+            // caller is told to expect.
+            repository.saveAndFlush(entity);
             return home;
         } catch (DataIntegrityViolationException e) {
             // Translate unique constraint violation (access_code) to a domain-level signal

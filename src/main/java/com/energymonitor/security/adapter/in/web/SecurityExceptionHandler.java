@@ -8,6 +8,7 @@ import com.energymonitor.security.application.exception.InvalidResetTokenExcepti
 import com.energymonitor.security.application.exception.PasswordPolicyViolationException;
 import com.energymonitor.security.application.exception.RoleNotFoundException;
 import com.energymonitor.security.application.exception.SecurityApplicationException;
+import com.energymonitor.security.application.exception.TooManyResetAttemptsException;
 import com.energymonitor.security.application.exception.SessionNotFoundException;
 import com.energymonitor.security.application.exception.UserNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -44,6 +45,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *   <li>403 - the account is blocked or inactive.</li>
  *   <li>422 - the password was well-formed but breaks the configured policy.</li>
  *   <li>405 - the route exists, but not for the verb the request used.</li>
+ *   <li>429 - the caller is sending password-recovery attempts too fast.</li>
  *   <li>500 - anything unexpected, reported without detail.</li>
  * </ul>
  */
@@ -122,10 +124,33 @@ public class SecurityExceptionHandler {
     }
 
     /**
-     * A reset token was unknown, already used or expired.
+     * The caller is going too fast at password recovery.
+     *
+     * <p>The only refusal here that is not {@code 400}, and deliberately so: {@code 429} with a
+     * {@code Retry-After} tells a well-behaved client to come back later, which {@code 400} would
+     * not. The message is fixed, so it reports nothing about how many attempts remain or how close
+     * a guess had come.
      *
      * @param exception the application failure
      * @param request   the failed request
+     * @return 429
+     */
+    @ExceptionHandler(TooManyResetAttemptsException.class)
+    public ResponseEntity<ApiError> handleTooManyAttempts(TooManyResetAttemptsException exception,
+                                                          HttpServletRequest request) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "900");
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).headers(headers)
+                .body(ApiError.of(Instant.now(clock),
+                        HttpStatus.TOO_MANY_REQUESTS.value(),
+                        HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase(),
+                        exception.getMessage(), request.getRequestURI()));
+    }
+
+    /**
+     * A reset code was unknown, already used or expired.
+     *
+     * @param exception the application failure
      * @return 400
      */
     @ExceptionHandler(InvalidResetTokenException.class)
