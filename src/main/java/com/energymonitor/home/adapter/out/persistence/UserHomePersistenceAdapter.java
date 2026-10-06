@@ -6,6 +6,7 @@ import com.energymonitor.home.adapter.out.persistence.mapper.UserHomeMapper;
 import com.energymonitor.home.adapter.out.persistence.repository.UserHomeRepository;
 import com.energymonitor.home.adapter.out.persistence.support.Instants;
 import com.energymonitor.home.application.port.out.UserHomePersistencePort;
+import com.energymonitor.home.domain.model.Role;
 import com.energymonitor.home.domain.model.UserHome;
 import java.util.List;
 import java.util.Optional;
@@ -76,6 +77,6 @@ public class UserHomePersistenceAdapter implements UserHomePersistencePort {
 
     @Override
     public long countActiveOwnersByHomeId(String homeId) {
-        return repository.countByIdHomeIdAndRoleAndDeletedAtIsNull(homeId, "OWNER");
+        return repository.countByIdHomeIdAndRoleAndDeletedAtIsNull(homeId, Role.OWNER);
     }
 }

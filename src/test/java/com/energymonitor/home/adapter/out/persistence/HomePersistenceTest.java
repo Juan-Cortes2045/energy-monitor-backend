@@ -8,21 +8,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.energymonitor.home.application.exception.HomeAccessCodeCollisionException;
 import com.energymonitor.home.domain.model.Home;
+import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import jakarta.persistence.EntityManager;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Round trips of the {@code home} aggregate.
+ *
+ * <p>No test profile is activated, so these run against the same datasource as the rest of the
+ * suite. An earlier {@code @ActiveProfiles("test")} pulled in credentials that matched no running
+ * container and failed the whole class at startup.
+ *
+ * <p>{@link JwtKeyedTest} supplies the RSA key paths that any test booting the whole application
+ * needs, so the context starts.
  */
 @SpringBootTest
-@ActiveProfiles("test")
 @Transactional
-class HomePersistenceTest {
+class HomePersistenceTest extends JwtKeyedTest {
 
     @Autowired
     private EntityManager entityManager;
