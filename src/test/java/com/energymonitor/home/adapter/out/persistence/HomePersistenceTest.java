@@ -78,7 +78,7 @@ class HomePersistenceTest extends JwtKeyedTest {
     void findActiveByIdsReturnsOnlyActive() {
         HomePersistenceFixtures.seedHomeType(entityManager);
         Home home1 = HomePersistenceFixtures.seedHome(homes);
-        Home home2 = Home.create("hom0000002", "Casa2", "hous000001", "Calle 456", "XYZ98765", null,
+        Home home2 = Home.create("hom0000002", "Casa2", "tst0000001", "Calle 456", "XYZ98765", null,
                 HomePersistenceFixtures.CREATION_DATE);
         homes.save(home2);
         flushAndClear();
@@ -98,7 +98,7 @@ class HomePersistenceTest extends JwtKeyedTest {
         flushAndClear();
 
         // Try to save another home with the same access code
-        Home home2 = Home.create("hom0000002", "Casa2", "hous000001", "Calle 456", home1.accessCode(), null,
+        Home home2 = Home.create("hom0000002", "Casa2", "tst0000001", "Calle 456", home1.accessCode(), null,
                 HomePersistenceFixtures.CREATION_DATE);
         assertThrows(HomeAccessCodeCollisionException.class, () -> homes.save(home2));
     }
@@ -107,7 +107,7 @@ class HomePersistenceTest extends JwtKeyedTest {
     void findActiveByIdsExcludesSoftDeleted() {
         HomePersistenceFixtures.seedHomeType(entityManager);
         Home home1 = HomePersistenceFixtures.seedHome(homes);
-        Home home2 = Home.create("hom0000002", "Casa2", "hous000001", "Calle 456", "XYZ98765", null,
+        Home home2 = Home.create("hom0000002", "Casa2", "tst0000001", "Calle 456", "XYZ98765", null,
                 HomePersistenceFixtures.CREATION_DATE);
         homes.save(home2);
         flushAndClear();
