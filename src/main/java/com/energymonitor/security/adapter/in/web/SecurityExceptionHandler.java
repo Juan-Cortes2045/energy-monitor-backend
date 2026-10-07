@@ -5,6 +5,7 @@ import com.energymonitor.security.application.exception.AccountNotActiveExceptio
 import com.energymonitor.security.application.exception.CurrentPasswordMismatchException;
 import com.energymonitor.security.application.exception.EmailAlreadyRegisteredException;
 import com.energymonitor.security.application.exception.InvalidResetTokenException;
+import com.energymonitor.security.application.exception.InvalidVerificationCodeException;
 import com.energymonitor.security.application.exception.PasswordPolicyViolationException;
 import com.energymonitor.security.application.exception.RoleNotFoundException;
 import com.energymonitor.security.application.exception.SecurityApplicationException;
@@ -166,6 +167,12 @@ public class SecurityExceptionHandler {
      * @param request   the failed request
      * @return 401
      */
+    @ExceptionHandler(InvalidVerificationCodeException.class)
+    public ResponseEntity<ApiError> handleInvalidVerificationCode(
+            InvalidVerificationCodeException exception, HttpServletRequest request) {
+        return respond(HttpStatus.BAD_REQUEST, exception.getMessage(), request);
+    }
+
     @ExceptionHandler(CurrentPasswordMismatchException.class)
     public ResponseEntity<ApiError> handleWrongCurrentPassword(
             CurrentPasswordMismatchException exception, HttpServletRequest request) {
