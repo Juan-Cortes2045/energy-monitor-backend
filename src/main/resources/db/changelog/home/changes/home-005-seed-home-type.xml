@@ -6,7 +6,7 @@
         https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
     <changeSet id="home-005-seed-home-type" author="JuanCortes2045">
-        <comment>Seed data for home_type: house, apartment, studio, other.</comment>
+        <comment>Seed data for home_type: house, apartment, studio, country_house, cabin, other.</comment>
 
         <insert tableName="home_type">
             <column name="id_home_type" value="hous000001"/>
@@ -21,13 +21,21 @@
             <column name="name" value="studio"/>
         </insert>
         <insert tableName="home_type">
+            <column name="id_home_type" value="coun000001"/>
+            <column name="name" value="country_house"/>
+        </insert>
+        <insert tableName="home_type">
+            <column name="id_home_type" value="cabi000001"/>
+            <column name="name" value="cabin"/>
+        </insert>
+        <insert tableName="home_type">
             <column name="id_home_type" value="othe000001"/>
             <column name="name" value="other"/>
         </insert>
 
         <rollback>
             <delete tableName="home_type">
-                <where>id_home_type IN ('hous000001', 'apar000001', 'stud000001', 'othe000001')</where>
+                <where>id_home_type IN ('hous000001', 'apar000001', 'stud000001', 'coun000001', 'cabi000001', 'othe000001')</where>
             </delete>
         </rollback>
     </changeSet>
