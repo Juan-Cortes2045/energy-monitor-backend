@@ -44,7 +44,7 @@ public record SecurityCorsProperties(
         @DefaultValue List<String> allowedOriginPatterns,
         @DefaultValue({"GET", "POST", "PUT", "OPTIONS"}) List<String> allowedMethods,
         @DefaultValue({"Authorization", "Content-Type", "Accept"}) List<String> allowedHeaders,
-        @DefaultValue("Allow") List<String> exposedHeaders,
+        @DefaultValue({"Allow", "Retry-After"}) List<String> exposedHeaders,
         @DefaultValue("false") boolean allowCredentials,
         @DefaultValue("30m") Duration maxAge) {
 }

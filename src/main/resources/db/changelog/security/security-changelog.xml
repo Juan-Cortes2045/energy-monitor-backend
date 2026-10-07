@@ -31,6 +31,7 @@
     <include file="changes/security-019-seed-default-password-policy.xml" relativeToChangelogFile="true"/>
     <include file="changes/security-020-drop-person-cellphone.xml" relativeToChangelogFile="true"/>
     <include file="changes/security-021-add-password-reset-token-attempts.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-022-widen-user-profile-image.xml" relativeToChangelogFile="true"/>
     
 
 </databaseChangeLog>

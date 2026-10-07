@@ -75,7 +75,7 @@ public class UpdateUserProfileService implements UpdateUserProfile {
             accountChanged = true;
         }
         if (command.profileImage() != null) {
-            user.changeProfileImage(command.profileImage());
+            user.changeProfileImage(command.profileImage().isBlank() ? null : command.profileImage());
             accountChanged = true;
         }
         // Saved once, after every account attribute has been applied. Saving inside each branch

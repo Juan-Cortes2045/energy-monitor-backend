@@ -8,8 +8,8 @@ import jakarta.validation.constraints.Size;
  *
  * <p>Every field is optional and absent means unchanged, so a client sends only what it wants to
  * edit. The sizes mirror the columns these values land in - {@code person.name} and
- * {@code person.last_name} are {@code VARCHAR(100)}, {@code user.email} and {@code user.profile_image}
- * are {@code VARCHAR(255)} - so a value that could not be stored is rejected here, before a use
+ * {@code person.last_name} are {@code VARCHAR(100)}, {@code user.email} is {@code VARCHAR(255)}
+ * and {@code user.profile_image} is {@code MEDIUMTEXT} - so a value that could not be stored is rejected here, before a use
  * case runs, rather than by the database afterwards.
  *
  * <p>{@code newEmail} is not the account's current address: it is the address the caller wants
@@ -32,12 +32,12 @@ import jakarta.validation.constraints.Size;
  *
  * @param name         new first name, {@code null} to keep
  * @param lastName     new last name, {@code null} to keep
- * @param profileImage new avatar location, {@code null} to keep
+ * @param profileImage new avatar (URL or data URL), blank to remove it, {@code null} to keep
  * @param newEmail     address to move the account to, {@code null} to keep
  */
 public record UpdateProfileRequest(
         @Size(max = 100) String name,
         @Size(max = 100) String lastName,
-        @Size(max = 255) String profileImage,
+        @Size(max = 500_000) String profileImage,
         @Email @Size(max = 255) String newEmail) {
 }
