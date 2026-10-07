@@ -132,26 +132,32 @@ class HomeControllerTest {
     void listHomesReturns200() throws Exception {
         when(currentUser.resolveCurrentUserId()).thenReturn(USER_ID);
         when(listHomes.list(any(ListHomesQuery.class)))
-                .thenReturn(List.of(new HomeMembershipResult(HOME_ID, "Casa", "hous000001", "Calle 123", "ABC12345", "Mi casa", Instant.now(), Role.OWNER, false)));
+                .thenReturn(List.of(new HomeMembershipResult(HOME_ID, "Casa", "hous000001", "Calle 123", "ABC12345", "Mi casa", Instant.now(), Role.OWNER, false, "Ada", "Lovelace", "ada@example.com")));
 
         mockMvc.perform(get("/api/v1/homes")
                         .header("X-User-Id", USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].idHome").value(HOME_ID))
-                .andExpect(jsonPath("$[0].role").value("OWNER"));
+                .andExpect(jsonPath("$[0].role").value("OWNER"))
+                .andExpect(jsonPath("$[0].userResponsible").value("Ada"))
+                .andExpect(jsonPath("$[0].userResponsibleLastName").value("Lovelace"))
+                .andExpect(jsonPath("$[0].userResponsibleEmail").value("ada@example.com"));
     }
 
     @Test
     void listMembersReturns200() throws Exception {
         when(currentUser.resolveCurrentUserId()).thenReturn(USER_ID);
         when(listMembers.list(any(ListMembersQuery.class)))
-                .thenReturn(List.of(new UserHomeResult("use0000002", HOME_ID, Role.MEMBER, false)));
+                .thenReturn(List.of(new UserHomeResult("use0000002", HOME_ID, Role.MEMBER, false, "Grace", "Hopper", "grace@example.com")));
 
         mockMvc.perform(get("/api/v1/homes/" + HOME_ID + "/members")
                         .header("X-User-Id", USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].userId").value("use0000002"))
-                .andExpect(jsonPath("$[0].role").value("MEMBER"));
+                .andExpect(jsonPath("$[0].role").value("MEMBER"))
+                .andExpect(jsonPath("$[0].name").value("Grace"))
+                .andExpect(jsonPath("$[0].lastName").value("Hopper"))
+                .andExpect(jsonPath("$[0].email").value("grace@example.com"));
     }
 
     @Test
@@ -169,7 +175,7 @@ class HomeControllerTest {
     void joinHomeReturns201() throws Exception {
         when(currentUser.resolveCurrentUserId()).thenReturn(USER_ID);
         when(joinHome.join(any(JoinHomeCommand.class)))
-                .thenReturn(new UserHomeResult(USER_ID, HOME_ID, Role.MEMBER, false));
+                .thenReturn(new UserHomeResult(USER_ID, HOME_ID, Role.MEMBER, false, null, null, null));
 
         mockMvc.perform(post("/api/v1/homes/join")
                         .header("X-User-Id", USER_ID)
@@ -196,7 +202,7 @@ class HomeControllerTest {
     void toggleFavoriteReturns200() throws Exception {
         when(currentUser.resolveCurrentUserId()).thenReturn(USER_ID);
         when(toggleFavorite.toggle(any(ToggleFavoriteCommand.class)))
-                .thenReturn(new UserHomeResult(USER_ID, HOME_ID, Role.OWNER, true));
+                .thenReturn(new UserHomeResult(USER_ID, HOME_ID, Role.OWNER, true, null, null, null));
 
         mockMvc.perform(put("/api/v1/homes/{homeId}/favorite", HOME_ID)
                         .header("X-User-Id", USER_ID))
