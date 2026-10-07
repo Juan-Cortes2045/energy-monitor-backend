@@ -152,9 +152,32 @@ class SecurityCorsWebTest extends JwtKeyedTest {
         // be answered with a wildcard that would let the browser go on to attempt it.
         mvc.perform(options("/api/v1/auth/login")
                         .header("Origin", ALLOWED)
-                        .header("Access-Control-Request-Method", "DELETE"))
+                        .header("Access-Control-Request-Method", "PATCH"))
                 .andExpect(status().isForbidden())
                 .andExpect(header().doesNotExist("Access-Control-Allow-Methods"));
+    }
+
+    @Test
+    void answersTheDeletePreflightTheWebSendsToLeaveAHome() throws Exception {
+        // The web client removes a member and leaves a home with DELETE. Refusing this preflight
+        // makes both actions fail in the browser before the request ever reaches the API.
+        mvc.perform(options("/api/v1/homes/x/members/me")
+                        .header("Origin", ALLOWED)
+                        .header("Access-Control-Request-Method", "DELETE")
+                        .header("Access-Control-Request-Headers", "authorization,x-user-id"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED))
+                .andExpect(header().string("Access-Control-Allow-Methods", containsString("DELETE")));
+    }
+
+    @Test
+    void refusesTheDeletePreflightFromAnOriginThatIsNotAllowed() throws Exception {
+        mvc.perform(options("/api/v1/homes/x/members/me")
+                        .header("Origin", "http://evil.example")
+                        .header("Access-Control-Request-Method", "DELETE")
+                        .header("Access-Control-Request-Headers", "authorization,x-user-id"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
     }
 
     // --------------------------------------------------------------- actual requests
@@ -250,8 +273,8 @@ class SecurityCorsWebTest extends JwtKeyedTest {
         CorsConfiguration policy = policyFor("/api/v1/auth/login");
 
         assertThat(policy.getAllowedMethods())
-                .contains("GET", "POST", "PUT", "OPTIONS")
-                .doesNotContain("DELETE", "PATCH");
+                .contains("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .doesNotContain("PATCH");
         assertThat(policy.getAllowedHeaders()).contains("Authorization", "Content-Type");
     }
 

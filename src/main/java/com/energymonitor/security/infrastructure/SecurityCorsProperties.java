@@ -28,6 +28,12 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * matches with a wildcard rule and which, unlike {@code allowedOrigins}, is still allowed to be
  * combined with credentials.
  *
+ * <p><strong>Why the default methods include {@code DELETE} but not {@code PATCH}.</strong> The
+ * list names the verbs the web client actually sends. It removes a member from a home and leaves
+ * a home with {@code DELETE /api/v1/homes/{homeId}/members/...}; without {@code DELETE} here the
+ * browser's preflight is refused with {@code 403} and both actions fail before reaching the API.
+ * No route answers {@code PATCH}, so it stays out rather than being allowed speculatively.
+ *
  * @param allowedOrigins         the exact origins permitted, empty to permit none
  * @param allowedOriginPatterns  origin patterns permitted, empty for none
  * @param allowedMethods         the HTTP methods a permitted origin may use
@@ -42,7 +48,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record SecurityCorsProperties(
         @DefaultValue List<String> allowedOrigins,
         @DefaultValue List<String> allowedOriginPatterns,
-        @DefaultValue({"GET", "POST", "PUT", "OPTIONS"}) List<String> allowedMethods,
+        @DefaultValue({"GET", "POST", "PUT", "DELETE", "OPTIONS"}) List<String> allowedMethods,
         @DefaultValue({"Authorization", "Content-Type", "Accept"}) List<String> allowedHeaders,
         @DefaultValue({"Allow", "Retry-After"}) List<String> exposedHeaders,
         @DefaultValue("false") boolean allowCredentials,
