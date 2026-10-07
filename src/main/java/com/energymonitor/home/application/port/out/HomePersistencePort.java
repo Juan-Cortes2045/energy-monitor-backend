@@ -49,4 +49,11 @@ public interface HomePersistencePort {
      * @return the active homes
      */
     List<Home> findActiveByIds(Collection<String> ids);
+
+    /**
+     * Soft-deletes a home. Its memberships are not touched here.
+     *
+     * @param idHome the identifier
+     */
+    void remove(String idHome);
 }
