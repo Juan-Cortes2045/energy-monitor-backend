@@ -3,6 +3,7 @@ package com.energymonitor.security.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.containsStringIgnoringCase;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -106,14 +107,42 @@ class SecurityCorsWebTest extends JwtKeyedTest {
     }
 
     @Test
-    void allowsTheUserIdHeaderTheHomeModuleStillReads() throws Exception {
+    void answersAHomesPreflightCarryingTheHeadersTheWebSends() throws Exception {
+        mvc.perform(options("/api/v1/homes")
+                        .header("Origin", ALLOWED)
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "authorization,content-type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Headers",
+                        containsStringIgnoringCase("Authorization")));
+    }
+
+    @Test
+    void neverGrantsTheRetiredUserIdHeader() throws Exception {
+        // The caller is the token's subject; a header naming a user is no longer read anywhere.
+        // Spring answers a preflight with the subset of requested headers it allows, so asking
+        // for authorization and x-user-id gets 200 with authorization alone. That omission is
+        // what makes the browser refuse to send the real request.
         mvc.perform(options("/api/v1/homes")
                         .header("Origin", ALLOWED)
                         .header("Access-Control-Request-Method", "GET")
                         .header("Access-Control-Request-Headers", "authorization,x-user-id"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Headers",
-                        containsStringIgnoringCase("X-User-Id")));
+                        containsStringIgnoringCase("authorization")))
+                .andExpect(header().string("Access-Control-Allow-Headers",
+                        not(containsStringIgnoringCase("x-user-id"))));
+    }
+
+    @Test
+    void refusesAPreflightThatOnlyAsksForTheRetiredUserIdHeader() throws Exception {
+        // With nothing allowed among the requested headers, the preflight itself is refused.
+        mvc.perform(options("/api/v1/homes")
+                        .header("Origin", ALLOWED)
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "x-user-id"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Headers"));
     }
 
     @Test
@@ -164,7 +193,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
         mvc.perform(options("/api/v1/homes/x/members/me")
                         .header("Origin", ALLOWED)
                         .header("Access-Control-Request-Method", "DELETE")
-                        .header("Access-Control-Request-Headers", "authorization,x-user-id"))
+                        .header("Access-Control-Request-Headers", "authorization"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED))
                 .andExpect(header().string("Access-Control-Allow-Methods", containsString("DELETE")));
@@ -175,7 +204,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
         mvc.perform(options("/api/v1/homes/x/members/me")
                         .header("Origin", "http://evil.example")
                         .header("Access-Control-Request-Method", "DELETE")
-                        .header("Access-Control-Request-Headers", "authorization,x-user-id"))
+                        .header("Access-Control-Request-Headers", "authorization"))
                 .andExpect(status().isForbidden())
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
     }
@@ -275,7 +304,8 @@ class SecurityCorsWebTest extends JwtKeyedTest {
         assertThat(policy.getAllowedMethods())
                 .contains("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .doesNotContain("PATCH");
-        assertThat(policy.getAllowedHeaders()).contains("Authorization", "Content-Type");
+        assertThat(policy.getAllowedHeaders()).contains("Authorization", "Content-Type")
+                .doesNotContain("X-User-Id");
     }
 
     @Test

@@ -1,42 +1,50 @@
 package com.energymonitor.home.adapter.in.web;
 
 import com.energymonitor.home.application.exception.MissingUserIdentityException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
- * Resolves the current user's identity from the HTTP request.
+ * Resolves the caller of a home endpoint from the validated access token.
  *
- * <p><strong>TEMPORARY AND INSECURE:</strong> This resolver reads the user ID from the
- * {@code X-User-Id} header, which is trivially spoofable. It exists only to unblock
- * development of the home module before the {@code security} module exposes authentication.
+ * <p><strong>Why the token's subject and nothing else.</strong> The resource server has already
+ * checked the token's signature, issuer and expiry before a controller runs, and the security
+ * module issues it with the account identifier ({@code user.id_user}) as {@code sub}. That is the
+ * only statement about who the caller is that the caller cannot forge. A request header or body
+ * field naming a user is just a value the client chose, so reading one would let any holder of a
+ * valid token act on someone else's homes. No header is consulted here, deliberately: a client
+ * that still sends {@code X-User-Id} has it ignored rather than trusted.
  *
- * <p>When {@code security} is ready, this class must be replaced by a proper
- * {@code CurrentUserPrincipal} or similar that reads the authenticated principal from
- * the Spring Security context or from validated JWT claims.
+ * <p>This is the same rule {@code security} follows in its own controllers, which take the
+ * account from {@code Authentication#getName()}. It is applied by reading Spring Security's
+ * context rather than by calling the security module, so {@code home} keeps depending on
+ * {@code security::api} only.
+ *
+ * <p>An unauthenticated request never reaches a home controller, because the filter chain answers
+ * {@code 401} first. The check below is the backstop for a context without a JWT (a test slice,
+ * or a route accidentally opened later), and it fails as {@code 401} rather than as a
+ * {@code NullPointerException} turned into {@code 500}.
  */
 @Component
 public class CurrentUserResolver {
 
-    private static final String USER_ID_HEADER = "X-User-Id";
-
     /**
-     * Resolves the current user's ID from the request header.
+     * Resolves the identifier of the authenticated caller.
      *
-     * @return the user ID
-     * @throws MissingUserIdentityException when the header is missing (401)
+     * @return the {@code sub} claim of the access token, which is the caller's {@code id_user}
+     * @throws MissingUserIdentityException when the request carries no validated JWT (401)
      */
     public String resolveCurrentUserId() {
-        var attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (attributes == null) {
-            throw new MissingUserIdentityException("no request context available");
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (!(authentication instanceof JwtAuthenticationToken token)) {
+            throw new MissingUserIdentityException("no authenticated user in the request");
         }
-        var request = attributes.getRequest();
-        String userId = request.getHeader(USER_ID_HEADER);
-        if (userId == null || userId.isBlank()) {
-            throw new MissingUserIdentityException("missing " + USER_ID_HEADER + " header");
+        String subject = token.getToken().getSubject();
+        if (subject == null || subject.isBlank()) {
+            throw new MissingUserIdentityException("the access token carries no subject");
         }
-        return userId;
+        return subject;
     }
 }

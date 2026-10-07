@@ -40,7 +40,8 @@ import jakarta.validation.Valid;
 /**
  * Controller for home management endpoints.
  *
- * <p>All endpoints require authentication via the {@code X-User-Id} header.
+ * <p>All endpoints require a valid access token. The caller is the token's subject, resolved by
+ * {@link CurrentUserResolver}; no request header or body field can name a different user.
  */
 @RestController
 @RequestMapping("/api/v1/homes")
