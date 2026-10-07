@@ -2,11 +2,13 @@ package com.energymonitor.security.infrastructure;
 
 import com.energymonitor.security.api.EmailVerificationDeliveryPort;
 import com.energymonitor.security.api.PasswordResetDeliveryPort;
+import com.energymonitor.security.api.UserProfileQuery;
 import com.energymonitor.security.application.port.in.AssignRole;
 import com.energymonitor.security.application.port.in.AuthenticateUser;
 import com.energymonitor.security.application.port.in.ChangePassword;
 import com.energymonitor.security.application.port.in.CheckPermission;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
+import com.energymonitor.security.application.port.in.DeleteAccount;
 import com.energymonitor.security.application.port.in.EmailVerification;
 import com.energymonitor.security.application.port.in.CreateUserSession;
 import com.energymonitor.security.application.port.in.FindUser;
@@ -42,7 +44,10 @@ import com.energymonitor.security.application.usecase.AuthenticateUserService;
 import com.energymonitor.security.application.usecase.ChangePasswordService;
 import com.energymonitor.security.application.usecase.CheckPermissionService;
 import com.energymonitor.security.application.usecase.CreatePasswordResetTokenService;
+import com.energymonitor.security.application.usecase.DeleteAccountService;
+import com.energymonitor.security.application.port.out.AccountEventPublisherPort;
 import com.energymonitor.security.application.usecase.EmailVerificationService;
+import com.energymonitor.security.application.usecase.UserProfileQueryService;
 import com.energymonitor.security.application.usecase.CreateUserSessionService;
 import com.energymonitor.security.application.usecase.FindUserService;
 import com.energymonitor.security.application.usecase.LogoutUserSessionService;
@@ -318,6 +323,30 @@ public class SecurityApplicationWiring {
                 new EmailVerificationService(users, tokenHasher, delivery,
                         new InMemoryResetAttemptLimiter(5, Duration.ofMinutes(15), clock), clock),
                 EmailVerification.class);
+    }
+
+    /** Read-only, so no transaction: each lookup is a single statement. */
+    @Bean
+    public UserProfileQuery userProfileQuery(UserPersistencePort users,
+                                             PersonPersistencePort persons) {
+        return new UserProfileQueryService(users, persons);
+    }
+
+    /**
+     * Transactional on purpose: the home module's listener runs inside this transaction, so a
+     * failure there leaves the account undeleted rather than half deleted.
+     */
+    @Bean
+    public DeleteAccount deleteAccount(UserPersistencePort users, PersonPersistencePort persons,
+                                       UserSessionPersistencePort sessions,
+                                       PasswordHasherPort hasher, AuditLogPersistencePort audits,
+                                       AccountEventPublisherPort events,
+                                       IdentifierGeneratorPort identifiers, Clock clock,
+                                       PlatformTransactionManager transactions) {
+        return transactional(transactions,
+                new DeleteAccountService(users, persons, sessions, hasher, audits, events,
+                        identifiers, clock),
+                DeleteAccount.class);
     }
 
     @Bean

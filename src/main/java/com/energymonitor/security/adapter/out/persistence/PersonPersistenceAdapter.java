@@ -5,6 +5,7 @@ import com.energymonitor.security.adapter.out.persistence.mapper.PersonMapper;
 import com.energymonitor.security.adapter.out.persistence.repository.PersonRepository;
 import com.energymonitor.security.application.port.out.PersonPersistencePort;
 import com.energymonitor.security.domain.model.Person;
+import java.time.Instant;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
@@ -44,5 +45,13 @@ public class PersonPersistenceAdapter implements PersonPersistencePort {
         return repository.findById(idPerson)
                 .filter(entity -> entity.getDeletedAt() == null)
                 .map(mapper::toDomain);
+    }
+
+    @Override
+    public void softDelete(String idPerson, Instant deletedAt) {
+        repository.findById(idPerson).ifPresent(entity -> {
+            entity.setDeletedAt(deletedAt);
+            repository.save(entity);
+        });
     }
 }

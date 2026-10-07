@@ -2,6 +2,7 @@ package com.energymonitor.security.application.port.out;
 
 import com.energymonitor.security.domain.model.Email;
 import com.energymonitor.security.domain.model.User;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -32,4 +33,15 @@ public interface UserPersistencePort {
      * @return the domain object, empty when soft-deleted or unknown
      */
     Optional<User> findActiveByEmail(Email email);
+
+    /**
+     * Marks the user as deleted. Its row stays; {@code findActive} stops returning it.
+     *
+     * <p>The address is released: the row keeps a placeholder instead, so the same address can
+     * register a new account despite the unique constraint on {@code user.email}.
+     *
+     * @param idUser the identifier
+     * @param deletedAt when it was deleted
+     */
+    void softDelete(String idUser, Instant deletedAt);
 }

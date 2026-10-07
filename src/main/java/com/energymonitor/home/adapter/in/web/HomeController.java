@@ -86,7 +86,7 @@ public class HomeController {
     public List<UserHomeResponse> listMembers(@PathVariable String homeId) {
         String userId = currentUser.resolveCurrentUserId();
         return listMembers.list(new ListMembersQuery(userId, homeId)).stream()
-                .map(r -> new UserHomeResponse(r.userId(), r.homeId(), r.role(), r.favorite()))
+                .map(UserHomeResponse::from)
                 .toList();
     }
 
@@ -95,14 +95,14 @@ public class HomeController {
     public UserHomeResponse joinHome(@Valid @RequestBody JoinHomeRequest request) {
         String userId = currentUser.resolveCurrentUserId();
         UserHomeResult result = joinHome.join(new JoinHomeCommand(userId, request.accessCode()));
-        return new UserHomeResponse(result.userId(), result.homeId(), result.role(), result.favorite());
+        return UserHomeResponse.from(result);
     }
 
     @PutMapping("/{homeId}/favorite")
     public UserHomeResponse toggleFavorite(@PathVariable String homeId) {
         String userId = currentUser.resolveCurrentUserId();
         UserHomeResult result = toggleFavorite.toggle(new ToggleFavoriteCommand(userId, homeId));
-        return new UserHomeResponse(result.userId(), result.homeId(), result.role(), result.favorite());
+        return UserHomeResponse.from(result);
     }
 
     @DeleteMapping("/{homeId}/members/{userId}")

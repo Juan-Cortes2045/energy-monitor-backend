@@ -3,6 +3,7 @@ package com.energymonitor.home.adapter.out.persistence;
 import com.energymonitor.home.adapter.out.persistence.entity.HomeEntity;
 import com.energymonitor.home.adapter.out.persistence.mapper.HomeMapper;
 import com.energymonitor.home.adapter.out.persistence.repository.HomeRepository;
+import com.energymonitor.home.adapter.out.persistence.support.Instants;
 import com.energymonitor.home.application.exception.HomeAccessCodeCollisionException;
 import com.energymonitor.home.application.port.out.HomePersistencePort;
 import com.energymonitor.home.domain.model.Home;
@@ -70,5 +71,13 @@ public class HomePersistenceAdapter implements HomePersistencePort {
         return repository.findByIdHomeInAndDeletedAtIsNull(ids).stream()
                 .map(mapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public void remove(String idHome) {
+        repository.findById(idHome).ifPresent(entity -> {
+            entity.setDeletedAt(Instants.now());
+            repository.save(entity);
+        });
     }
 }
