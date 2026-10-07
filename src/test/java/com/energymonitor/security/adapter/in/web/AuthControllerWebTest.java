@@ -27,6 +27,12 @@ import com.energymonitor.security.application.port.in.ChangePassword;
 import com.energymonitor.security.application.port.in.CheckPermission;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
 import com.energymonitor.security.application.port.in.EmailVerification;
+import com.energymonitor.security.application.port.in.FindUser;
+import com.energymonitor.security.application.port.in.DeleteAccount;
+import com.energymonitor.security.application.command.DeleteAccountCommand;
+import com.energymonitor.security.application.exception.CurrentPasswordMismatchException;
+import com.energymonitor.security.api.UserProfile;
+import com.energymonitor.security.api.UserProfileQuery;
 import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.RefreshSession;
 import com.energymonitor.security.application.port.in.RegisterUser;
@@ -108,6 +114,15 @@ class AuthControllerWebTest extends JwtKeyedTest {
     @MockitoBean
     private EmailVerification emailVerification;
 
+    @MockitoBean
+    private FindUser findUser;
+
+    @MockitoBean
+    private UserProfileQuery userProfileQuery;
+
+    @MockitoBean
+    private DeleteAccount deleteAccount;
+
     private static User newAccount() {
         return User.register("USR0000001", "PER0000001", PasswordHash.of("$2a$10$abcdefghij"),
                 Email.of(EMAIL), REGISTRATION, null);
@@ -167,6 +182,58 @@ class AuthControllerWebTest extends JwtKeyedTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registrationBody()))
                 .andExpect(status().isCreated());
+    }
+
+    // ---------------------------------------------------------------- account
+
+    @Test
+    void returnsTheAccountWithTheNameOfItsPerson() throws Exception {
+        given(findUser.findByIdentifier("USR0000001")).willReturn(Optional.of(newAccount()));
+        given(userProfileQuery.findByIds(List.of("USR0000001"))).willReturn(java.util.Map.of(
+                "USR0000001", new UserProfile("USR0000001", "Ada", "Lovelace", EMAIL)));
+
+        mvc.perform(get("/api/v1/auth/account").header("Authorization", bearerFor(identity())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idUser").value("USR0000001"))
+                .andExpect(jsonPath("$.email").value(EMAIL))
+                .andExpect(jsonPath("$.name").value("Ada"))
+                .andExpect(jsonPath("$.lastName").value("Lovelace"));
+    }
+
+    @Test
+    void deletesTheCallersOwnAccountAndAnswers204() throws Exception {
+        mvc.perform(post("/api/v1/auth/account/delete")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"StrongPass1!\"}"))
+                .andExpect(status().isNoContent());
+
+        ArgumentCaptor<DeleteAccountCommand> command = ArgumentCaptor.forClass(DeleteAccountCommand.class);
+        verify(deleteAccount).delete(command.capture());
+        org.junit.jupiter.api.Assertions.assertEquals("USR0000001", command.getValue().idUser());
+        org.junit.jupiter.api.Assertions.assertEquals("StrongPass1!", command.getValue().password());
+    }
+
+    @Test
+    void answers401WhenTheDeletionPasswordIsWrong() throws Exception {
+        willThrow(new CurrentPasswordMismatchException("current password does not match"))
+                .given(deleteAccount).delete(any());
+
+        mvc.perform(post("/api/v1/auth/account/delete")
+                        .header("Authorization", bearerFor(identity()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"wrong\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void refusesAnAccountDeletionWithoutAToken() throws Exception {
+        mvc.perform(post("/api/v1/auth/account/delete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"StrongPass1!\"}"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(deleteAccount);
     }
 
     // ---------------------------------------------------------------- email verification
