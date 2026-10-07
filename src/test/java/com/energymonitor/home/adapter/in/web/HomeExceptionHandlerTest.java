@@ -6,7 +6,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.energymonitor.home.application.exception.MissingUserIdentityException;
 import com.energymonitor.home.application.port.in.CreateHome;
 import com.energymonitor.home.application.port.in.JoinHome;
 import com.energymonitor.home.application.port.in.LeaveHome;
@@ -22,6 +21,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.security.test.context.TestSecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultMatcher;
@@ -31,13 +33,14 @@ import org.springframework.test.web.servlet.ResultMatcher;
  *
  * <p>The advice is not a controller, so a slice has to be pointed at {@link HomeController} to
  * have anything to fail: an exception is raised inside it and mapped afterwards. Every dependency
- * of that controller is therefore mocked, since the point is the mapping, not the use cases.
+ * of that controller is mocked except {@link CurrentUserResolver}, which is the real one: the
+ * point is the mapping, and the resolver is what raises the exception being mapped.
  *
  * <p>See {@link HomeControllerTest} for why the {@link ClockConfiguration} import and the
  * disabled filters are needed.
  */
 @WebMvcTest(HomeController.class)
-@Import(ClockConfiguration.class)
+@Import({ClockConfiguration.class, CurrentUserResolver.class})
 @AutoConfigureMockMvc(addFilters = false)
 class HomeExceptionHandlerTest {
 
@@ -65,14 +68,10 @@ class HomeExceptionHandlerTest {
     @MockitoBean
     private LeaveHome leaveHome;
 
-    @MockitoBean
-    private CurrentUserResolver currentUser;
-
     @Test
     void missingUserIdentityReturns401() throws Exception {
-        when(currentUser.resolveCurrentUserId())
-                .thenThrow(new MissingUserIdentityException("No authenticated user in the request."));
-
+        // No token in the security context: the real resolver raises MissingUserIdentityException,
+        // and the advice must map it to 401, never to a 500.
         mockMvc.perform(get("/api/v1/homes")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized())
@@ -85,13 +84,19 @@ class HomeExceptionHandlerTest {
      */
     @Test
     void listHomesReturns200WhenIdentityIsPresent() throws Exception {
-        when(currentUser.resolveCurrentUserId()).thenReturn("use0000001");
         when(listHomes.list(any())).thenReturn(List.of());
 
-        mockMvc.perform(get("/api/v1/homes")
-                        .header("X-User-Id", "use0000001")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
+        // Filters are off in this class, so nothing would load a jwt() post-processor into the
+        // security context; the authenticated JWT is placed there directly instead.
+        Jwt token = Jwt.withTokenValue("token").header("alg", "none").subject("use0000001").build();
+        TestSecurityContextHolder.setAuthentication(new JwtAuthenticationToken(token));
+        try {
+            mockMvc.perform(get("/api/v1/homes")
+                            .contentType(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$").isArray());
+        } finally {
+            TestSecurityContextHolder.clearContext();
+        }
     }
 }
