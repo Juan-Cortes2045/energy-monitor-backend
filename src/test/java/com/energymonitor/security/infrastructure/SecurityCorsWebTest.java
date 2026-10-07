@@ -106,6 +106,17 @@ class SecurityCorsWebTest extends JwtKeyedTest {
     }
 
     @Test
+    void allowsTheUserIdHeaderTheHomeModuleStillReads() throws Exception {
+        mvc.perform(options("/api/v1/homes")
+                        .header("Origin", ALLOWED)
+                        .header("Access-Control-Request-Method", "GET")
+                        .header("Access-Control-Request-Headers", "authorization,x-user-id"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Headers",
+                        containsStringIgnoringCase("X-User-Id")));
+    }
+
+    @Test
     void letsTheBrowserCacheThePreflightAnswer() throws Exception {
         mvc.perform(options("/api/v1/auth/login")
                         .header("Origin", ALLOWED)
