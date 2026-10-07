@@ -56,7 +56,7 @@ public class UserEntity extends BaseAuditEntity {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
-    @Column(name = "profile_image", length = 255)
+    @Column(name = "profile_image", columnDefinition = "MEDIUMTEXT")
     private String profileImage;
 
     public UserEntity() {
