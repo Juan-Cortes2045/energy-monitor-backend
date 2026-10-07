@@ -20,11 +20,13 @@ import org.mockito.ArgumentCaptor;
 import com.energymonitor.security.application.command.RegisterUserCommand;
 import com.energymonitor.security.application.command.ResetPasswordCommand;
 import com.energymonitor.security.application.exception.EmailAlreadyRegisteredException;
+import com.energymonitor.security.application.exception.InvalidVerificationCodeException;
 import com.energymonitor.security.application.exception.PasswordPolicyViolationException;
 import com.energymonitor.security.application.exception.UserNotFoundException;
 import com.energymonitor.security.application.port.in.ChangePassword;
 import com.energymonitor.security.application.port.in.CheckPermission;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
+import com.energymonitor.security.application.port.in.EmailVerification;
 import com.energymonitor.security.application.port.in.LogoutUserSession;
 import com.energymonitor.security.application.port.in.RefreshSession;
 import com.energymonitor.security.application.port.in.RegisterUser;
@@ -103,6 +105,9 @@ class AuthControllerWebTest extends JwtKeyedTest {
     @MockitoBean
     private UpdateUserProfile updateUserProfile;
 
+    @MockitoBean
+    private EmailVerification emailVerification;
+
     private static User newAccount() {
         return User.register("USR0000001", "PER0000001", PasswordHash.of("$2a$10$abcdefghij"),
                 Email.of(EMAIL), REGISTRATION, null);
@@ -139,6 +144,78 @@ class AuthControllerWebTest extends JwtKeyedTest {
                 .andExpect(jsonPath("$.idPerson").value("PER0000001"))
                 .andExpect(jsonPath("$.email").value(EMAIL))
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
+    }
+
+    @Test
+    void sendsTheVerificationCodeOnceTheAccountIsCreated() throws Exception {
+        given(registerUser.register(any())).willReturn(newAccount());
+
+        mvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registrationBody()))
+                .andExpect(status().isCreated());
+
+        verify(emailVerification).sendCode(EMAIL);
+    }
+
+    @Test
+    void stillAnswers201WhenTheVerificationCodeCannotBeSent() throws Exception {
+        given(registerUser.register(any())).willReturn(newAccount());
+        willThrow(new IllegalStateException("smtp down")).given(emailVerification).sendCode(anyString());
+
+        mvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registrationBody()))
+                .andExpect(status().isCreated());
+    }
+
+    // ---------------------------------------------------------------- email verification
+    // Each test uses its own caller address: the per-caller limiter is shared by the context.
+
+    @Test
+    void verifiesTheEmailWithTheCode() throws Exception {
+        mvc.perform(post("/api/v1/auth/email/verify")
+                        .with(request -> { request.setRemoteAddr("10.0.1.1"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"someone@example.com\",\"code\":\"123456\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Email verified."));
+
+        verify(emailVerification).verify(EMAIL, "123456");
+    }
+
+    @Test
+    void answers400ForAWrongCode() throws Exception {
+        willThrow(new InvalidVerificationCodeException("The verification code is invalid or expired."))
+                .given(emailVerification).verify(anyString(), anyString());
+
+        mvc.perform(post("/api/v1/auth/email/verify")
+                        .with(request -> { request.setRemoteAddr("10.0.1.2"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"someone@example.com\",\"code\":\"654321\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("The verification code is invalid or expired."));
+    }
+
+    @Test
+    void rejectsAVerificationCodeThatIsNotSixDigits() throws Exception {
+        mvc.perform(post("/api/v1/auth/email/verify")
+                        .with(request -> { request.setRemoteAddr("10.0.1.3"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"someone@example.com\",\"code\":\"12ab\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(emailVerification);
+    }
+
+    @Test
+    void answersAnEmptyAcceptedToAResendRequest() throws Exception {
+        mvc.perform(post("/api/v1/auth/email/verification/resend")
+                        .with(request -> { request.setRemoteAddr("10.0.1.4"); return request; })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"nobody@example.com\"}"))
+                .andExpect(status().isAccepted())
+                .andExpect(content().string(""));
     }
 
     @Test

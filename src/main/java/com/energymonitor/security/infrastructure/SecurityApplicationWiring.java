@@ -1,11 +1,13 @@
 package com.energymonitor.security.infrastructure;
 
+import com.energymonitor.security.api.EmailVerificationDeliveryPort;
 import com.energymonitor.security.api.PasswordResetDeliveryPort;
 import com.energymonitor.security.application.port.in.AssignRole;
 import com.energymonitor.security.application.port.in.AuthenticateUser;
 import com.energymonitor.security.application.port.in.ChangePassword;
 import com.energymonitor.security.application.port.in.CheckPermission;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
+import com.energymonitor.security.application.port.in.EmailVerification;
 import com.energymonitor.security.application.port.in.CreateUserSession;
 import com.energymonitor.security.application.port.in.FindUser;
 import com.energymonitor.security.application.port.in.LogoutUserSession;
@@ -40,6 +42,7 @@ import com.energymonitor.security.application.usecase.AuthenticateUserService;
 import com.energymonitor.security.application.usecase.ChangePasswordService;
 import com.energymonitor.security.application.usecase.CheckPermissionService;
 import com.energymonitor.security.application.usecase.CreatePasswordResetTokenService;
+import com.energymonitor.security.application.usecase.EmailVerificationService;
 import com.energymonitor.security.application.usecase.CreateUserSessionService;
 import com.energymonitor.security.application.usecase.FindUserService;
 import com.energymonitor.security.application.usecase.LogoutUserSessionService;
@@ -50,6 +53,7 @@ import com.energymonitor.security.application.usecase.ResetPasswordService;
 import com.energymonitor.security.application.usecase.RevokeRoleService;
 import com.energymonitor.security.application.usecase.UpdateUserProfileService;
 import java.time.Clock;
+import java.time.Duration;
 import org.aopalliance.aop.Advice;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -300,6 +304,22 @@ public class SecurityApplicationWiring {
      * @param clock          time source
      * @return the use case
      */
+    /**
+     * The per-address limiter is built here rather than exposed as a bean: a second
+     * {@link ResetAttemptLimiterPort} bean would make every by-type injection of the per-caller
+     * one ambiguous. Five guesses per address per window keep a six-digit code out of reach.
+     */
+    @Bean
+    public EmailVerification emailVerification(UserPersistencePort users,
+                                               PasswordResetTokenHasherPort tokenHasher,
+                                               EmailVerificationDeliveryPort delivery, Clock clock,
+                                               PlatformTransactionManager transactions) {
+        return transactional(transactions,
+                new EmailVerificationService(users, tokenHasher, delivery,
+                        new InMemoryResetAttemptLimiter(5, Duration.ofMinutes(15), clock), clock),
+                EmailVerification.class);
+    }
+
     @Bean
     public CreateUserSession createUserSession(UserPersistencePort users,
                                                UserSessionPersistencePort sessions,

@@ -169,7 +169,7 @@ public class Notification {
     }
 
     /**
-     * Normalises a failure reason to the width of the {@code error_message} column.
+     * Normalises a failure reason to the width of the {@code failure_reason} column.
      *
      * <p>Exposed because a failure is recorded by updating an already stored row, where the
      * domain object is never instantiated, and the truncation rule must not be applied twice in
@@ -183,8 +183,8 @@ public class Notification {
         return text.length() > MAX_REASON ? text.substring(0, MAX_REASON) : text;
     }
 
-    /** Matches the {@code error_message} column width. */
-    private static final int MAX_REASON = 500;
+    /** Matches the {@code failure_reason} column width. */
+    private static final int MAX_REASON = 200;
 
     public String idNotification() {
         return idNotification;

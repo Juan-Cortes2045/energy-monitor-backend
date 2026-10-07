@@ -38,27 +38,27 @@ class HomeTypePersistenceTest extends JwtKeyedTest {
         // Insert directly via EntityManager (HomeType is read-only in the catalog)
         entityManager.createNativeQuery(
                 "INSERT INTO home_type (id_home_type, name, created_at, updated_at) VALUES (:id, :name, NOW(), NOW())")
-                .setParameter("id", "hous000001")
-                .setParameter("name", "house")
+                .setParameter("id", "tst0000001")
+                .setParameter("name", "test_house")
                 .executeUpdate();
         flushAndClear();
 
-        HomeType read = homeTypes.findActive("hous000001").orElseThrow();
-        assertEquals("hous000001", read.idHomeType());
-        assertEquals("house", read.name());
+        HomeType read = homeTypes.findActive("tst0000001").orElseThrow();
+        assertEquals("tst0000001", read.idHomeType());
+        assertEquals("test_house", read.name());
     }
 
     @Test
     void findAllActive() {
         entityManager.createNativeQuery(
                 "INSERT INTO home_type (id_home_type, name, created_at, updated_at) VALUES (:id, :name, NOW(), NOW())")
-                .setParameter("id", "hous000001")
-                .setParameter("name", "house")
+                .setParameter("id", "tst0000001")
+                .setParameter("name", "test_house")
                 .executeUpdate();
         entityManager.createNativeQuery(
                 "INSERT INTO home_type (id_home_type, name, created_at, updated_at) VALUES (:id, :name, NOW(), NOW())")
-                .setParameter("id", "apar000001")
-                .setParameter("name", "apartment")
+                .setParameter("id", "tst0000002")
+                .setParameter("name", "test_apartment")
                 .executeUpdate();
         flushAndClear();
 
@@ -70,17 +70,17 @@ class HomeTypePersistenceTest extends JwtKeyedTest {
     void findActiveExcludesSoftDeleted() {
         entityManager.createNativeQuery(
                 "INSERT INTO home_type (id_home_type, name, created_at, updated_at) VALUES (:id, :name, NOW(), NOW())")
-                .setParameter("id", "hous000001")
-                .setParameter("name", "house")
+                .setParameter("id", "tst0000001")
+                .setParameter("name", "test_house")
                 .executeUpdate();
         flushAndClear();
 
         // Soft delete
         entityManager.createNativeQuery("UPDATE home_type SET deleted_at = NOW() WHERE id_home_type = :id")
-                .setParameter("id", "hous000001")
+                .setParameter("id", "tst0000001")
                 .executeUpdate();
         flushAndClear();
 
-        assertTrue(homeTypes.findActive("hous000001").isEmpty());
+        assertTrue(homeTypes.findActive("tst0000001").isEmpty());
     }
 }

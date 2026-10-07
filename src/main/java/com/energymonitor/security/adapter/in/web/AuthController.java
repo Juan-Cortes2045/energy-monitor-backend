@@ -13,8 +13,10 @@ import com.energymonitor.security.adapter.in.web.dto.ProfileResponse;
 import com.energymonitor.security.adapter.in.web.dto.RefreshRequest;
 import com.energymonitor.security.adapter.in.web.dto.RefreshResponse;
 import com.energymonitor.security.adapter.in.web.dto.RegisterRequest;
+import com.energymonitor.security.adapter.in.web.dto.ResendVerificationRequest;
 import com.energymonitor.security.adapter.in.web.dto.ResetPasswordRequest;
 import com.energymonitor.security.adapter.in.web.dto.UpdateProfileRequest;
+import com.energymonitor.security.adapter.in.web.dto.VerifyEmailRequest;
 import com.energymonitor.security.application.command.ChangePasswordCommand;
 import com.energymonitor.security.application.command.CreatePasswordResetTokenCommand;
 import com.energymonitor.security.application.command.RegisterUserCommand;
@@ -26,6 +28,7 @@ import com.energymonitor.security.application.exception.UserNotFoundException;
 import com.energymonitor.security.application.port.in.ChangePassword;
 import com.energymonitor.security.application.port.in.CheckPermission;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
+import com.energymonitor.security.application.port.in.EmailVerification;
 import com.energymonitor.security.application.port.in.FindUser;
 import com.energymonitor.security.application.port.in.RegisterUser;
 import com.energymonitor.security.application.port.in.ResetPassword;
@@ -131,6 +134,7 @@ public class AuthController {
     private final FindUser findUser;
     private final CheckPermission checkPermission;
     private final UpdateUserProfile updateUserProfile;
+    private final EmailVerification emailVerification;
 
     public AuthController(RegisterUser registerUser, SecurityLoginFlow loginFlow,
                           LogoutUserSession logoutUserSession, RefreshSession refreshSession,
@@ -140,7 +144,8 @@ public class AuthController {
                           @Qualifier("passwordResetExecutor") ThreadPoolExecutor recoveryExecutor,
                           ResetPassword resetPassword, ChangePassword changePassword,
                           FindUser findUser, CheckPermission checkPermission,
-                          UpdateUserProfile updateUserProfile) {
+                          UpdateUserProfile updateUserProfile,
+                          EmailVerification emailVerification) {
         this.registerUser = registerUser;
         this.loginFlow = loginFlow;
         this.logoutUserSession = logoutUserSession;
@@ -154,6 +159,7 @@ public class AuthController {
         this.findUser = findUser;
         this.checkPermission = checkPermission;
         this.updateUserProfile = updateUserProfile;
+        this.emailVerification = emailVerification;
     }
 
     /**
@@ -200,7 +206,73 @@ public class AuthController {
         var account = registerUser.register(new RegisterUserCommand(request.email(),
                 request.password(), request.name(), request.lastName(),
                 request.profileImage(), clientIp(servlet)));
+        // After the account is committed, and never able to fail the registration: a mail outage
+        // must not leave a created account behind a 500. The client can ask for a new code.
+        try {
+            emailVerification.sendCode(account.email().value());
+        } catch (RuntimeException undeliverable) {
+            LOG.warn("The verification code for a new account could not be sent", undeliverable);
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(AccountResponse.from(account));
+    }
+
+    @Operation(summary = "Verify the account's email",
+            description = "Checks the six-digit code sent to the address at registration and "
+                    + "marks the address as verified. An unknown address and a wrong or expired "
+                    + "code produce the same 400, so the endpoint cannot be used to learn which "
+                    + "addresses are registered. Repeating it with a valid code is harmless.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Email verified",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = MessageResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {"message": "Email verified."}"""))),
+            @ApiResponse(responseCode = "400", description = "Validation error, or the code is "
+                    + "invalid or expired",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "429", description = "Too many attempts",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class)))
+    })
+    @PostMapping("/email/verify")
+    public ResponseEntity<MessageResponse> verifyEmail(
+            @Valid @RequestBody VerifyEmailRequest request, HttpServletRequest servlet) {
+        attemptLimiter.checkAllowed(clientIp(servlet));
+        emailVerification.verify(request.email(), request.code());
+        return ResponseEntity.ok(new MessageResponse("Email verified."));
+    }
+
+    @Operation(summary = "Send a new verification code",
+            description = "Sends the current verification code again. Always answers 202 with "
+                    + "an empty body, whether or not the address is registered or already "
+                    + "verified, for the same reason as the password-recovery request.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "202", description = "Request accepted, empty body",
+                    content = @Content),
+            @ApiResponse(responseCode = "400", description = "Validation error: the body "
+                    + "carries no email",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class)))
+    })
+    @PostMapping("/email/verification/resend")
+    public ResponseEntity<Void> resendVerification(
+            @Valid @RequestBody ResendVerificationRequest request, HttpServletRequest servlet) {
+        attemptLimiter.checkAllowed(clientIp(servlet));
+        // Off the request thread, like the recovery request, so the answer time does not depend on
+        // whether the address exists.
+        try {
+            recoveryExecutor.execute(() -> {
+                try {
+                    emailVerification.sendCode(request.email());
+                } catch (RuntimeException failure) {
+                    LOG.warn("A verification resend could not be processed", failure);
+                }
+            });
+        } catch (RejectedExecutionException queueFull) {
+            LOG.warn("The recovery queue is full; a verification resend was not processed");
+        }
+        return ResponseEntity.accepted().build();
     }
 
     /**

@@ -3,7 +3,7 @@ package com.energymonitor.notification.domain.model;
 /**
  * Which context a notification belongs to.
  *
- * <p>This is not the same question as {@link NotificationType}, which asked what the message says.
+ * <p>This is not the same question as what the message says.
  * An alert and the message about an alert are related, but they are not the same fact, and the
  * documented model keeps them apart: {@code sourceType} plus {@code sourceId} locate the row this
  * message is about, while {@code messageKey} names the wording that was used.

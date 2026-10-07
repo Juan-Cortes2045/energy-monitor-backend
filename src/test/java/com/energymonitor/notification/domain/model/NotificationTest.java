@@ -193,7 +193,7 @@ class NotificationTest {
 
             notification.markAsFailed("x".repeat(900));
 
-            assertThat(notification.failureReason()).hasSize(500);
+            assertThat(notification.failureReason()).hasSize(200);
         }
     }
 

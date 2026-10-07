@@ -15,7 +15,7 @@ import java.time.Instant;
  */
 final class HomePersistenceFixtures {
 
-    static final String HOME_TYPE_ID = "hous000001";
+    static final String HOME_TYPE_ID = "tst0000001";
     static final String HOME_ID = "hom0000001";
     static final String USER_ID = "use0000001";
     static final Instant CREATION_DATE = Instant.parse("2026-01-15T10:30:00Z");
@@ -24,14 +24,14 @@ final class HomePersistenceFixtures {
     }
 
     static HomeType seedHomeType(HomeTypePersistenceAdapter homeTypes) {
-        HomeType type = new HomeType(HOME_TYPE_ID, "house");
+        HomeType type = new HomeType(HOME_TYPE_ID, "test_house");
         // Note: HomeType is read-only in the catalog, but we need to seed it for tests
         // Since there's no save method in HomeTypePersistencePort, we use the repository directly
         return type;
     }
 
     static void seedHomeType(EntityManager entityManager) {
-        HomeTypeEntity entity = new HomeTypeEntity(HOME_TYPE_ID, "house");
+        HomeTypeEntity entity = new HomeTypeEntity(HOME_TYPE_ID, "test_house");
         entityManager.persist(entity);
         entityManager.flush();
     }
