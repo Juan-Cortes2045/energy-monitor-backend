@@ -162,7 +162,7 @@ public class NotificationEntity extends BaseAuditEntity {
     public void settled(String failureReason, LocalDateTime sentAt, NotificationStatus status) {
         this.failureReason = failureReason;
         this.sentAt = sentAt;
-        this.deliveryStatus = deliveryStatus;
+        this.deliveryStatus = status;
     }
 
     /**
