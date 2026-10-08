@@ -10,6 +10,8 @@ import com.energymonitor.device.api.DeviceConnectivityRestored;
 import com.energymonitor.device.api.DeviceLinked;
 import com.energymonitor.device.application.command.LinkDeviceCommand;
 import com.energymonitor.device.application.command.UnlinkDeviceCommand;
+import com.energymonitor.device.application.command.UpdateDeviceCommand;
+import com.energymonitor.device.application.exception.DeviceNotFoundException;
 import com.energymonitor.device.application.exception.ApplianceTypeNotFoundException;
 import com.energymonitor.device.application.exception.DeviceAlreadyLinkedException;
 import com.energymonitor.device.application.exception.HomeNotFoundException;
@@ -222,5 +224,48 @@ class HomeDeviceServiceTest {
         // and it can be linked again, to any home
         service.link(link(OWNER, OTHER_HOME, "EM204"));
         assertEquals(OTHER_HOME, homeByDevice.get(id));
+    }
+
+    @Test
+    void ownerEditsTheApplianceKeepingKeyAndLinkDate() {
+        var linked = service.link(link(OWNER, HOME, "EM0001"));
+        Device before = devices.get(linked.device().idDevice());
+
+        var edited = service.update(new UpdateDeviceCommand(OWNER, HOME, before.idDevice(), "TV sala",
+                "appl000001", "livingRoom"));
+
+        Device after = devices.get(before.idDevice());
+        assertEquals("TV sala", edited.name());
+        assertEquals("livingRoom", after.location());
+        assertEquals(before.apiKey(), after.apiKey());
+        assertEquals(before.installationDate(), after.installationDate());
+    }
+
+    @Test
+    void onlyOwnersEditAndOnlyDevicesOfTheHome() {
+        var linked = service.link(link(OWNER, HOME, "EM0001"));
+        String id = linked.device().idDevice();
+
+        assertThrows(NotHomeOwnerException.class, () -> service.update(
+                new UpdateDeviceCommand(GUEST, HOME, id, "x", "appl000001", null)));
+        assertThrows(DeviceNotFoundException.class, () -> service.update(
+                new UpdateDeviceCommand(OWNER, OTHER_HOME, id, "x", "appl000001", null)));
+        assertThrows(ApplianceTypeNotFoundException.class, () -> service.update(
+                new UpdateDeviceCommand(OWNER, HOME, id, "x", "appl999999", null)));
+    }
+
+    @Test
+    void reissuingRotatesTheKeyWithoutANewLink() {
+        var linked = service.link(link(OWNER, HOME, "EM0001"));
+        Device before = devices.get(linked.device().idDevice());
+
+        var reissued = service.reissue(OWNER, HOME, before.idDevice());
+
+        Device after = devices.get(before.idDevice());
+        assertNotEquals(linked.apiKey(), reissued.apiKey());
+        assertEquals(reissued.apiKey(), after.apiKey());
+        assertEquals(before.installationDate(), after.installationDate());
+        assertEquals(1, linkedEvents.size());
+        assertThrows(NotHomeOwnerException.class, () -> service.reissue(GUEST, HOME, before.idDevice()));
     }
 }
