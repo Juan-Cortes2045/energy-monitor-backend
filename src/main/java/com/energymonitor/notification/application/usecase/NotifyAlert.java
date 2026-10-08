@@ -22,7 +22,8 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Delivers an alert to every member of its home, on the channels each one enabled.
+ * Delivers an alert, or a recommendation, to every member of its home, on the channels each one
+ * enabled.
  *
  * <ul>
  *   <li><strong>Mail</strong> to the account address when {@code emailEnabled}.</li>
@@ -65,6 +66,15 @@ public class NotifyAlert {
     }
 
     public void notify(String idAlert, String homeId, String deviceId, String messageKey) {
+        notify(NotificationSourceType.ALERT, idAlert, homeId, deviceId, messageKey);
+    }
+
+    /**
+     * @param source   what is being delivered: an alert or a recommendation
+     * @param idAlert  identifier of that alert or recommendation
+     */
+    public void notify(NotificationSourceType source, String idAlert, String homeId, String deviceId,
+                       String messageKey) {
         List<String> members = directory.memberIds(homeId);
         if (members.isEmpty()) {
             return;
@@ -80,19 +90,19 @@ public class NotifyAlert {
             Recipient recipient = recipients.get(userId);
             try {
                 if (preference.emailEnabled() && recipient != null && recipient.email() != null) {
-                    sendMail(idAlert, homeId, messageKey, recipient, message);
+                    sendMail(source, idAlert, homeId, messageKey, recipient, message);
                 }
                 if (preference.pushEnabled() && push.isConfigured()) {
-                    sendPush(idAlert, homeId, userId, messageKey, message);
+                    sendPush(source, idAlert, homeId, userId, messageKey, message);
                 }
             } catch (RuntimeException e) {
-                log.warn("Alert {} could not be delivered to {}: {}", idAlert, userId, e.getMessage());
+                log.warn("{} {} could not be delivered to {}: {}", source, idAlert, userId, e.getMessage());
             }
         }
     }
 
-    private void sendMail(String idAlert, String homeId, String messageKey, Recipient recipient,
-                          AlertMessages.Message message) {
+    private void sendMail(NotificationSourceType source, String idAlert, String homeId, String messageKey,
+                          Recipient recipient, AlertMessages.Message message) {
         String link = webUrl + "/notifications";
         String greeting = recipient.name() == null ? "Hola," : "Hola " + recipient.name() + ",";
         String text = """
@@ -115,12 +125,12 @@ public class NotifyAlert {
                 """.formatted(EmailSender.escapeHtml(greeting), EmailSender.escapeHtml(message.title()),
                 EmailSender.escapeHtml(message.body()), EmailSender.escapeHtml(link));
         mailer.send(new EmailSender.Delivery(identifiers.generate(), recipient.userId(), homeId,
-                NotificationSourceType.ALERT, idAlert, messageKey, recipient.email(),
+                source, idAlert, messageKey, recipient.email(),
                 "Energy Monitor: " + message.title(), text, html));
     }
 
-    private void sendPush(String idAlert, String homeId, String userId, String messageKey,
-                          AlertMessages.Message message) {
+    private void sendPush(NotificationSourceType source, String idAlert, String homeId, String userId,
+                          String messageKey, AlertMessages.Message message) {
         List<PushSubscription> browsers = subscriptions.findByUser(userId);
         if (browsers.isEmpty()) {
             return;
@@ -132,7 +142,7 @@ public class NotifyAlert {
                 "tag", idAlert));
         for (PushSubscription browser : browsers) {
             String id = identifiers.generate();
-            records.openForSending(id, userId, homeId, NotificationSourceType.ALERT, idAlert, messageKey,
+            records.openForSending(id, userId, homeId, source, idAlert, messageKey,
                     NotificationChannel.PUSH);
             PushSenderPort.Result result = push.send(browser, payload);
             switch (result.outcome()) {
