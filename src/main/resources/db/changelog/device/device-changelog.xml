@@ -14,5 +14,7 @@
     <include file="changes/device-002-create-device.xml" relativeToChangelogFile="true"/>
     <include file="changes/device-003-create-device-status-log.xml" relativeToChangelogFile="true"/>
     <include file="changes/device-004-create-device-home.xml" relativeToChangelogFile="true"/>
+    <include file="changes/device-005-status-log-last-seen-precision.xml" relativeToChangelogFile="true"/>
+    <include file="changes/device-006-seed-appliance-types.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
