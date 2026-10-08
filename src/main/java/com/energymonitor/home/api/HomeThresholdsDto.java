@@ -8,12 +8,14 @@ package com.energymonitor.home.api;
  * @param dailyLimit       daily limit in kWh
  * @param monthlyLimit     monthly limit in kWh
  * @param useSystemDefault whether the limits come from system defaults
+ * @param limitPeriod      which limit the owner set; the other one is derived from it
  */
 public record HomeThresholdsDto(
         String idThreshold,
         String homeId,
         double dailyLimit,
         double monthlyLimit,
-        boolean useSystemDefault
+        boolean useSystemDefault,
+        LimitPeriod limitPeriod
 ) {
 }

@@ -7,7 +7,10 @@ import com.energymonitor.home.application.port.out.HomePersistencePort;
 import com.energymonitor.home.application.port.out.HomeThresholdsPersistencePort;
 import com.energymonitor.home.application.port.out.UserHomePersistencePort;
 import com.energymonitor.home.domain.model.Home;
+import com.energymonitor.home.domain.model.Role;
+import com.energymonitor.home.domain.model.UserHome;
 import com.energymonitor.home.domain.model.HomeThresholds;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +43,18 @@ public class HomeApiImpl implements HomeApi {
     }
 
     @Override
+    public boolean isOwner(String idUser, String idHome) {
+        return userHomePort.findActive(idUser, idHome)
+                .filter(membership -> membership.role() == Role.OWNER)
+                .isPresent();
+    }
+
+    @Override
+    public List<String> memberIds(String idHome) {
+        return userHomePort.listActiveByHomeId(idHome).stream().map(UserHome::userId).toList();
+    }
+
+    @Override
     public Optional<HomeDto> findHome(String idHome) {
         return homePort.findActive(idHome).map(HomeApiImpl::toDto);
     }
@@ -56,6 +71,7 @@ public class HomeApiImpl implements HomeApi {
 
     private static HomeThresholdsDto toDto(HomeThresholds thresholds) {
         return new HomeThresholdsDto(thresholds.idThreshold(), thresholds.homeId(),
-                thresholds.dailyLimit(), thresholds.monthlyLimit(), thresholds.isUseSystemDefault());
+                thresholds.dailyLimit(), thresholds.monthlyLimit(), thresholds.isUseSystemDefault(),
+                thresholds.limitPeriod());
     }
 }

@@ -1,5 +1,8 @@
 package com.energymonitor.home.adapter.in.web.dto;
 
+import com.energymonitor.home.api.LimitPeriod;
+
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 /**
@@ -9,7 +12,7 @@ import jakarta.validation.constraints.Positive;
  * @param monthlyLimit monthly limit in kWh, must be positive
  */
 public record UpdateHomeThresholdsRequest(
-        @Positive double dailyLimit,
-        @Positive double monthlyLimit
+        @NotNull LimitPeriod limitPeriod,
+        @Positive double limit
 ) {
 }

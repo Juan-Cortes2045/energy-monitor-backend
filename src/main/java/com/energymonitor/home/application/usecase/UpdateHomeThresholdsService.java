@@ -47,7 +47,7 @@ public class UpdateHomeThresholdsService implements UpdateHomeThresholds {
                         "no thresholds found for home " + command.homeId()));
 
         // Delegate validation to domain (IllegalArgumentException propagates to web layer)
-        thresholds.update(command.dailyLimit(), command.monthlyLimit());
+        thresholds.setLimit(command.limitPeriod(), command.limit());
         thresholdsPort.save(thresholds);
 
         return HomeThresholdsResult.from(thresholds);

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.energymonitor.home.api.LimitPeriod;
 import com.energymonitor.home.application.command.UpdateHomeThresholdsCommand;
 import com.energymonitor.home.application.exception.HomeAccessDeniedException;
 import com.energymonitor.home.application.exception.HomeNotFoundException;
@@ -34,29 +35,40 @@ class UpdateHomeThresholdsServiceTest {
 
     @Test
     void updateThresholdsWithOwnerPermission() {
-        var command = new UpdateHomeThresholdsCommand("use0000001", "hom0000001", 15.0, 450.0);
+        var command = new UpdateHomeThresholdsCommand("use0000001", "hom0000001", LimitPeriod.DAILY, 15.0);
         var result = service.update(command);
 
         assertEquals(15.0, result.dailyLimit());
         assertEquals(450.0, result.monthlyLimit());
+        assertEquals(LimitPeriod.DAILY, result.limitPeriod());
         assertFalse(result.useSystemDefault());
     }
 
     @Test
+    void settingTheMonthlyLimitDerivesTheDailyOne() {
+        var result = service.update(new UpdateHomeThresholdsCommand("use0000001", "hom0000001",
+                LimitPeriod.MONTHLY, 600.0));
+
+        assertEquals(600.0, result.monthlyLimit());
+        assertEquals(20.0, result.dailyLimit());
+        assertEquals(LimitPeriod.MONTHLY, result.limitPeriod());
+    }
+
+    @Test
     void updateThresholdsWithoutMembershipThrows404() {
-        var command = new UpdateHomeThresholdsCommand("use0000003", "hom0000001", 15.0, 450.0);
+        var command = new UpdateHomeThresholdsCommand("use0000003", "hom0000001", LimitPeriod.DAILY, 15.0);
         assertThrows(HomeNotFoundException.class, () -> service.update(command));
     }
 
     @Test
     void updateThresholdsAsMemberWithoutPermissionThrows403() {
-        var command = new UpdateHomeThresholdsCommand("use0000002", "hom0000001", 15.0, 450.0);
+        var command = new UpdateHomeThresholdsCommand("use0000002", "hom0000001", LimitPeriod.DAILY, 15.0);
         assertThrows(HomeAccessDeniedException.class, () -> service.update(command));
     }
 
     @Test
     void updateThresholdsWithInvalidValuesThrows() {
-        var command = new UpdateHomeThresholdsCommand("use0000001", "hom0000001", 500.0, 300.0);
+        var command = new UpdateHomeThresholdsCommand("use0000001", "hom0000001", LimitPeriod.MONTHLY, -5.0);
         assertThrows(IllegalArgumentException.class, () -> service.update(command));
     }
 }

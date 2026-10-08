@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        The owner sets either the daily or the monthly limit, not both: limit_period says which
+        one is set, and the other column keeps the value derived from it. Existing homes keep
+        DAILY, which is what their screen showed first.
+    -->
+    <changeSet id="home-006-add-threshold-limit-period" author="JuanCortes2045">
+        <comment>home_thresholds.limit_period: which limit the owner set.</comment>
+        <addColumn tableName="home_thresholds">
+            <column name="limit_period" type="ENUM('DAILY', 'MONTHLY')" defaultValue="DAILY">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <rollback>
+            <dropColumn tableName="home_thresholds" columnName="limit_period"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

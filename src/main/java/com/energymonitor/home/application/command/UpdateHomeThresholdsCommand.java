@@ -1,5 +1,7 @@
 package com.energymonitor.home.application.command;
 
+import com.energymonitor.home.api.LimitPeriod;
+
 /**
  * Input of {@code UpdateHomeThresholds}: updates the consumption thresholds of a home.
  *
@@ -8,5 +10,5 @@ package com.energymonitor.home.application.command;
  * @param dailyLimit   new daily limit in kWh
  * @param monthlyLimit new monthly limit in kWh
  */
-public record UpdateHomeThresholdsCommand(String userId, String homeId, double dailyLimit, double monthlyLimit) {
+public record UpdateHomeThresholdsCommand(String userId, String homeId, LimitPeriod limitPeriod, double limit) {
 }
