@@ -2,6 +2,7 @@ package com.energymonitor.measurement.application.port.out;
 
 import com.energymonitor.measurement.domain.model.Measurement;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,4 +44,17 @@ public interface MeasurementPersistencePort {
      * @return the latest measurement, empty when the device has none
      */
     Optional<Measurement> findLatestActiveByDevice(String deviceId);
+
+    /**
+     * Hourly aggregates of the active measurements of several devices.
+     *
+     * @return rows ordered by device and hour
+     */
+    List<HourlyEnergyRow> aggregateHourly(Collection<String> deviceIds, Instant from, Instant to);
+
+    /**
+     * The most recent active measurement of a device strictly before an instant: the baseline of
+     * the cumulative energy counter for a range starting there.
+     */
+    Optional<Measurement> findLatestActiveByDeviceBefore(String deviceId, Instant before);
 }
