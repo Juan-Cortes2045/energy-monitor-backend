@@ -6,5 +6,7 @@ package com.energymonitor.notification.domain.model;
 public enum NotificationChannel {
 
     /** Email delivery channel. */
-    EMAIL
+    EMAIL,
+    /** Web Push (RFC 8030) to a browser subscription. */
+    PUSH
 }

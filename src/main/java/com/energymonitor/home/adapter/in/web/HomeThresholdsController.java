@@ -39,7 +39,7 @@ public class HomeThresholdsController {
         String userId = currentUser.resolveCurrentUserId();
         HomeThresholdsResult result = getHomeThresholds.get(new GetHomeThresholdsQuery(userId, homeId));
         return new HomeThresholdsResponse(result.idThreshold(), result.homeId(),
-                result.dailyLimit(), result.monthlyLimit(), result.useSystemDefault());
+                result.dailyLimit(), result.monthlyLimit(), result.useSystemDefault(), result.limitPeriod());
     }
 
     @PutMapping
@@ -47,8 +47,8 @@ public class HomeThresholdsController {
                                                    @Valid @RequestBody UpdateHomeThresholdsRequest request) {
         String userId = currentUser.resolveCurrentUserId();
         HomeThresholdsResult result = updateHomeThresholds.update(new UpdateHomeThresholdsCommand(
-                userId, homeId, request.dailyLimit(), request.monthlyLimit()));
+                userId, homeId, request.limitPeriod(), request.limit()));
         return new HomeThresholdsResponse(result.idThreshold(), result.homeId(),
-                result.dailyLimit(), result.monthlyLimit(), result.useSystemDefault());
+                result.dailyLimit(), result.monthlyLimit(), result.useSystemDefault(), result.limitPeriod());
     }
 }

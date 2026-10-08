@@ -1,9 +1,10 @@
 package com.energymonitor.measurement.adapter.in.web;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,7 +12,7 @@ import com.energymonitor.measurement.application.exception.MeasurementNotFoundEx
 import com.energymonitor.measurement.application.port.in.GetConsumptionStatistics;
 import com.energymonitor.measurement.application.port.in.GetLatestMeasurement;
 import com.energymonitor.measurement.application.port.in.ListMeasurements;
-import com.energymonitor.measurement.application.port.in.RegisterMeasurement;
+import com.energymonitor.measurement.application.port.in.AuthorizeDeviceRead;
 import com.energymonitor.measurement.application.result.ConsumptionStatisticsResult;
 import com.energymonitor.measurement.application.result.MeasurementResult;
 import java.time.Clock;
@@ -21,7 +22,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -43,7 +43,10 @@ class MeasurementControllerTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private RegisterMeasurement registerMeasurement;
+    private AuthorizeDeviceRead authorizeDeviceRead;
+
+    @MockitoBean
+    private CurrentUserResolver currentUser;
 
     @MockitoBean
     private ListMeasurements listMeasurements;
@@ -59,62 +62,6 @@ class MeasurementControllerTest {
 
     private MeasurementResult sampleResult() {
         return new MeasurementResult("mea0000001", "dev0000001", DATE_TIME, 120.5, 2.5, 300.0, 1520.75);
-    }
-
-    @Test
-    void registerReturns201() throws Exception {
-        when(registerMeasurement.register(any())).thenReturn(sampleResult());
-
-        mockMvc.perform(post("/api/v1/measurements")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "deviceId": "dev0000001",
-                                  "dateTime": "2026-01-15T10:30:00Z",
-                                  "voltage": 120.5,
-                                  "current": 2.5,
-                                  "activePower": 300.0,
-                                  "storedEnergy": 1520.75
-                                }
-                                """))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.idMeasurement").value("mea0000001"))
-                .andExpect(jsonPath("$.deviceId").value("dev0000001"))
-                .andExpect(jsonPath("$.activePower").value(300.0));
-    }
-
-    @Test
-    void registerWithoutDateTimeReturns201() throws Exception {
-        when(registerMeasurement.register(any())).thenReturn(sampleResult());
-
-        mockMvc.perform(post("/api/v1/measurements")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "deviceId": "dev0000001",
-                                  "voltage": 120.5,
-                                  "current": 2.5,
-                                  "activePower": 300.0,
-                                  "storedEnergy": 1520.75
-                                }
-                                """))
-                .andExpect(status().isCreated());
-    }
-
-    @Test
-    void registerWithNegativeValueReturns400() throws Exception {
-        mockMvc.perform(post("/api/v1/measurements")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "deviceId": "dev0000001",
-                                  "voltage": -1,
-                                  "current": 2.5,
-                                  "activePower": 300.0,
-                                  "storedEnergy": 1520.75
-                                }
-                                """))
-                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -156,5 +103,15 @@ class MeasurementControllerTest {
                 .andExpect(jsonPath("$.averageActivePower").value(200.0))
                 .andExpect(jsonPath("$.maxActivePower").value(300.0))
                 .andExpect(jsonPath("$.consumedEnergy").value(750.0));
+    }
+
+    @Test
+    void readingADeviceOfAnotherHomeReturns404() throws Exception {
+        when(currentUser.resolveCurrentUserId()).thenReturn("usr0000001");
+        doThrow(new MeasurementNotFoundException("no measurements for device dev0000009"))
+                .when(authorizeDeviceRead).requireReadable(eq("usr0000001"), eq("dev0000009"));
+
+        mockMvc.perform(get("/api/v1/measurements/latest").param("deviceId", "dev0000009"))
+                .andExpect(status().isNotFound());
     }
 }

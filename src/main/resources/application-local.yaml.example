@@ -1,3 +1,9 @@
+# Local profile: copy to application-local.yaml (gitignored) and set the database password.
+#
+# Only what differs per machine lives here. The MQTT broker, device provisioning and alert
+# notification settings are read from .env (see .env.example and README sections 9 and 10),
+# so this file does not need them.
+
 spring:
   datasource:
     url: jdbc:mysql://localhost:3306/energy_monitor?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true

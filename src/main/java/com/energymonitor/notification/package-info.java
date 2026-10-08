@@ -24,8 +24,12 @@
  * different channel replaces one adapter in this module and leaves security untouched. Widening
  * the allowance to the whole module would let mail code reach into security's internals, which
  * is the coupling this arrangement exists to prevent.
+ *
+ * <p><strong>Alert delivery.</strong> Every {@code AlertRaised} of {@code alert::api} is sent to
+ * the members of its home ({@code home::api}), by mail and Web Push according to each member's
+ * preferences; the names in the message come from {@code home::api} and {@code device::api}.
  */
-@ApplicationModule(allowedDependencies = {"security::api"})
+@ApplicationModule(allowedDependencies = {"security::api", "home::api", "device::api", "alert::api"})
 package com.energymonitor.notification;
 
 import org.springframework.modulith.ApplicationModule;

@@ -1,5 +1,6 @@
 package com.energymonitor.home.domain.model;
 
+import com.energymonitor.home.api.LimitPeriod;
 import java.util.Objects;
 
 /**
@@ -13,6 +14,8 @@ import java.util.Objects;
  *   <li>HOME-INV-006: {@code monthlyLimit > 0}</li>
  *   <li>HOME-INV-007: {@code dailyLimit <= monthlyLimit}</li>
  *   <li>HOME-INV-014: when updated manually, {@code useSystemDefault} becomes {@code false}</li>
+ *   <li>Only one limit is set by the owner ({@link #limitPeriod()}); the other is derived from it
+ *       at {@value #DAYS_PER_MONTH} days per month.</li>
  * </ul>
  *
  * <p>Maps to the {@code home_thresholds} table.
@@ -24,6 +27,18 @@ public class HomeThresholds {
     private double dailyLimit;
     private double monthlyLimit;
     private boolean useSystemDefault;
+    private LimitPeriod limitPeriod;
+
+    /** Days per month used to derive one limit from the other. */
+    public static final double DAYS_PER_MONTH = 30.0;
+
+    /**
+     * Rehydrates thresholds whose daily limit is the one set ({@link LimitPeriod#DAILY}).
+     */
+    public HomeThresholds(String idThreshold, String homeId, double dailyLimit,
+                          double monthlyLimit, boolean useSystemDefault) {
+        this(idThreshold, homeId, dailyLimit, monthlyLimit, useSystemDefault, LimitPeriod.DAILY);
+    }
 
     /**
      * Rehydrates or creates thresholds. Prefer {@link #create} for new thresholds.
@@ -33,9 +48,11 @@ public class HomeThresholds {
      * @param dailyLimit       daily limit in kWh, must be positive (HOME-INV-005)
      * @param monthlyLimit     monthly limit in kWh, must be positive (HOME-INV-006)
      * @param useSystemDefault whether the limits come from system defaults
+     * @param limitPeriod      which of the two limits the owner set
      */
     public HomeThresholds(String idThreshold, String homeId, double dailyLimit,
-                          double monthlyLimit, boolean useSystemDefault) {
+                          double monthlyLimit, boolean useSystemDefault, LimitPeriod limitPeriod) {
+        this.limitPeriod = limitPeriod == null ? LimitPeriod.DAILY : limitPeriod;
         this.idThreshold = Preconditions.text(idThreshold, 10, "idThreshold");
         this.homeId = Preconditions.text(homeId, 10, "homeId");
         this.dailyLimit = Preconditions.positive(dailyLimit, "dailyLimit");
@@ -84,6 +101,29 @@ public class HomeThresholds {
     /** @return whether the limits come from system defaults */
     public boolean isUseSystemDefault() {
         return useSystemDefault;
+    }
+
+    /** The limit the owner set; the other one is derived from it. */
+    public LimitPeriod limitPeriod() {
+        return limitPeriod;
+    }
+
+    /**
+     * Sets the daily or the monthly limit, never both: the other is derived (30 days per month),
+     * so the two always agree and {@code daily <= monthly} holds by construction.
+     */
+    public void setLimit(LimitPeriod period, double value) {
+        Preconditions.notNull(period, "limitPeriod");
+        Preconditions.positive(value, period == LimitPeriod.DAILY ? "dailyLimit" : "monthlyLimit");
+        if (period == LimitPeriod.DAILY) {
+            this.dailyLimit = value;
+            this.monthlyLimit = value * DAYS_PER_MONTH;
+        } else {
+            this.monthlyLimit = value;
+            this.dailyLimit = value / DAYS_PER_MONTH;
+        }
+        this.limitPeriod = period;
+        this.useSystemDefault = false;
     }
 
     /**

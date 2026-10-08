@@ -4,6 +4,7 @@ import com.energymonitor.measurement.api.MeasurementRecorded;
 import com.energymonitor.measurement.api.RiskConsumption;
 import com.energymonitor.measurement.application.port.out.ConsumptionLevelPersistencePort;
 import com.energymonitor.measurement.application.port.out.IdentifierGeneratorPort;
+import com.energymonitor.measurement.application.port.out.HourlyEnergyRow;
 import com.energymonitor.measurement.application.port.out.MeasurementEventPort;
 import com.energymonitor.measurement.application.port.out.MeasurementPersistencePort;
 import com.energymonitor.measurement.domain.model.ConsumptionLevel;
@@ -11,12 +12,15 @@ import com.energymonitor.measurement.domain.model.Measurement;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 /**
  * In-memory fakes of the output ports, for application-layer tests only.
@@ -64,6 +68,31 @@ public final class MeasurementUseCaseFixtures {
         public Optional<Measurement> findLatestActiveByDevice(String deviceId) {
             return byId.values().stream()
                     .filter(m -> m.deviceId().equals(deviceId))
+                    .max(Comparator.comparing(Measurement::dateTime));
+        }
+
+        @Override
+        public List<HourlyEnergyRow> aggregateHourly(Collection<String> deviceIds, Instant from, Instant to) {
+            Map<String, List<Measurement>> groups = new TreeMap<>();
+            byId.values().stream()
+                    .filter(m -> deviceIds.contains(m.deviceId()))
+                    .filter(m -> !m.dateTime().isBefore(from) && !m.dateTime().isAfter(to))
+                    .forEach(m -> groups.computeIfAbsent(
+                            m.deviceId() + "|" + m.dateTime().truncatedTo(ChronoUnit.HOURS), k -> new ArrayList<>())
+                            .add(m));
+            return groups.values().stream()
+                    .map(list -> new HourlyEnergyRow(list.getFirst().deviceId(),
+                            list.getFirst().dateTime().truncatedTo(ChronoUnit.HOURS),
+                            list.stream().mapToDouble(Measurement::getActivePower).average().orElseThrow(),
+                            list.stream().mapToDouble(Measurement::getStoredEnergy).min().orElseThrow(),
+                            list.stream().mapToDouble(Measurement::getStoredEnergy).max().orElseThrow()))
+                    .toList();
+        }
+
+        @Override
+        public Optional<Measurement> findLatestActiveByDeviceBefore(String deviceId, Instant before) {
+            return byId.values().stream()
+                    .filter(m -> m.deviceId().equals(deviceId) && m.dateTime().isBefore(before))
                     .max(Comparator.comparing(Measurement::dateTime));
         }
 

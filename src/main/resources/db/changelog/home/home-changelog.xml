@@ -15,5 +15,6 @@
     <include file="changes/home-003-create-home-thresholds.xml" relativeToChangelogFile="true"/>
     <include file="changes/home-004-create-user-home.xml" relativeToChangelogFile="true"/>
     <include file="changes/home-005-seed-home-type.xml" relativeToChangelogFile="true"/>
+    <include file="changes/home-006-add-threshold-limit-period.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

@@ -1,5 +1,8 @@
 package com.energymonitor.home.adapter.out.persistence.entity;
 
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import com.energymonitor.home.api.LimitPeriod;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -27,9 +30,21 @@ public class HomeThresholdsEntity extends BaseAuditEntity {
     @Column(name = "monthly_limit", nullable = false)
     private Double monthlyLimit;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "limit_period", nullable = false, columnDefinition = "ENUM('DAILY','MONTHLY')")
+    private LimitPeriod limitPeriod = LimitPeriod.DAILY;
+
     @JdbcTypeCode(SqlTypes.TINYINT)
     @Column(name = "use_system_default", nullable = false)
     private Boolean useSystemDefault;
+
+    public LimitPeriod getLimitPeriod() {
+        return limitPeriod;
+    }
+
+    public void setLimitPeriod(LimitPeriod limitPeriod) {
+        this.limitPeriod = limitPeriod;
+    }
 
     public HomeThresholdsEntity() {
     }

@@ -1,5 +1,6 @@
 package com.energymonitor.home.api;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -26,6 +27,23 @@ public interface HomeApi {
      * @return {@code true} when the user is an active member
      */
     boolean isMember(String idUser, String idHome);
+
+    /**
+     * Checks if a user is an active OWNER of a home.
+     *
+     * @param idUser the user identifier
+     * @param idHome the home identifier
+     * @return {@code true} when the user is an active member with the OWNER role
+     */
+    boolean isOwner(String idUser, String idHome);
+
+    /**
+     * Identifiers of the active members of a home, owners included.
+     *
+     * @param idHome the home identifier
+     * @return the user identifiers, empty when the home has none or does not exist
+     */
+    List<String> memberIds(String idHome);
 
     /**
      * Finds a home by identifier.

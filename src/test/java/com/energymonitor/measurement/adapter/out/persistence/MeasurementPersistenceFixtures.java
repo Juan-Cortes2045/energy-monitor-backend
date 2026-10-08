@@ -8,7 +8,7 @@ import java.time.Instant;
  */
 final class MeasurementPersistenceFixtures {
 
-    static final String DEVICE_ID = "dev0000001";
+    static final String DEVICE_ID = "tstmeas001";
     static final Instant T1 = Instant.parse("2026-01-15T08:00:00Z");
     static final Instant T2 = Instant.parse("2026-01-15T09:00:00Z");
     static final Instant T3 = Instant.parse("2026-01-15T10:00:00Z");

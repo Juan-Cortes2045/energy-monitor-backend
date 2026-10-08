@@ -1,5 +1,6 @@
 package com.energymonitor.home.application.result;
 
+import com.energymonitor.home.api.LimitPeriod;
 import com.energymonitor.home.domain.model.HomeThresholds;
 
 /**
@@ -12,7 +13,7 @@ import com.energymonitor.home.domain.model.HomeThresholds;
  * @param useSystemDefault whether the limits come from system defaults
  */
 public record HomeThresholdsResult(String idThreshold, String homeId, double dailyLimit,
-                                   double monthlyLimit, boolean useSystemDefault) {
+                                   double monthlyLimit, boolean useSystemDefault, LimitPeriod limitPeriod) {
 
     /**
      * Creates a result from a domain object.
@@ -22,6 +23,7 @@ public record HomeThresholdsResult(String idThreshold, String homeId, double dai
      */
     public static HomeThresholdsResult from(HomeThresholds thresholds) {
         return new HomeThresholdsResult(thresholds.idThreshold(), thresholds.homeId(),
-                thresholds.dailyLimit(), thresholds.monthlyLimit(), thresholds.isUseSystemDefault());
+                thresholds.dailyLimit(), thresholds.monthlyLimit(), thresholds.isUseSystemDefault(),
+                thresholds.limitPeriod());
     }
 }

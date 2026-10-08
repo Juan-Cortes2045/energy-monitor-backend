@@ -1,0 +1,148 @@
+package com.energymonitor.notification.application.usecase;
+
+import com.energymonitor.notification.application.port.out.HomeDirectoryPort;
+import com.energymonitor.notification.application.port.out.HomeDirectoryPort.Recipient;
+import com.energymonitor.notification.application.port.out.NotificationIdentifierPort;
+import com.energymonitor.notification.application.port.out.NotificationPreferencePort;
+import com.energymonitor.notification.application.port.out.NotificationRecordPort;
+import com.energymonitor.notification.application.port.out.PushSenderPort;
+import com.energymonitor.notification.application.port.out.PushSubscriptionPort;
+import com.energymonitor.notification.domain.model.NotificationChannel;
+import com.energymonitor.notification.domain.model.NotificationPreference;
+import com.energymonitor.notification.domain.model.NotificationSourceType;
+import com.energymonitor.notification.domain.model.PushSubscription;
+import com.energymonitor.notification.infrastructure.mail.EmailSender;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
+
+/**
+ * Delivers an alert to every member of its home, on the channels each one enabled.
+ *
+ * <ul>
+ *   <li><strong>Mail</strong> to the account address when {@code emailEnabled}.</li>
+ *   <li><strong>Push</strong> to every browser the member subscribed when {@code pushEnabled};
+ *       a subscription the push service reports as gone is deleted.</li>
+ * </ul>
+ *
+ * <p>Every attempt is a row of the delivery log ({@code notification}), one per recipient and
+ * channel. A failure on one recipient never stops the others.
+ */
+@Component
+public class NotifyAlert {
+
+    private static final Logger log = LoggerFactory.getLogger(NotifyAlert.class);
+
+    private final HomeDirectoryPort directory;
+    private final NotificationPreferencePort preferences;
+    private final PushSubscriptionPort subscriptions;
+    private final PushSenderPort push;
+    private final EmailSender mailer;
+    private final NotificationRecordPort records;
+    private final NotificationIdentifierPort identifiers;
+    private final ObjectMapper objectMapper;
+    private final String webUrl;
+
+    public NotifyAlert(HomeDirectoryPort directory, NotificationPreferencePort preferences,
+                       PushSubscriptionPort subscriptions, PushSenderPort push, EmailSender mailer,
+                       NotificationRecordPort records, NotificationIdentifierPort identifiers,
+                       ObjectMapper objectMapper,
+                       @Value("${notification.web-url:http://localhost:5173}") String webUrl) {
+        this.directory = directory;
+        this.preferences = preferences;
+        this.subscriptions = subscriptions;
+        this.push = push;
+        this.mailer = mailer;
+        this.records = records;
+        this.identifiers = identifiers;
+        this.objectMapper = objectMapper;
+        this.webUrl = webUrl.endsWith("/") ? webUrl.substring(0, webUrl.length() - 1) : webUrl;
+    }
+
+    public void notify(String idAlert, String homeId, String deviceId, String messageKey) {
+        List<String> members = directory.memberIds(homeId);
+        if (members.isEmpty()) {
+            return;
+        }
+        String homeName = directory.homeName(homeId).orElse(null);
+        AlertMessages.Message message = AlertMessages.render(messageKey, homeName,
+                directory.deviceName(deviceId).orElse(null));
+        Map<String, Recipient> recipients = directory.recipients(members);
+
+        for (String userId : members) {
+            NotificationPreference preference =
+                    preferences.find(userId).orElseGet(() -> NotificationPreference.defaults(userId));
+            Recipient recipient = recipients.get(userId);
+            try {
+                if (preference.emailEnabled() && recipient != null && recipient.email() != null) {
+                    sendMail(idAlert, homeId, messageKey, recipient, message);
+                }
+                if (preference.pushEnabled() && push.isConfigured()) {
+                    sendPush(idAlert, homeId, userId, messageKey, message);
+                }
+            } catch (RuntimeException e) {
+                log.warn("Alert {} could not be delivered to {}: {}", idAlert, userId, e.getMessage());
+            }
+        }
+    }
+
+    private void sendMail(String idAlert, String homeId, String messageKey, Recipient recipient,
+                          AlertMessages.Message message) {
+        String link = webUrl + "/notifications";
+        String greeting = recipient.name() == null ? "Hola," : "Hola " + recipient.name() + ",";
+        String text = """
+                %s
+
+                %s
+
+                Revisa tus notificaciones: %s
+
+                Puedes desactivar estos correos en Configuración > Notificaciones.
+                """.formatted(greeting, message.body(), link);
+        String html = """
+                <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px">
+                  <p>%s</p>
+                  <h2 style="margin:16px 0 8px">%s</h2>
+                  <p>%s</p>
+                  <p style="margin:24px 0"><a href="%s" style="background:#2563EB;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Ver notificaciones</a></p>
+                  <p style="color:#888;font-size:13px">Puedes desactivar estos correos en Configuración &gt; Notificaciones.</p>
+                </div>
+                """.formatted(EmailSender.escapeHtml(greeting), EmailSender.escapeHtml(message.title()),
+                EmailSender.escapeHtml(message.body()), EmailSender.escapeHtml(link));
+        mailer.send(new EmailSender.Delivery(identifiers.generate(), recipient.userId(), homeId,
+                NotificationSourceType.ALERT, idAlert, messageKey, recipient.email(),
+                "Energy Monitor: " + message.title(), text, html));
+    }
+
+    private void sendPush(String idAlert, String homeId, String userId, String messageKey,
+                          AlertMessages.Message message) {
+        List<PushSubscription> browsers = subscriptions.findByUser(userId);
+        if (browsers.isEmpty()) {
+            return;
+        }
+        String payload = objectMapper.writeValueAsString(Map.of(
+                "title", message.title(),
+                "body", message.body(),
+                "url", "/notifications",
+                "tag", idAlert));
+        for (PushSubscription browser : browsers) {
+            String id = identifiers.generate();
+            records.openForSending(id, userId, homeId, NotificationSourceType.ALERT, idAlert, messageKey,
+                    NotificationChannel.PUSH);
+            PushSenderPort.Result result = push.send(browser, payload);
+            switch (result.outcome()) {
+                case DELIVERED -> records.recordSent(id, LocalDateTime.now());
+                case GONE -> {
+                    records.recordFailure(id, "subscription gone: " + result.detail());
+                    subscriptions.deleteByEndpoint(browser.endpoint());
+                }
+                case FAILED -> records.recordFailure(id, result.detail());
+            }
+        }
+    }
+}
