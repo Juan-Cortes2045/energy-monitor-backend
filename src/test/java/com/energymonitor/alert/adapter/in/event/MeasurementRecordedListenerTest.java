@@ -29,7 +29,11 @@ class MeasurementRecordedListenerTest {
     @Test
     void forwardsTheEventToTheUseCase() {
         var useCase = new CapturingRegisterThresholdAlert();
-        var listener = new MeasurementRecordedListener(useCase);
+        var limitChecks = new ArrayList<String>();
+        var linkChecks = new ArrayList<String>();
+        var listener = new MeasurementRecordedListener(useCase,
+                (deviceId, dateTime) -> limitChecks.add(deviceId),
+                (deviceId, dateTime) -> linkChecks.add(deviceId));
         var event = new MeasurementRecorded("mea0000001", "dev0000001", DATE_TIME,
                 120.5, 2.5, 300.0, 1520.75);
 
@@ -41,5 +45,7 @@ class MeasurementRecordedListenerTest {
         assertEquals("mea0000001", command.measurementId());
         assertEquals(DATE_TIME, command.dateTime());
         assertEquals(300.0, command.activePower());
+        assertEquals(List.of("dev0000001"), limitChecks);
+        assertEquals(List.of("dev0000001"), linkChecks);
     }
 }

@@ -33,6 +33,7 @@ public final class AlertUseCaseFixtures {
     public static class FakeAlertPersistencePort implements AlertPersistencePort {
 
         private final Map<String, Alert> byId = new LinkedHashMap<>();
+        private final Map<String, Alert> deleted = new LinkedHashMap<>();
 
         @Override
         public Alert save(Alert alert) {
@@ -56,7 +57,10 @@ public final class AlertUseCaseFixtures {
 
         @Override
         public void delete(String idAlert) {
-            byId.remove(idAlert);
+            Alert removed = byId.remove(idAlert);
+            if (removed != null) {
+                deleted.put(idAlert, removed);
+            }
         }
 
         @Override
@@ -67,6 +71,13 @@ public final class AlertUseCaseFixtures {
                     .toList();
             resolved.forEach(byId::remove);
             return resolved.size();
+        }
+
+        @Override
+        public boolean existsForDeviceSince(String deviceId, String messageKey, Instant since) {
+            return java.util.stream.Stream.concat(byId.values().stream(), deleted.values().stream())
+                    .anyMatch(a -> deviceId.equals(a.deviceId())
+                    && messageKey.equals(a.messageKey()) && !a.dateTime().isBefore(since));
         }
 
         public void seed(Alert alert) {

@@ -412,7 +412,8 @@ looks local).
 
 ## 10. Alert notifications (mail and browser push)
 
-Every alert (device linked, device disconnected, high/critical consumption) is delivered to all
+Every alert (device connected after being linked, device disconnected, high/critical
+consumption, daily or monthly limit reached) is delivered to all
 members of the home, by mail and by Web Push according to each user's
 **Settings > Notifications** (`/api/v1/notifications/preferences`, both on by default). Mail uses
 the SMTP account of section 5; every attempt is a row of the `notification` table.
@@ -423,6 +424,13 @@ their subscription to the public key. Without it push is off and mail still work
 only allow push on `https://` or `http://localhost`.
 
 `NOTIFICATION_WEB_URL` is the address of the web app used by the links in the mail.
+
+- **Device linked** is raised by the first reading the module sends after it was linked, once per
+  link: retrying the linking from the web while the module cannot join the network sends nothing.
+- **Limit reached** (`alert.limit.daily` / `alert.limit.monthly`) is raised when the energy of the
+  home since the start of the day or month (`ALERT_LIMIT_ZONE`, default `America/Bogota`)
+  reaches the limit set in the thresholds. It resolves itself when a new period starts or the
+  limit is raised above the consumption.
 
 New recommendations (section 11) are delivered the same way, with the source type
 `RECOMMENDATION` in the `notification` table.
