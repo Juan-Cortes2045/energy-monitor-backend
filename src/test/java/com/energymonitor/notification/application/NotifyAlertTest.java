@@ -14,6 +14,7 @@ import com.energymonitor.notification.application.port.out.PushSenderPort;
 import com.energymonitor.notification.application.port.out.PushSubscriptionPort;
 import com.energymonitor.notification.application.usecase.NotifyAlert;
 import com.energymonitor.notification.domain.model.NotificationPreference;
+import com.energymonitor.notification.domain.model.NotificationSourceType;
 import com.energymonitor.notification.domain.model.PushSubscription;
 import com.energymonitor.notification.infrastructure.mail.EmailSender;
 import java.util.ArrayList;
@@ -154,5 +155,18 @@ class NotifyAlertTest {
         notifyAlert.notify("ale0000001", "hom0000001", "dev0000001", "alert.threshold.high");
 
         assertTrue(subscriptions.isEmpty());
+    }
+
+    @Test
+    void recommendationsAreDeliveredAsTheirOwnSource() {
+        notifyAlert.notify(NotificationSourceType.RECOMMENDATION, "rec0000001", "hom0000001", "dev0000001",
+                "recommendation.standby");
+
+        ArgumentCaptor<EmailSender.Delivery> mail = ArgumentCaptor.forClass(EmailSender.Delivery.class);
+        verify(mailer, org.mockito.Mockito.times(2)).send(mail.capture());
+        assertEquals(NotificationSourceType.RECOMMENDATION, mail.getValue().sourceType());
+        assertEquals("rec0000001", mail.getValue().sourceId());
+        assertTrue(mail.getValue().subject().contains("consumo en reposo"));
+        assertTrue(mail.getValue().text().contains("«Nevera»"));
     }
 }
