@@ -83,6 +83,11 @@ public final class UseCaseFixtures {
                     .findFirst();
         }
 
+        @Override
+        public void softDelete(String idUser, Instant deletedAt) {
+            byId.remove(idUser);
+        }
+
         public User seed(String idUser, String idPerson, String email, UserStatus status) {
             User user = new User(idUser, idPerson, PasswordHash.of("hash:" + PASSWORD),
                     Email.of(email), true, REGISTRATION, status, 0, null, null);
@@ -117,6 +122,11 @@ public final class UseCaseFixtures {
         @Override
         public Optional<Person> findActive(String idPerson) {
             return Optional.ofNullable(byId.get(idPerson));
+        }
+
+        @Override
+        public void softDelete(String idPerson, Instant deletedAt) {
+            byId.remove(idPerson);
         }
 
         public Person seed(String idPerson) {

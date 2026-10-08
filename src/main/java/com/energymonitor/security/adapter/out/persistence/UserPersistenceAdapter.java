@@ -6,6 +6,7 @@ import com.energymonitor.security.adapter.out.persistence.repository.UserReposit
 import com.energymonitor.security.application.port.out.UserPersistencePort;
 import com.energymonitor.security.domain.model.Email;
 import com.energymonitor.security.domain.model.User;
+import java.time.Instant;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
@@ -75,5 +76,23 @@ public class UserPersistenceAdapter implements UserPersistencePort {
     @Override
     public Optional<User> findActiveByEmail(Email email) {
         return findActiveByEmail(email.value());
+    }
+
+    @Override
+    public void softDelete(String idUser, Instant deletedAt) {
+        repository.findById(idUser).ifPresent(entity -> {
+            entity.setDeletedAt(deletedAt);
+            entity.setEmail(releasedEmail(idUser));
+            repository.save(entity);
+        });
+    }
+
+    /**
+     * What a deleted row keeps instead of its address. Unique per account, valid for
+     * {@code Email}, and under {@code .invalid}, a reserved domain (RFC 2606) no real address
+     * can belong to.
+     */
+    static String releasedEmail(String idUser) {
+        return "deleted+" + idUser + "@deleted.invalid";
     }
 }

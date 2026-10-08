@@ -117,9 +117,9 @@ and read from those environment variables, so leaving them empty there keeps bot
 The application refuses to start when a key is missing, unreadable or invalid,
 and the error message names the path it could not read.
 
-## 5. Email delivery (password recovery)
+## 5. Email delivery (password recovery and email verification)
 
-Password recovery mails are sent over SMTP. Every credential comes from the
+Password recovery and email verification mails are sent over SMTP. Every credential comes from the
 environment; none is ever written into a committed file.
 
 ### The recovery code, and why it is short
@@ -160,6 +160,35 @@ instance, resets on restart, and cannot be shared between replicas. Behind a loa
 balancer, add a rate limiter there too. And because the limit is keyed by address,
 everyone behind one NAT shares it, which is why the allowance is generous enough to
 absorb an office.
+
+### The email verification code
+
+Registering mails a six-digit code to the new address. `POST /api/v1/auth/email/verify`
+with `{email, code}` marks the address as verified; `POST /api/v1/auth/email/verification/resend`
+sends the current code again and always answers `202`, like the recovery request.
+
+The code is derived, not stored: `HMAC-SHA256` with the same pepper, over the account, its
+address and the current fifteen-minute window, reduced to six digits. A code is accepted during
+its window and the next one, so it lives between 15 and 30 minutes, and changing the address
+invalidates it. Guessing is bounded twice: the per-address limit above, and five attempts per
+address per window, so spreading guesses over many callers does not help.
+
+An unverified account can still sign in. Verification records that the address works; it does
+not gate access.
+
+### Deleting an account
+
+`POST /api/v1/auth/account/delete` with `{password}` deletes the caller's own account after
+checking the password (`401` when it is wrong, `204` when done). It is a soft delete: `user` and
+`person` get `deleted_at`, the account's sessions are closed and its home memberships removed.
+The address is released: the deleted row keeps `deleted+<id_user>@deleted.invalid` instead, so
+the same address can register a new account. A
+home the account is the only member of is deleted with it. If the account is the only owner of a
+home that still has other members, the request is refused with `409` and a readable `message`:
+the ownership must be handed over or the members removed first. Both modules write inside one transaction: the security module
+publishes `AccountDeleted` and the home module reacts to it, so either everything is deleted or
+nothing is. An access token issued before the deletion keeps working until it expires, at most
+15 minutes; no refresh token can renew it.
 
 ### Gmail app password
 

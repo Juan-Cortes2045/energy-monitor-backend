@@ -109,6 +109,22 @@ class AccountLifecycleServiceTest {
     }
 
     @Test
+    void aBlankAvatarRemovesTheImageAndAbsentKeepsIt() {
+        seedAda();
+        updateProfile.update(new UpdateUserProfileCommand("use0000001",
+                null, null, "data:image/jpeg;base64," + "A".repeat(30_000), null, "10.0.0.5"));
+        assertTrue(users.findActive("use0000001").orElseThrow().profileImage().isPresent());
+
+        updateProfile.update(new UpdateUserProfileCommand("use0000001",
+                null, null, null, null, "10.0.0.5"));
+        assertTrue(users.findActive("use0000001").orElseThrow().profileImage().isPresent());
+
+        updateProfile.update(new UpdateUserProfileCommand("use0000001",
+                null, null, "", null, "10.0.0.5"));
+        assertTrue(users.findActive("use0000001").orElseThrow().profileImage().isEmpty());
+    }
+
+    @Test
     void changesTheAccountEmailAndResetsVerification() {
         seedAda();
 

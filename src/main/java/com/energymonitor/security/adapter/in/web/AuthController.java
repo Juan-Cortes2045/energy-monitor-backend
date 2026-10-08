@@ -1,8 +1,11 @@
 package com.energymonitor.security.adapter.in.web;
 
 import com.energymonitor.security.adapter.in.web.dto.AccountResponse;
+import com.energymonitor.security.api.UserProfile;
+import com.energymonitor.security.api.UserProfileQuery;
 import com.energymonitor.security.adapter.in.web.dto.ApiError;
 import com.energymonitor.security.adapter.in.web.dto.ChangePasswordRequest;
+import com.energymonitor.security.adapter.in.web.dto.DeleteAccountRequest;
 import com.energymonitor.security.adapter.in.web.dto.ForgotPasswordRequest;
 import com.energymonitor.security.adapter.in.web.dto.LoginRequest;
 import com.energymonitor.security.adapter.in.web.dto.LoginResponse;
@@ -19,6 +22,7 @@ import com.energymonitor.security.adapter.in.web.dto.UpdateProfileRequest;
 import com.energymonitor.security.adapter.in.web.dto.VerifyEmailRequest;
 import com.energymonitor.security.application.command.ChangePasswordCommand;
 import com.energymonitor.security.application.command.CreatePasswordResetTokenCommand;
+import com.energymonitor.security.application.command.DeleteAccountCommand;
 import com.energymonitor.security.application.command.RegisterUserCommand;
 import com.energymonitor.security.application.command.ResetPasswordCommand;
 import com.energymonitor.security.application.command.LogoutUserSessionCommand;
@@ -28,6 +32,7 @@ import com.energymonitor.security.application.exception.UserNotFoundException;
 import com.energymonitor.security.application.port.in.ChangePassword;
 import com.energymonitor.security.application.port.in.CheckPermission;
 import com.energymonitor.security.application.port.in.CreatePasswordResetToken;
+import com.energymonitor.security.application.port.in.DeleteAccount;
 import com.energymonitor.security.application.port.in.EmailVerification;
 import com.energymonitor.security.application.port.in.FindUser;
 import com.energymonitor.security.application.port.in.RegisterUser;
@@ -135,6 +140,8 @@ public class AuthController {
     private final CheckPermission checkPermission;
     private final UpdateUserProfile updateUserProfile;
     private final EmailVerification emailVerification;
+    private final UserProfileQuery userProfiles;
+    private final DeleteAccount deleteAccount;
 
     public AuthController(RegisterUser registerUser, SecurityLoginFlow loginFlow,
                           LogoutUserSession logoutUserSession, RefreshSession refreshSession,
@@ -145,7 +152,8 @@ public class AuthController {
                           ResetPassword resetPassword, ChangePassword changePassword,
                           FindUser findUser, CheckPermission checkPermission,
                           UpdateUserProfile updateUserProfile,
-                          EmailVerification emailVerification) {
+                          EmailVerification emailVerification,
+                          UserProfileQuery userProfiles, DeleteAccount deleteAccount) {
         this.registerUser = registerUser;
         this.loginFlow = loginFlow;
         this.logoutUserSession = logoutUserSession;
@@ -160,6 +168,8 @@ public class AuthController {
         this.checkPermission = checkPermission;
         this.updateUserProfile = updateUserProfile;
         this.emailVerification = emailVerification;
+        this.userProfiles = userProfiles;
+        this.deleteAccount = deleteAccount;
     }
 
     /**
@@ -747,6 +757,38 @@ public class AuthController {
         return ResponseEntity.ok(ProfileResponse.from(updated));
     }
 
+    @Operation(summary = "Delete the caller's own account",
+            description = "Confirms the current password, then soft-deletes the account and its "
+                    + "person (deleted_at), closes its sessions and drops its home memberships. "
+                    + "A home the caller is the only member of is deleted with it. Refused with 409 "
+                    + "while the caller is the only owner of a home that still has other "
+                    + "members. The account is read from the access token's subject, so a "
+                    + "caller can only delete itself.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Account deleted", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Validation error: the password "
+                    + "is missing",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "401", description = "Missing, malformed or expired "
+                    + "access token, or the password is not correct",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "409", description = "The caller is the only owner of a "
+                    + "home that still has other members",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class)))
+    })
+    @PostMapping("/account/delete")
+    public ResponseEntity<Void> deleteAccount(@Valid @RequestBody DeleteAccountRequest request,
+                                              Authentication authentication,
+                                              HttpServletRequest servlet) {
+        deleteAccount.delete(new DeleteAccountCommand(authentication.getName(), request.password(),
+                clientIp(servlet)));
+        return ResponseEntity.noContent().build();
+    }
+
     /**
      * Returns the account details for the authenticated caller. The identity comes from the
      * access token, not from a request parameter.
@@ -770,7 +812,9 @@ public class AuthController {
                                       "email": "ada@example.com",
                                       "status": "ACTIVE",
                                       "lastLogin": "2026-10-05T14:31:00Z",
-                                      "profileImage": null
+                                      "profileImage": null,
+                                      "name": "Ada",
+                                      "lastName": "Lovelace"
                                     }"""))),
             @ApiResponse(responseCode = "401", description = "Missing, malformed or expired "
                     + "access token",
@@ -783,7 +827,12 @@ public class AuthController {
     @GetMapping("/account")
     public ResponseEntity<AccountResponse> getAccount(Authentication authentication) {
         return findUser.findByIdentifier(authentication.getName())
-                .map(AccountResponse::from)
+                .map(user -> {
+                    UserProfile profile = userProfiles.findByIds(java.util.List.of(user.idUser()))
+                            .get(user.idUser());
+                    return profile == null ? AccountResponse.from(user)
+                            : AccountResponse.from(user, profile.name(), profile.lastName());
+                })
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }

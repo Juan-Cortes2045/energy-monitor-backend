@@ -1,6 +1,7 @@
 package com.energymonitor.security.application.port.out;
 
 import com.energymonitor.security.domain.model.Person;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -23,4 +24,12 @@ public interface PersonPersistencePort {
      * @return the domain object, empty when soft-deleted or missing
      */
     Optional<Person> findActive(String idPerson);
+
+    /**
+     * Marks the person as deleted. Its row stays; {@code findActive} stops returning it.
+     *
+     * @param idPerson the identifier
+     * @param deletedAt when it was deleted
+     */
+    void softDelete(String idPerson, Instant deletedAt);
 }

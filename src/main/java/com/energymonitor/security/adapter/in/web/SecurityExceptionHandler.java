@@ -1,6 +1,7 @@
 package com.energymonitor.security.adapter.in.web;
 
 import com.energymonitor.security.adapter.in.web.dto.ApiError;
+import com.energymonitor.security.api.AccountDeletionBlockedException;
 import com.energymonitor.security.application.exception.AccountNotActiveException;
 import com.energymonitor.security.application.exception.CurrentPasswordMismatchException;
 import com.energymonitor.security.application.exception.EmailAlreadyRegisteredException;
@@ -171,6 +172,12 @@ public class SecurityExceptionHandler {
     public ResponseEntity<ApiError> handleInvalidVerificationCode(
             InvalidVerificationCodeException exception, HttpServletRequest request) {
         return respond(HttpStatus.BAD_REQUEST, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(AccountDeletionBlockedException.class)
+    public ResponseEntity<ApiError> handleAccountDeletionBlocked(
+            AccountDeletionBlockedException exception, HttpServletRequest request) {
+        return respond(HttpStatus.CONFLICT, exception.getMessage(), request);
     }
 
     @ExceptionHandler(CurrentPasswordMismatchException.class)

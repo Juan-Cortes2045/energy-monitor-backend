@@ -15,8 +15,8 @@ import java.util.Optional;
  */
 public class User {
 
-    /** Matches {@code user.profile_image VARCHAR(255)}. */
-    private static final int PROFILE_IMAGE_MAX = 255;
+    /** Room for a 256 px avatar as a data URL; the column is MEDIUMTEXT. */
+    private static final int PROFILE_IMAGE_MAX = 500_000;
 
     private final String idUser;
     private final String idPerson;

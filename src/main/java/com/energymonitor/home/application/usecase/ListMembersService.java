@@ -3,6 +3,7 @@ package com.energymonitor.home.application.usecase;
 import com.energymonitor.home.application.command.ListMembersQuery;
 import com.energymonitor.home.application.exception.HomeNotFoundException;
 import com.energymonitor.home.application.port.in.ListMembers;
+import com.energymonitor.home.application.port.out.UserDirectoryPort;
 import com.energymonitor.home.application.port.out.UserHomePersistencePort;
 import com.energymonitor.home.application.result.UserHomeResult;
 import java.util.List;
@@ -16,9 +17,12 @@ import java.util.List;
 public class ListMembersService implements ListMembers {
 
     private final UserHomePersistencePort userHomePort;
+    private final UserDirectoryPort userDirectory;
 
-    public ListMembersService(UserHomePersistencePort userHomePort) {
+    public ListMembersService(UserHomePersistencePort userHomePort,
+                              UserDirectoryPort userDirectory) {
         this.userHomePort = userHomePort;
+        this.userDirectory = userDirectory;
     }
 
     @Override
@@ -28,8 +32,10 @@ public class ListMembersService implements ListMembers {
                 .orElseThrow(() -> new HomeNotFoundException(
                         "no active membership for user " + query.userId() + " in home " + query.homeId()));
 
-        return userHomePort.listActiveByHomeId(query.homeId()).stream()
-                .map(UserHomeResult::from)
+        var members = userHomePort.listActiveByHomeId(query.homeId());
+        var people = userDirectory.findByIds(members.stream().map(m -> m.userId()).toList());
+        return members.stream()
+                .map(m -> UserHomeResult.from(m, people.get(m.userId())))
                 .toList();
     }
 }

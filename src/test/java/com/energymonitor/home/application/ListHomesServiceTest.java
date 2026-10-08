@@ -31,7 +31,9 @@ class ListHomesServiceTest {
         userHomePort.save(UserHome.owner("use0000001", "hom0000001"));
         userHomePort.save(UserHome.member("use0000001", "hom0000002"));
 
-        service = new ListHomesService(homePort, userHomePort);
+        var directory = new HomeUseCaseFixtures.FakeUserDirectoryPort();
+        directory.seed("use0000001", "Ada", "Lovelace", "ada@example.com");
+        service = new ListHomesService(homePort, userHomePort, directory);
     }
 
     @Test
@@ -69,5 +71,18 @@ class ListHomesServiceTest {
         var query = new ListHomesQuery("use0000001");
         var results = service.list(query);
         assertEquals(2, results.size());
+    }
+
+    @Test
+    void listHomesIncludesTheOwnerAsResponsible() {
+        var results = service.list(new ListHomesQuery("use0000001"));
+
+        var owned = results.stream().filter(r -> r.idHome().equals("hom0000001")).findFirst().orElseThrow();
+        assertEquals("Ada", owned.userResponsible());
+        assertEquals("Lovelace", owned.userResponsibleLastName());
+        assertEquals("ada@example.com", owned.userResponsibleEmail());
+        // hom0000002 has no owner in the fixtures: the responsible is left empty, not invented.
+        var ownerless = results.stream().filter(r -> r.idHome().equals("hom0000002")).findFirst().orElseThrow();
+        org.junit.jupiter.api.Assertions.assertNull(ownerless.userResponsible());
     }
 }

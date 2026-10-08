@@ -96,10 +96,9 @@ security:
     # Wildcard origin patterns, kept separate from allowed-origins because Spring only tolerates a
     # wildcard in this list and echoes the concrete origin back rather than the pattern itself.
     allowed-origin-patterns: ${SECURITY_CORS_ALLOWED_ORIGIN_PATTERNS:}
-    # X-User-Id is here only because the home module still reads the caller from it
-    # (CurrentUserResolver). That header is trivially spoofable: remove it from this list as soon
-    # as the home module takes the caller from the access token instead.
-    allowed-headers: Authorization,Content-Type,Accept,X-User-Id
+    # Only what the web client sends. Every module reads the caller from the access token's
+    # subject, so no header naming a user is allowed: a browser asking to send one is refused.
+    allowed-headers: Authorization,Content-Type,Accept
     allow-credentials: false
     max-age: 30m
 

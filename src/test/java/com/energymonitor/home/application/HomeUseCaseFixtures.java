@@ -6,6 +6,7 @@ import com.energymonitor.home.application.port.out.HomeThresholdsPersistencePort
 import com.energymonitor.home.application.port.out.HomeTypePersistencePort;
 import com.energymonitor.home.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.home.application.port.out.SystemDefaultsPort;
+import com.energymonitor.home.application.port.out.UserDirectoryPort;
 import com.energymonitor.home.application.port.out.UserHomePersistencePort;
 import com.energymonitor.home.domain.model.Home;
 import com.energymonitor.home.domain.model.HomeThresholds;
@@ -74,6 +75,14 @@ public final class HomeUseCaseFixtures {
                     .map(byId::get)
                     .filter(h -> h != null)
                     .toList();
+        }
+
+        @Override
+        public void remove(String idHome) {
+            Home removed = byId.remove(idHome);
+            if (removed != null) {
+                byAccessCode.remove(removed.accessCode());
+            }
         }
 
         public void seed(Home home) {
@@ -203,6 +212,27 @@ public final class HomeUseCaseFixtures {
         @Override
         public double defaultMonthlyLimit() {
             return DEFAULT_MONTHLY_LIMIT;
+        }
+    }
+
+    /** Users the directory knows; any other identifier is absent, as in the real one. */
+    public static final class FakeUserDirectoryPort implements UserDirectoryPort {
+
+        private final Map<String, UserSummary> users = new LinkedHashMap<>();
+
+        public void seed(String userId, String name, String lastName, String email) {
+            users.put(userId, new UserSummary(name, lastName, email));
+        }
+
+        @Override
+        public Map<String, UserSummary> findByIds(Collection<String> userIds) {
+            Map<String, UserSummary> found = new LinkedHashMap<>();
+            userIds.forEach(id -> {
+                if (users.containsKey(id)) {
+                    found.put(id, users.get(id));
+                }
+            });
+            return found;
         }
     }
 }
