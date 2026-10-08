@@ -407,6 +407,11 @@ the broker. Full contract and firmware steps: `devices/README.md`.
 | `DEVICE_MQTT_PUBLIC_HOST` / `_PORT` | — / `8883` | broker address given to devices when linked |
 | `DEVICE_OFFLINE_AFTER` | `PT150S` | a device silent this long is marked OFFLINE |
 
+Device endpoints of a home (`/api/v1/homes/{homeId}/devices`): `GET` lists them (members);
+`POST` links a module, `PUT /{deviceId}` edits appliance, name and room,
+`POST /{deviceId}/credentials` issues a new api key plus the broker address to give a linked
+module a new Wi-Fi network (not a new link), and `DELETE /{deviceId}` unlinks it (owner only).
+
 A public reverse proxy must **not** forward `/internal/**` (section 7: behind it every request
 looks local).
 
