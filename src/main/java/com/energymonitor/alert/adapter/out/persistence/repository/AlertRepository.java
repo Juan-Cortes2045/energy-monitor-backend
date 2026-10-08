@@ -21,6 +21,9 @@ public interface AlertRepository extends JpaRepository<AlertEntity, String> {
     List<AlertEntity> findByHomeIdAndAlertStatusAndDeletedAtIsNullOrderByDateTimeDesc(
             String homeId, AlertStatus status);
 
+    boolean existsByDeviceIdAndMessageKeyAndDateTimeGreaterThanEqual(String deviceId, String messageKey,
+                                                                     Instant since);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update AlertEntity a set a.deletedAt = :now where a.idAlert = :id and a.deletedAt is null")
     int softDelete(@Param("id") String idAlert, @Param("now") Instant now);

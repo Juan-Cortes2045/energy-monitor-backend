@@ -123,6 +123,17 @@ public class Alert {
                 AlertStatus.PENDING, null, null);
     }
 
+    /**
+     * Raises a LIMIT alert: the home's consumption reached the limit its owner set for the day or
+     * the month. Home-scoped, so it carries no device.
+     *
+     * @return a new PENDING alert; the system resolves it when consumption is under the limit again
+     */
+    public static Alert limit(String idAlert, String homeId, String messageKey, Instant dateTime) {
+        return new Alert(idAlert, homeId, null, AlertType.LIMIT, messageKey, dateTime,
+                AlertStatus.PENDING, null, null);
+    }
+
     /** @return the identifier */
     public String idAlert() {
         return idAlert;

@@ -14,5 +14,7 @@ public enum AlertType {
     /** A device stopped reporting. */
     CONNECTIVITY,
     /** Informational: something changed in the home's devices, e.g. a module was linked. */
-    DEVICE
+    DEVICE,
+    /** The home reached its daily or monthly consumption limit. */
+    LIMIT
 }

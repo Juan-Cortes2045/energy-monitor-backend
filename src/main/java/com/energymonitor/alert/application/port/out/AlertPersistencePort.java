@@ -2,6 +2,7 @@ package com.energymonitor.alert.application.port.out;
 
 import com.energymonitor.alert.api.AlertStatus;
 import com.energymonitor.alert.domain.model.Alert;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,4 +41,10 @@ public interface AlertPersistencePort {
 
     /** Soft-deletes every RESOLVED alert of a home. @return how many */
     int deleteResolved(String homeId);
+
+    /**
+     * Whether an alert with this key was raised for the device since an instant, deleted ones
+     * included: an alert the user already read and deleted must not come back.
+     */
+    boolean existsForDeviceSince(String deviceId, String messageKey, Instant since);
 }

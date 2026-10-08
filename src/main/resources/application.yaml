@@ -169,6 +169,11 @@ device:
     mqtt-host: ${DEVICE_MQTT_PUBLIC_HOST:}
     mqtt-port: ${DEVICE_MQTT_PUBLIC_PORT:8883}
 
+alert:
+  limit:
+    # Zone in which the day and the month of the consumption limit start.
+    zone: ${ALERT_LIMIT_ZONE:America/Bogota}
+
 recommendation:
   # The rules run over the hourly energy of every home with readings in the last week.
   evaluate-interval: ${RECOMMENDATION_EVALUATE_INTERVAL:PT1H}
