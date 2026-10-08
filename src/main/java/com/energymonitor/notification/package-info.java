@@ -28,8 +28,10 @@
  * <p><strong>Alert delivery.</strong> Every {@code AlertRaised} of {@code alert::api} is sent to
  * the members of its home ({@code home::api}), by mail and Web Push according to each member's
  * preferences; the names in the message come from {@code home::api} and {@code device::api}.
+ * Every {@code RecommendationCreated} of {@code recommendation::api} is delivered the same way.
  */
-@ApplicationModule(allowedDependencies = {"security::api", "home::api", "device::api", "alert::api"})
+@ApplicationModule(allowedDependencies = {"security::api", "home::api", "device::api", "alert::api",
+        "recommendation::api"})
 package com.energymonitor.notification;
 
 import org.springframework.modulith.ApplicationModule;
