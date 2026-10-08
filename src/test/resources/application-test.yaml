@@ -25,3 +25,7 @@ security:
     # (see application-local.yaml.example); the environment variables win when set.
     private-key-path: ${SECURITY_JWT_PRIVATE_KEY_PATH:${user.home}/.energy-monitor/keys/private.pem}
     public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:${user.home}/.energy-monitor/keys/public.pem}
+
+recommendation:
+  # The hourly evaluation is exercised by unit tests; it must not run against the shared database.
+  enabled: false
