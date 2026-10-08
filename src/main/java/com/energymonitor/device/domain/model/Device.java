@@ -44,6 +44,23 @@ public class Device {
                 deviceCode, apiKey);
     }
 
+    /**
+     * New display data (what it measures, its name and room). Identity, key and link date stay.
+     */
+    public Device edited(String name, String applianceTypeId, String location) {
+        return new Device(idDevice, name, applianceTypeId, location, description, installationDate,
+                deviceCode, apiKey);
+    }
+
+    /**
+     * A fresh API key for the same module, e.g. to write it again together with a new Wi-Fi
+     * network. It is not a new link: the link date stays.
+     */
+    public Device withApiKey(String apiKey) {
+        return new Device(idDevice, name, applianceTypeId, location, description, installationDate,
+                deviceCode, apiKey);
+    }
+
     public String idDevice() {
         return idDevice;
     }

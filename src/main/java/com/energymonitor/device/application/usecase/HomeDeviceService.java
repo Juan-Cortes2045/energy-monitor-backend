@@ -2,6 +2,7 @@ package com.energymonitor.device.application.usecase;
 
 import com.energymonitor.device.application.command.LinkDeviceCommand;
 import com.energymonitor.device.application.command.UnlinkDeviceCommand;
+import com.energymonitor.device.application.command.UpdateDeviceCommand;
 import com.energymonitor.device.application.exception.ApplianceTypeNotFoundException;
 import com.energymonitor.device.application.exception.DeviceAlreadyLinkedException;
 import com.energymonitor.device.application.exception.DeviceNotFoundException;
@@ -10,7 +11,9 @@ import com.energymonitor.device.application.exception.NotHomeOwnerException;
 import com.energymonitor.device.application.port.in.LinkDevice;
 import com.energymonitor.device.application.port.in.ListApplianceTypes;
 import com.energymonitor.device.application.port.in.ListHomeDevices;
+import com.energymonitor.device.application.port.in.ReissueDeviceCredentials;
 import com.energymonitor.device.application.port.in.UnlinkDevice;
+import com.energymonitor.device.application.port.in.UpdateDevice;
 import com.energymonitor.device.application.port.out.ApplianceTypePersistencePort;
 import com.energymonitor.device.application.port.out.ApplianceTypePersistencePort.ApplianceTypeEntry;
 import com.energymonitor.device.api.DeviceLinked;
@@ -35,14 +38,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Devices as seen from a home: listing, linking and unlinking.
+ * Devices as seen from a home: listing, linking, editing, reissuing credentials and unlinking.
  *
- * <p>Access rules: any member may list; only an OWNER may link or unlink. A caller who is not a
+ * <p>Access rules: any member may list; only an OWNER may change anything. A caller who is not a
  * member gets "home not found", so the endpoints cannot be used to probe home identifiers.
  */
 @Service
 @Transactional
-public class HomeDeviceService implements LinkDevice, UnlinkDevice, ListHomeDevices, ListApplianceTypes {
+public class HomeDeviceService implements LinkDevice, UnlinkDevice, ListHomeDevices, ListApplianceTypes,
+        UpdateDevice, ReissueDeviceCredentials {
 
     private final DevicePersistencePort devices;
     private final DeviceHomePersistencePort deviceHomes;
@@ -95,13 +99,30 @@ public class HomeDeviceService implements LinkDevice, UnlinkDevice, ListHomeDevi
     }
 
     @Override
+    public HomeDeviceResult update(UpdateDeviceCommand command) {
+        requireOwner(command.userId(), command.homeId());
+        if (!applianceTypes.exists(command.applianceTypeId())) {
+            throw new ApplianceTypeNotFoundException(command.applianceTypeId());
+        }
+        Device device = deviceOfHome(command.homeId(), command.deviceId())
+                .edited(command.name(), command.applianceTypeId(), command.location());
+        devices.save(device);
+        return toResult(device, applianceTypeNames());
+    }
+
+    @Override
+    public LinkedDeviceResult reissue(String userId, String homeId, String deviceId) {
+        requireOwner(userId, homeId);
+        String apiKey = identifiers.nextApiKey();
+        Device device = deviceOfHome(homeId, deviceId).withApiKey(apiKey);
+        devices.save(device);
+        return new LinkedDeviceResult(toResult(device, applianceTypeNames()), apiKey);
+    }
+
+    @Override
     public void unlink(UnlinkDeviceCommand command) {
         requireOwner(command.userId(), command.homeId());
-        Device device = devices.findById(command.deviceId())
-                .filter(d -> deviceHomes.findByDeviceId(d.idDevice())
-                        .map(link -> link.homeId().equals(command.homeId()))
-                        .orElse(false))
-                .orElseThrow(() -> new DeviceNotFoundException(command.deviceId()));
+        Device device = deviceOfHome(command.homeId(), command.deviceId());
         deviceHomes.unlink(device.idDevice());
         // The old key stops working; the module needs to be linked again to get a new one.
         devices.save(device.relinked(device.name(), device.applianceTypeId(), device.location(),
@@ -126,6 +147,14 @@ public class HomeDeviceService implements LinkDevice, UnlinkDevice, ListHomeDevi
     @Transactional(readOnly = true)
     public List<ApplianceTypeEntry> list() {
         return applianceTypes.findAll();
+    }
+
+    private Device deviceOfHome(String homeId, String deviceId) {
+        return devices.findById(deviceId)
+                .filter(d -> deviceHomes.findByDeviceId(d.idDevice())
+                        .map(link -> link.homeId().equals(homeId))
+                        .orElse(false))
+                .orElseThrow(() -> new DeviceNotFoundException(deviceId));
     }
 
     private void requireOwner(String userId, String homeId) {
