@@ -113,6 +113,17 @@ app:
     pending-threshold: 30m
     sweep-delay: 5m
 
+notification:
+  # Base URL of the web app, for the links in alert mail.
+  web-url: ${NOTIFICATION_WEB_URL:http://localhost:5173}
+  push:
+    # VAPID key pair for Web Push (base64url: public = 65-byte point, private = 32-byte scalar).
+    # Generate once per environment (docs: devices/README.md) and never rotate it casually:
+    # browsers bind their subscription to the public key. Empty = push disabled.
+    vapid-public-key: ${NOTIFICATION_VAPID_PUBLIC_KEY:}
+    vapid-private-key: ${NOTIFICATION_VAPID_PRIVATE_KEY:}
+    subject: ${NOTIFICATION_VAPID_SUBJECT:mailto:support.energymonitor@gmail.com}
+
 management:
   endpoints:
     web:
@@ -122,3 +133,38 @@ management:
     mail:
       # A mail server that is down is not the application's health: it must not fail the probe.
       enabled: false
+
+mqtt:
+  # The backend subscribes over the plain listener. Locally and in a compose deployment the
+  # broker runs next to the backend, so this connection never leaves the host; devices use TLS.
+  broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}
+  # Suffixed with -telemetry and -status. Must differ per backend instance.
+  client-id: ${MQTT_CLIENT_ID:energy-monitor-backend}
+  # Also the credentials the broker accepts for the backend: the broker asks
+  # /internal/mqtt/auth/user, and these are compared there, so they live in one place.
+  username: ${MQTT_BACKEND_USER:em-backend}
+  password: ${MQTT_BACKEND_PASS:change-me}
+  topics:
+    telemetry: energy-monitor/devices/+/telemetry
+    status: energy-monitor/devices/+/status
+  qos: 0
+  keep-alive-interval: 60
+  clean-session: true
+  connection-timeout: 30
+  broker-auth:
+    # Addresses allowed to call /internal/mqtt/auth/**: loopback and the private range Docker
+    # uses, where the broker container lives. Narrow it in production if the network allows it.
+    allowed-networks: ${MQTT_AUTH_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
+
+device:
+  connectivity:
+    # A device not heard from for this long is marked OFFLINE. Telemetry comes every 60 s at
+    # QoS 0, so one lost sample plus network jitter is tolerated before declaring it gone.
+    offline-after: ${DEVICE_OFFLINE_AFTER:PT150S}
+    check-interval: PT30S
+  provisioning:
+    # Broker address the web app writes to a module over Bluetooth when linking it. It must be
+    # reachable from the home network: the LAN IP of this PC in development, the public domain
+    # of the broker in production. Never localhost.
+    mqtt-host: ${DEVICE_MQTT_PUBLIC_HOST:}
+    mqtt-port: ${DEVICE_MQTT_PUBLIC_PORT:8883}

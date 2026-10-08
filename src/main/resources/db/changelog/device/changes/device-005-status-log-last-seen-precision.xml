@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        The latest row of a device is its current connectivity state, chosen by last_seen. With
+        whole seconds, a last will arriving in the same second as the previous telemetry ties with
+        it and the current state becomes ambiguous. Microseconds remove the tie; the application
+        also keeps last_seen strictly increasing per device.
+    -->
+    <changeSet id="device-005-status-log-last-seen-precision" author="JuanCortes2045">
+        <comment>last_seen of device_status_log keeps microseconds.</comment>
+        <sql dbms="mysql">ALTER TABLE device_status_log MODIFY last_seen TIMESTAMP(6) NOT NULL</sql>
+
+        <rollback>
+            <sql dbms="mysql">ALTER TABLE device_status_log MODIFY last_seen TIMESTAMP NOT NULL</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
