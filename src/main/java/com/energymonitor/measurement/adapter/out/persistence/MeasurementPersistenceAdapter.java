@@ -76,6 +76,11 @@ public class MeasurementPersistenceAdapter implements MeasurementPersistencePort
     }
 
     @Override
+    public List<String> devicesReportingSince(Instant since) {
+        return repository.findDeviceIdsReportingSince(since);
+    }
+
+    @Override
     public Optional<Measurement> findLatestActiveByDeviceBefore(String deviceId, Instant before) {
         return repository.findFirstByDeviceIdAndDeletedAtIsNullAndDateTimeBeforeOrderByDateTimeDesc(deviceId, before)
                 .map(mapper::toDomain);
