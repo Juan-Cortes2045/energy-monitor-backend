@@ -1,6 +1,8 @@
 package com.energymonitor.alert.application.usecase;
 
 import com.energymonitor.alert.api.AlertRaised;
+import com.energymonitor.alert.api.AlertStatus;
+import com.energymonitor.alert.api.AlertType;
 import com.energymonitor.alert.application.command.RegisterThresholdAlertCommand;
 import com.energymonitor.alert.application.port.in.RegisterThresholdAlert;
 import com.energymonitor.alert.application.port.out.AlertEventPort;
@@ -23,9 +25,10 @@ import java.util.Optional;
  * classification as the {@link ConsumptionLevelLookupPort}, and the factory as
  * {@link Alert#threshold}.
  *
- * <p><strong>Alerting rule (initial, documented):</strong> only HIGH and CRITICAL readings
- * raise an alert. The message key follows the level: {@code alert.threshold.high} or
- * {@code alert.threshold.critical}.
+ * <p><strong>Alerting rule:</strong> only HIGH and CRITICAL readings raise an alert, at most one
+ * pending per device and level. A LOW or MEDIUM reading resolves the pending ones of that device:
+ * the alert closes itself when consumption is back to normal. The message key follows the
+ * level: {@code alert.threshold.high} or {@code alert.threshold.critical}.
  *
  * <p><strong>Home resolution:</strong> the home comes from the device through
  * {@link HomeLookupPort}. While the Devices module does not expose the relationship, the
@@ -66,14 +69,24 @@ public class RegisterThresholdAlertService implements RegisterThresholdAlert {
             return Optional.empty();
         }
         String messageKey = MESSAGE_KEY_BY_RISK.get(level.get().name());
+        var homeId = homes.findHomeIdByDeviceId(command.deviceId());
+        if (homeId.isEmpty()) {
+            // A device without a home has nobody to tell
+            return Optional.empty();
+        }
         if (messageKey == null) {
-            // LOW and MEDIUM readings never alert
+            // LOW and MEDIUM readings never alert, and they mean consumption is back to normal:
+            // the threshold alerts still pending for this device are resolved by the system.
+            resolvePendingThresholdAlerts(homeId.get(), command.deviceId());
             return Optional.empty();
         }
 
-        var homeId = homes.findHomeIdByDeviceId(command.deviceId());
-        if (homeId.isEmpty()) {
-            // Documented gap: the Devices module does not expose DeviceHome yet
+        // One reading per minute would otherwise raise one alert per minute: while an alert with
+        // the same level is still PENDING for the device, the new reading adds nothing.
+        boolean alreadyPending = alertPort.listActiveByHome(homeId.get(), AlertStatus.PENDING).stream()
+                .anyMatch(a -> a.type() == AlertType.THRESHOLD && command.deviceId().equals(a.deviceId())
+                        && messageKey.equals(a.messageKey()));
+        if (alreadyPending) {
             return Optional.empty();
         }
 
@@ -87,5 +100,14 @@ public class RegisterThresholdAlertService implements RegisterThresholdAlert {
                 alert.consumptionLevelId(), alert.measurementId()));
 
         return Optional.of(AlertResult.from(alert));
+    }
+
+    private void resolvePendingThresholdAlerts(String homeId, String deviceId) {
+        alertPort.listActiveByHome(homeId, AlertStatus.PENDING).stream()
+                .filter(a -> a.type() == AlertType.THRESHOLD && deviceId.equals(a.deviceId()))
+                .forEach(alert -> {
+                    alert.resolve();
+                    alertPort.save(alert);
+                });
     }
 }

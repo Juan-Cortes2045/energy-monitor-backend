@@ -3,12 +3,14 @@ package com.energymonitor.alert.adapter.out.persistence;
 import com.energymonitor.alert.adapter.out.persistence.entity.AlertEntity;
 import com.energymonitor.alert.adapter.out.persistence.mapper.AlertMapper;
 import com.energymonitor.alert.adapter.out.persistence.repository.AlertRepository;
+import com.energymonitor.alert.adapter.out.persistence.support.Instants;
 import com.energymonitor.alert.api.AlertStatus;
 import com.energymonitor.alert.application.port.out.AlertPersistencePort;
 import com.energymonitor.alert.domain.model.Alert;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Persistence adapter for {@link Alert}.
@@ -51,5 +53,17 @@ public class AlertPersistenceAdapter implements AlertPersistencePort {
         return entities.stream()
                 .map(mapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public void delete(String idAlert) {
+        repository.softDelete(idAlert, Instants.now());
+    }
+
+    @Override
+    @Transactional
+    public int deleteResolved(String homeId) {
+        return repository.softDeleteByStatus(homeId, AlertStatus.RESOLVED, Instants.now());
     }
 }

@@ -23,10 +23,21 @@ class ResolveAlertServiceTest {
     }
 
     private Alert seedPending() {
-        Alert alert = Alert.threshold("ale0000001", "hom0000001", "dev0000001",
-                "alert.threshold.high", AlertUseCaseFixtures.NOW, "high000001", "mea0000001");
+        Alert alert = Alert.device("ale0000001", "hom0000001", "dev0000001", "alert.device.linked",
+                AlertUseCaseFixtures.NOW);
         alertPort.seed(alert);
         return alert;
+    }
+
+    @Test
+    void alertsTheSystemResolvesCannotBeResolvedByHand() {
+        alertPort.seed(Alert.threshold("ale0000002", "hom0000001", "dev0000001",
+                "alert.threshold.high", AlertUseCaseFixtures.NOW, "high000001", "mea0000001"));
+        alertPort.seed(Alert.connectivity("ale0000003", "hom0000001", "dev0000001",
+                "alert.connectivity.offline", AlertUseCaseFixtures.NOW));
+
+        assertThrows(IllegalStateException.class, () -> service.resolve(new ResolveAlertCommand("ale0000002")));
+        assertThrows(IllegalStateException.class, () -> service.resolve(new ResolveAlertCommand("ale0000003")));
     }
 
     @Test

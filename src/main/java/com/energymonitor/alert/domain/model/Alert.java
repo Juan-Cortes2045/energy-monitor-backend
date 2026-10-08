@@ -112,6 +112,17 @@ public class Alert {
                 AlertStatus.PENDING, null, null);
     }
 
+    /**
+     * Raises a DEVICE alert: informational, e.g. a module was linked to the home.
+     *
+     * @return a new PENDING alert; resolving it means "seen"
+     */
+    public static Alert device(String idAlert, String homeId, String deviceId, String messageKey,
+                               Instant dateTime) {
+        return new Alert(idAlert, homeId, deviceId, AlertType.DEVICE, messageKey, dateTime,
+                AlertStatus.PENDING, null, null);
+    }
+
     /** @return the identifier */
     public String idAlert() {
         return idAlert;

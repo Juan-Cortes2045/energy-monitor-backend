@@ -34,4 +34,10 @@ public interface AlertPersistencePort {
      * @return the alerts, most recent first
      */
     List<Alert> listActiveByHome(String homeId, AlertStatus status);
+
+    /** Soft-deletes one alert. */
+    void delete(String idAlert);
+
+    /** Soft-deletes every RESOLVED alert of a home. @return how many */
+    int deleteResolved(String homeId);
 }
