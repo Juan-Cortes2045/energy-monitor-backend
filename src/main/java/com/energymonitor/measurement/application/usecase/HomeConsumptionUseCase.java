@@ -7,7 +7,6 @@ import com.energymonitor.measurement.application.port.in.AuthorizeDeviceRead;
 import com.energymonitor.measurement.application.port.in.GetHomeConsumption;
 import com.energymonitor.measurement.application.port.out.ConsumptionLevelPersistencePort;
 import com.energymonitor.measurement.application.port.out.HomeAccessPort;
-import com.energymonitor.measurement.application.port.out.HourlyEnergyRow;
 import com.energymonitor.measurement.application.port.out.MeasurementPersistencePort;
 import com.energymonitor.measurement.application.result.HomeConsumptionHistoryResult;
 import com.energymonitor.measurement.application.result.HomeConsumptionHistoryResult.Bucket;
@@ -15,6 +14,7 @@ import com.energymonitor.measurement.application.result.HomeConsumptionHistoryRe
 import com.energymonitor.measurement.application.result.HomeConsumptionSummaryResult;
 import com.energymonitor.measurement.application.result.HomeConsumptionSummaryResult.DeviceConsumption;
 import com.energymonitor.measurement.application.result.HomeConsumptionSummaryResult.HourPower;
+import com.energymonitor.measurement.application.usecase.HourlyEnergyCalculator.HourEnergy;
 import com.energymonitor.measurement.domain.model.ConsumptionLevel;
 import com.energymonitor.measurement.domain.model.Measurement;
 import java.time.Clock;
@@ -35,11 +35,8 @@ import java.util.function.Function;
 /**
  * Consumption of a home, computed from hourly aggregates of its devices.
  *
- * <p><strong>Energy.</strong> {@code storedEnergy} is the cumulative counter of the meter, so the
- * energy of an hour is its highest reading minus the highest reading of the previous hour (or
- * the last reading before the range, for the first one). A counter that goes backwards (meter
- * reset or replaced) restarts the sequence: that hour counts only its own spread. Energy is never
- * negative.
+ * <p><strong>Energy.</strong> Computed per hour by {@link HourlyEnergyCalculator} from the
+ * cumulative {@code storedEnergy} counter of the meter.
  *
  * <p><strong>Time zones.</strong> Hours are aggregated in UTC and then placed in local days and
  * months; this is exact for every zone with whole-hour offsets.
@@ -53,6 +50,7 @@ public class HomeConsumptionUseCase implements GetHomeConsumption, AuthorizeDevi
     private static final DateTimeFormatter MONTH_KEY = DateTimeFormatter.ofPattern("yyyy-MM");
 
     private final MeasurementPersistencePort measurements;
+    private final HourlyEnergyCalculator energyCalculator;
     private final ConsumptionLevelPersistencePort levels;
     private final HomeAccessPort homes;
     private final Clock clock;
@@ -65,6 +63,7 @@ public class HomeConsumptionUseCase implements GetHomeConsumption, AuthorizeDevi
     public HomeConsumptionUseCase(MeasurementPersistencePort measurements, ConsumptionLevelPersistencePort levels,
                                   HomeAccessPort homes, Clock clock, Duration freshness) {
         this.measurements = measurements;
+        this.energyCalculator = new HourlyEnergyCalculator(measurements);
         this.levels = levels;
         this.homes = homes;
         this.clock = clock;
@@ -227,30 +226,8 @@ public class HomeConsumptionUseCase implements GetHomeConsumption, AuthorizeDevi
         }
     }
 
-    private record HourEnergy(Instant start, double averagePower, double energy) {
-    }
-
-    /** Energy of every hour with readings, per device, oldest first. */
     private Map<String, List<HourEnergy>> hourlyEnergy(List<String> deviceIds, Instant from, Instant to) {
-        Map<String, List<HourEnergy>> result = new LinkedHashMap<>();
-        if (deviceIds.isEmpty()) {
-            return result;
-        }
-        Map<String, Double> previous = new LinkedHashMap<>();
-        for (String deviceId : deviceIds) {
-            measurements.findLatestActiveByDeviceBefore(deviceId, from)
-                    .ifPresent(m -> previous.put(deviceId, m.getStoredEnergy()));
-        }
-        for (HourlyEnergyRow row : measurements.aggregateHourly(deviceIds, from, to)) {
-            Double before = previous.get(row.deviceId());
-            double energy = before == null || row.maxStoredEnergy() < before
-                    ? row.maxStoredEnergy() - row.minStoredEnergy()
-                    : row.maxStoredEnergy() - before;
-            previous.put(row.deviceId(), row.maxStoredEnergy());
-            result.computeIfAbsent(row.deviceId(), id -> new ArrayList<>())
-                    .add(new HourEnergy(row.hourStart(), row.averagePower(), Math.max(0, energy)));
-        }
-        return result;
+        return energyCalculator.compute(deviceIds, from, to);
     }
 
     private static double round(double value) {
