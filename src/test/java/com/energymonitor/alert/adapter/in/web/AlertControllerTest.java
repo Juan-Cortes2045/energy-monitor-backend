@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.energymonitor.alert.api.AlertStatus;
 import com.energymonitor.alert.api.AlertType;
 import com.energymonitor.alert.application.exception.AlertNotFoundException;
+import com.energymonitor.alert.application.port.in.AuthorizeAlertAccess;
+import com.energymonitor.alert.application.port.in.DeleteAlerts;
 import com.energymonitor.alert.application.port.in.GetAlert;
 import com.energymonitor.alert.application.port.in.ListAlerts;
 import com.energymonitor.alert.application.port.in.ResolveAlert;
@@ -49,6 +51,15 @@ class AlertControllerTest {
 
     @MockitoBean
     private ResolveAlert resolveAlert;
+
+    @MockitoBean
+    private DeleteAlerts deleteAlerts;
+
+    @MockitoBean
+    private AuthorizeAlertAccess authorizeAlertAccess;
+
+    @MockitoBean
+    private CurrentUserResolver currentUser;
 
     @MockitoBean
     private Clock clock;
@@ -104,7 +115,7 @@ class AlertControllerTest {
                 "dev0000001", AlertType.THRESHOLD, "alert.threshold.high", DATE_TIME,
                 AlertStatus.RESOLVED, "high000001", "mea0000001"));
 
-        mockMvc.perform(put("/api/v1/alerts/ale0000001/resolve"))
+        mockMvc.perform(put("/api/v1/alerts/ale0000001/read"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.alertStatus").value("RESOLVED"));
     }
@@ -113,7 +124,7 @@ class AlertControllerTest {
     void resolveReturns404WhenMissing() throws Exception {
         when(resolveAlert.resolve(any())).thenThrow(new AlertNotFoundException("no alert ale0000009"));
 
-        mockMvc.perform(put("/api/v1/alerts/ale0000009/resolve"))
+        mockMvc.perform(put("/api/v1/alerts/ale0000009/read"))
                 .andExpect(status().isNotFound());
     }
 
@@ -122,7 +133,7 @@ class AlertControllerTest {
         when(resolveAlert.resolve(any()))
                 .thenThrow(new IllegalStateException("alert ale0000001 is already resolved"));
 
-        mockMvc.perform(put("/api/v1/alerts/ale0000001/resolve"))
+        mockMvc.perform(put("/api/v1/alerts/ale0000001/read"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("alert ale0000001 is already resolved"));
     }

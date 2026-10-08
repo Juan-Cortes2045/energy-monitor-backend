@@ -54,6 +54,21 @@ public final class AlertUseCaseFixtures {
                     .toList();
         }
 
+        @Override
+        public void delete(String idAlert) {
+            byId.remove(idAlert);
+        }
+
+        @Override
+        public int deleteResolved(String homeId) {
+            var resolved = byId.values().stream()
+                    .filter(a -> a.homeId().equals(homeId) && !a.isPending())
+                    .map(Alert::idAlert)
+                    .toList();
+            resolved.forEach(byId::remove);
+            return resolved.size();
+        }
+
         public void seed(Alert alert) {
             byId.put(alert.idAlert(), alert);
         }
@@ -90,6 +105,11 @@ public final class AlertUseCaseFixtures {
         @Override
         public Optional<String> findHomeIdByDeviceId(String deviceId) {
             return Optional.ofNullable(homeByDevice.get(deviceId));
+        }
+
+        @Override
+        public boolean isMember(String userId, String homeId) {
+            return true;
         }
 
         public void link(String deviceId, String homeId) {

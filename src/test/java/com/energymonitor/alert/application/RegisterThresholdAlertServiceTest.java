@@ -96,4 +96,24 @@ class RegisterThresholdAlertServiceTest {
         assertTrue(alertPort.findActive("id0000001").isEmpty());
         assertTrue(events.published.isEmpty());
     }
+
+    @Test
+    void aRepeatedHighReadingDoesNotRaiseASecondAlert() {
+        homes.link("dev0000001", "hom0000001");
+
+        assertTrue(service.register(command(2000)).isPresent());
+        assertTrue(service.register(command(2100)).isEmpty());
+    }
+
+    @Test
+    void aNormalReadingResolvesThePendingThresholdAlert() {
+        homes.link("dev0000001", "hom0000001");
+        var raised = service.register(command(2000)).orElseThrow();
+
+        service.register(command(250));
+
+        assertEquals(AlertStatus.RESOLVED, alertPort.findActive(raised.idAlert()).orElseThrow().alertStatus());
+        // and the next spike alerts again
+        assertTrue(service.register(command(2000)).isPresent());
+    }
 }
