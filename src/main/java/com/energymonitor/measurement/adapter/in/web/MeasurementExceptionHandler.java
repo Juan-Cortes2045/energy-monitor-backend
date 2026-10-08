@@ -1,6 +1,7 @@
 package com.energymonitor.measurement.adapter.in.web;
 
 import com.energymonitor.measurement.application.exception.ConsumptionLevelNotFoundException;
+import com.energymonitor.measurement.application.exception.HomeNotAccessibleException;
 import com.energymonitor.measurement.application.exception.MeasurementNotFoundException;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -25,6 +26,12 @@ public class MeasurementExceptionHandler {
 
     @ExceptionHandler(MeasurementNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleMeasurementNotFound(MeasurementNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(HomeNotAccessibleException.class)
+    public ResponseEntity<Map<String, String>> handleHomeNotAccessible(HomeNotAccessibleException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", e.getMessage()));
     }
