@@ -21,6 +21,9 @@ public interface MeasurementRepository extends JpaRepository<MeasurementEntity, 
 
     Optional<MeasurementEntity> findFirstByDeviceIdAndDeletedAtIsNullOrderByDateTimeDesc(String deviceId);
 
+    @Query("select distinct m.deviceId from MeasurementEntity m where m.deletedAt is null and m.dateTime >= :since")
+    List<String> findDeviceIdsReportingSince(@Param("since") Instant since);
+
     Optional<MeasurementEntity> findFirstByDeviceIdAndDeletedAtIsNullAndDateTimeBeforeOrderByDateTimeDesc(
             String deviceId, Instant before);
 

@@ -96,6 +96,15 @@ public final class MeasurementUseCaseFixtures {
                     .max(Comparator.comparing(Measurement::dateTime));
         }
 
+        @Override
+        public List<String> devicesReportingSince(Instant since) {
+            return byId.values().stream()
+                    .filter(m -> !m.dateTime().isBefore(since))
+                    .map(Measurement::deviceId)
+                    .distinct()
+                    .toList();
+        }
+
         public void seed(Measurement measurement) {
             byId.put(measurement.idMeasurement(), measurement);
         }
