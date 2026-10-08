@@ -1,5 +1,7 @@
 package com.energymonitor.home.adapter.in.web.dto;
 
+import com.energymonitor.home.api.LimitPeriod;
+
 /**
  * Response DTO for home thresholds.
  *
@@ -14,6 +16,7 @@ public record HomeThresholdsResponse(
         String homeId,
         double dailyLimit,
         double monthlyLimit,
-        boolean useSystemDefault
+        boolean useSystemDefault,
+        LimitPeriod limitPeriod
 ) {
 }
