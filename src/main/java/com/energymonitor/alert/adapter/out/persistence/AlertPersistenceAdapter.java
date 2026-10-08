@@ -7,6 +7,7 @@ import com.energymonitor.alert.adapter.out.persistence.support.Instants;
 import com.energymonitor.alert.api.AlertStatus;
 import com.energymonitor.alert.application.port.out.AlertPersistencePort;
 import com.energymonitor.alert.domain.model.Alert;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -65,5 +66,11 @@ public class AlertPersistenceAdapter implements AlertPersistencePort {
     @Transactional
     public int deleteResolved(String homeId) {
         return repository.softDeleteByStatus(homeId, AlertStatus.RESOLVED, Instants.now());
+    }
+
+    @Override
+    public boolean existsForDeviceSince(String deviceId, String messageKey, Instant since) {
+        return repository.existsByDeviceIdAndMessageKeyAndDateTimeGreaterThanEqual(deviceId, messageKey,
+                Instants.truncate(since));
     }
 }
