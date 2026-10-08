@@ -168,3 +168,12 @@ device:
     # of the broker in production. Never localhost.
     mqtt-host: ${DEVICE_MQTT_PUBLIC_HOST:}
     mqtt-port: ${DEVICE_MQTT_PUBLIC_PORT:8883}
+
+recommendation:
+  # The rules run over the hourly energy of every home with readings in the last week.
+  evaluate-interval: ${RECOMMENDATION_EVALUATE_INTERVAL:PT1H}
+  initial-delay: PT2M
+  # Zone of the day-part rules: evening peak (18-22 h), night standby (1-5 h), calendar month.
+  zone: ${RECOMMENDATION_ZONE:America/Bogota}
+  # The same advice is not repeated for the same home and device within this period.
+  cool-down: P7D

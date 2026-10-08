@@ -57,4 +57,7 @@ public interface MeasurementPersistencePort {
      * the cumulative energy counter for a range starting there.
      */
     Optional<Measurement> findLatestActiveByDeviceBefore(String deviceId, Instant before);
+
+    /** Distinct devices with at least one active reading since {@code since}. */
+    List<String> devicesReportingSince(Instant since);
 }

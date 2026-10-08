@@ -1,5 +1,8 @@
 package com.energymonitor.measurement.api;
 
+import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -33,4 +36,17 @@ public interface MeasurementApi {
      * @return the level DTO, empty when not found
      */
     Optional<ConsumptionLevelDto> findLevel(RiskConsumption name);
+
+    /**
+     * Energy per device and UTC hour, computed from the cumulative counter the same way as the
+     * consumption endpoints.
+     *
+     * @return one entry per device and hour with readings, oldest first
+     */
+    List<HourlyEnergyDto> hourlyEnergy(Collection<String> deviceIds, Instant from, Instant to);
+
+    /**
+     * Devices that published at least one reading since an instant.
+     */
+    List<String> devicesReportingSince(Instant since);
 }
