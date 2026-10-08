@@ -5,9 +5,31 @@ Backend for Energy Monitor, built with Spring Boot 4.1.1 on Java 21.
 ## Requirements
 
 - Java 21 or later
-- Docker and Docker Compose, for the MySQL 8 database
-- OpenSSL, to generate the RSA key pair
+- Docker and Docker Compose, for MySQL 8 and the MQTT broker
+- OpenSSL, to generate the RSA key pair, the VAPID keys and the broker's TLS certificate
 - No Maven install needed: use the bundled `./mvnw` (`mvnw.cmd` on Windows)
+
+## Quick start on a new machine
+
+The whole system runs on one PC in development: MySQL and the backend (this repository), the
+MQTT broker (`devices/docker`), the web app (`frontend/energy-monitor-web`) and the ESP32 on the
+same Wi-Fi. In order:
+
+| # | Step | Where |
+|---|---|---|
+| 1 | `cp .env.example .env` and fill every `CHANGE_ME` | section 1 |
+| 2 | `docker compose up -d` (MySQL) | section 2 |
+| 3 | `cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml` | section 3 |
+| 4 | Generate the RSA key pair for JWT | section 4 |
+| 5 | Mail account (Gmail app password) | section 5 |
+| 6 | `./mvnw spring-boot:run` → `http://localhost:8080/actuator/health` says `UP` | section 6 |
+| 7 | MQTT broker: TLS certificate, firewall rule, `docker compose up -d` in `devices/docker` | section 9 |
+| 8 | Optional: VAPID keys for browser push | section 10 |
+| 9 | Web app: `npm install`, `npm run dev` | `frontend/energy-monitor-web/README.md` |
+| 10 | Firmware: flash the ESP32 and link it from the web | `devices/README.md` |
+
+The backend has to be up before the broker accepts any connection: Mosquitto asks it to
+authenticate every client, including the backend itself (it retries every 10 s on its own).
 
 ## 1. Database credentials
 
@@ -343,6 +365,104 @@ recovery codes, committed on purpose so every machine hashes identically. That
 pepper is confined to this file: outside the `test` profile the pepper is still
 required through `SECURITY_RESET_PEPPER`, and the application refuses to start
 without it.
+
+## 9. MQTT broker and devices
+
+Devices (ESP32 + PZEM-004T) publish telemetry over **MQTT with TLS** to Eclipse Mosquitto. The
+broker lives in `devices/docker` and delegates authentication and topic ACL to this backend
+(`POST /internal/mqtt/auth/user` and `/acl`, mosquitto-go-auth), so a device registered in the
+`device` table can connect with its `device_code` / `api_key` and nothing else is configured in
+the broker. Full contract and firmware steps: `devices/README.md`.
+
+1. `.env`: `MQTT_BACKEND_USER`, `MQTT_BACKEND_PASS` (any random value) and
+   `DEVICE_MQTT_PUBLIC_HOST` = the LAN IP of this PC (`hostname -I`, never `localhost`). That IP
+   is what the web app hands to a module when it is linked.
+2. TLS certificate for the broker, valid for the IPs of this PC (re-run it if the IP changes):
+
+   ```bash
+   cd ../../devices/docker
+   ./mosquitto/generate-dev-certs.sh
+   ```
+
+3. Linux with `ufw` only: the broker container calls the backend on the host, which ufw blocks.
+   Allow the Docker networks, not the LAN:
+
+   ```bash
+   sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp comment 'mosquitto -> backend'
+   ```
+
+4. Start the broker (with the backend already running):
+
+   ```bash
+   docker compose up -d
+   docker compose logs -f mosquitto   # the backend shows up as energy-monitor-backend-telemetry / -status
+   ```
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `MQTT_BROKER_URL` | `tcp://localhost:1883` | internal listener (plain, loopback only) |
+| `MQTT_BACKEND_USER` / `MQTT_BACKEND_PASS` | `em-backend` / `change-me` | backend credentials in the broker |
+| `MQTT_CLIENT_ID` | `energy-monitor-backend` | must differ per backend instance |
+| `MQTT_AUTH_ALLOWED_NETWORKS` | `127.0.0.1/32,::1/128,172.16.0.0/12` | who may call `/internal/mqtt/auth/**` |
+| `DEVICE_MQTT_PUBLIC_HOST` / `_PORT` | — / `8883` | broker address given to devices when linked |
+| `DEVICE_OFFLINE_AFTER` | `PT150S` | a device silent this long is marked OFFLINE |
+
+A public reverse proxy must **not** forward `/internal/**` (section 7: behind it every request
+looks local).
+
+## 10. Alert notifications (mail and browser push)
+
+Every alert (device linked, device disconnected, high/critical consumption) is delivered to all
+members of the home, by mail and by Web Push according to each user's
+**Settings > Notifications** (`/api/v1/notifications/preferences`, both on by default). Mail uses
+the SMTP account of section 5; every attempt is a row of the `notification` table.
+
+Push needs a VAPID key pair in `.env` (`NOTIFICATION_VAPID_PUBLIC_KEY` / `_PRIVATE_KEY`); the
+commands are in `.env.example`. Generate it **once per environment** and keep it: browsers bind
+their subscription to the public key. Without it push is off and mail still works. Browsers
+only allow push on `https://` or `http://localhost`.
+
+`NOTIFICATION_WEB_URL` is the address of the web app used by the links in the mail.
+
+## 11. Docker image
+
+`Dockerfile` builds the production image (Temurin 21, runs as a non-root user, uid 10001).
+`devices/docker/docker-compose.prod.yml` builds it and runs it next to MySQL and the broker on a
+server; that compose file and `devices/README.md` section 7 describe the deployment.
+
+To try the image on this machine (with MySQL and the broker of sections 2 and 9 running, and the
+local backend **stopped**, or two backends would store every reading twice):
+
+```bash
+docker build -t energy-monitor-backend .
+docker run --rm --network host --user "$(id -u):$(id -g)" \
+  --env-file .env \
+  -e SPRING_PROFILES_ACTIVE=prod \
+  -e SPRING_DATASOURCE_URL='jdbc:mysql://localhost:3306/energy_monitor?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true' \
+  -e SPRING_DATASOURCE_USERNAME=energy_app \
+  -e SPRING_DATASOURCE_PASSWORD=<same as MYSQL_PASSWORD> \
+  -e SECURITY_JWT_PRIVATE_KEY_PATH=/run/keys/private.pem \
+  -e SECURITY_JWT_PUBLIC_KEY_PATH=/run/keys/public.pem \
+  -v "$HOME/.energy-monitor/keys:/run/keys:ro" \
+  energy-monitor-backend
+```
+
+- Any profile other than `local` works (`prod` above): `application-local.yaml` is not inside
+  the image, so every setting comes from the environment.
+- `--user "$(id -u):$(id -g)"` lets the container read your `private.pem` (mode 600). On a
+  server, either make the key readable by uid 10001 or set `BACKEND_UID`/`BACKEND_GID` in the
+  production compose.
+
+## 12. Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Tests fail with `Access denied for user 'energymonitor'` | `.env` sets `SPRING_DATASOURCE_USERNAME` to something other than `energy_app`: remove it |
+| `Too many connections` in a few persistence tests | the backend is running while the suite runs; both use the same MySQL. Run the failing class alone or stop the backend |
+| Broker logs `context deadline exceeded` calling `backend:8080` | backend stopped, or the ufw rule of section 9 is missing |
+| Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: re-run `generate-dev-certs.sh` and restart the broker |
+| Device logs `rc=4` / `rc=5` | `device_code` / `api_key` do not match the `device` table (link it again from the web) |
+| Container: `Failed to read the RSA private key PEM` | the container user cannot read the key: see section 11 |
 
 ## Useful commands
 
