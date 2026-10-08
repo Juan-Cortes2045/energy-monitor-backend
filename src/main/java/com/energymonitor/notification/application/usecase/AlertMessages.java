@@ -23,11 +23,15 @@ public final class AlertMessages {
         String device = deviceName == null ? "un dispositivo" : "«" + deviceName + "»";
         return switch (messageKey) {
             case "alert.device.linked" -> new Message("Nuevo dispositivo vinculado",
-                    "Se vinculó " + device + " en " + home + ". Ya está enviando mediciones.");
+                    device + " ya está conectado en " + home + " y enviando mediciones.");
             case "alert.connectivity.offline" -> new Message("Dispositivo desconectado",
                     device + " de " + home + " dejó de enviar datos. Revisa que siga enchufado y con Wi-Fi.");
             case "alert.threshold.critical" -> new Message("Consumo crítico",
                     device + " de " + home + " está consumiendo a un nivel crítico.");
+            case "alert.limit.daily" -> new Message("Límite diario alcanzado",
+                    home + " ya consumió hoy el límite diario que configuraste.");
+            case "alert.limit.monthly" -> new Message("Límite mensual alcanzado",
+                    home + " ya consumió este mes el límite mensual que configuraste.");
             case "alert.threshold.high" -> new Message("Consumo alto",
                     device + " de " + home + " está consumiendo por encima de lo habitual.");
             case "recommendation.peakHours" -> new Message("Recomendación: horas pico",
