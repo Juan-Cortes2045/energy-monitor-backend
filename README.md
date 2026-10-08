@@ -424,7 +424,33 @@ only allow push on `https://` or `http://localhost`.
 
 `NOTIFICATION_WEB_URL` is the address of the web app used by the links in the mail.
 
-## 11. Docker image
+New recommendations (section 11) are delivered the same way, with the source type
+`RECOMMENDATION` in the `notification` table.
+
+## 11. Consumption recommendations
+
+Every hour (`RECOMMENDATION_EVALUATE_INTERVAL`, default `PT1H`, first run 2 minutes after start)
+the backend reviews the hourly energy of every home whose devices reported in the last week and
+stores a recommendation when a rule matches:
+
+| Type | Message key | Rule |
+|---|---|---|
+| `PEAK_HOURS` | `recommendation.peakHours` | ≥ 40 % of the last 7 days' energy (min. 2 kWh) used between 18:00 and 22:00 |
+| `SAVING` | `recommendation.standby` | a device (not a refrigerator) drew ≥ 15 W on average between 01:00 and 05:00 on each of the last 3 nights |
+| `HISTORICAL_COMPARISON` | `recommendation.aboveAverage` | last 7 days ≥ 25 % above the 7 before (min. 1 kWh) |
+| `THRESHOLD` | `recommendation.limitProjection` | at the current pace the home exceeds its daily or monthly limit (whichever the owner set) |
+| `HIGH_CONSUMPTION` | `recommendation.deviceIncrease` | a device's mean power in the last 7 days ≥ 30 % above the 21 days before |
+
+- Hours are local to `RECOMMENDATION_ZONE` (default `America/Bogota`).
+- The same advice (home + type + device) is not repeated within 7 days, even if it was deleted.
+- Members read them in the web app (Notifications > Recommendations): `GET
+  /api/v1/recommendations?homeId=`, `PUT /api/v1/recommendations/{id}/read`, `DELETE
+  /api/v1/recommendations/{id}` (read ones only) and `DELETE /api/v1/recommendations?homeId=`
+  (all read ones). A non-member gets 404.
+- The rules need history: the evening-peak and standby rules work after a few days of readings,
+  the week-over-week comparison after two weeks and the per-device comparison after four.
+
+## 12. Docker image
 
 `Dockerfile` builds the production image (Temurin 21, runs as a non-root user, uid 10001).
 `devices/docker/docker-compose.prod.yml` builds it and runs it next to MySQL and the broker on a
@@ -453,7 +479,7 @@ docker run --rm --network host --user "$(id -u):$(id -g)" \
   server, either make the key readable by uid 10001 or set `BACKEND_UID`/`BACKEND_GID` in the
   production compose.
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
@@ -462,7 +488,7 @@ docker run --rm --network host --user "$(id -u):$(id -g)" \
 | Broker logs `context deadline exceeded` calling `backend:8080` | backend stopped, or the ufw rule of section 9 is missing |
 | Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: re-run `generate-dev-certs.sh` and restart the broker |
 | Device logs `rc=4` / `rc=5` | `device_code` / `api_key` do not match the `device` table (link it again from the web) |
-| Container: `Failed to read the RSA private key PEM` | the container user cannot read the key: see section 11 |
+| Container: `Failed to read the RSA private key PEM` | the container user cannot read the key: see section 12 |
 
 ## Useful commands
 
