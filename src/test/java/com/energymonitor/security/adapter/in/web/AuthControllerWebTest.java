@@ -3,6 +3,7 @@ package com.energymonitor.security.adapter.in.web;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
@@ -361,6 +362,52 @@ class AuthControllerWebTest extends JwtKeyedTest {
     }
 
     // ----------------------------------------------------------------------- login
+
+    @Test
+    void signsInWithGoogleWithoutAnAccessToken() throws Exception {
+        given(loginFlow.loginWithGoogle(any(), any(), any()))
+                .willReturn(Optional.of(new SecurityLoginFlow.LoginOutcome("access-token",
+                        "refresh-token", 900L, identity())));
+
+        mvc.perform(post("/api/v1/auth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code":"4/0Ab-google-code"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access-token"))
+                .andExpect(jsonPath("$.account.email").value(EMAIL));
+    }
+
+    @Test
+    void anInvalidGoogleCodeIsUnauthorized() throws Exception {
+        given(loginFlow.loginWithGoogle(any(), any(), any())).willReturn(Optional.empty());
+
+        mvc.perform(post("/api/v1/auth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"code":"expired"}
+                                """))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void googleConflictsAndOutagesHaveTheirOwnStatus() throws Exception {
+        given(loginFlow.loginWithGoogle(eq("taken"), any(), any())).willThrow(
+                new com.energymonitor.security.application.exception.EmailAlreadyRegisteredException("taken"));
+        given(loginFlow.loginWithGoogle(eq("off"), any(), any())).willThrow(
+                new com.energymonitor.security.application.exception.GoogleSignInUnavailableException("off"));
+
+        mvc.perform(post("/api/v1/auth/google").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"taken\"}"))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/v1/auth/google").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"off\"}"))
+                .andExpect(status().isServiceUnavailable());
+        mvc.perform(post("/api/v1/auth/google").contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
 
     @Test
     void logsInAndAnswersTheTokensAndTheAccount() throws Exception {

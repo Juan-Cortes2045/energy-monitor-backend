@@ -3,6 +3,7 @@ package com.energymonitor.security.adapter.in.web;
 import com.energymonitor.security.adapter.in.web.dto.ApiError;
 import com.energymonitor.security.api.AccountDeletionBlockedException;
 import com.energymonitor.security.application.exception.AccountNotActiveException;
+import com.energymonitor.security.application.exception.GoogleSignInUnavailableException;
 import com.energymonitor.security.application.exception.CurrentPasswordMismatchException;
 import com.energymonitor.security.application.exception.EmailAlreadyRegisteredException;
 import com.energymonitor.security.application.exception.InvalidResetTokenException;
@@ -198,6 +199,19 @@ public class SecurityExceptionHandler {
             AuthenticationRejectedException exception, HttpServletRequest request) {
         LOG.debug("Rejected login attempt on {}", request.getRequestURI());
         return respond(HttpStatus.UNAUTHORIZED, exception.getMessage(), request);
+    }
+
+    /**
+     * No Google client is configured on this server.
+     *
+     * @param exception the application failure
+     * @param request   the failed request
+     * @return 503
+     */
+    @ExceptionHandler(GoogleSignInUnavailableException.class)
+    public ResponseEntity<ApiError> handleGoogleUnavailable(GoogleSignInUnavailableException exception,
+                                                            HttpServletRequest request) {
+        return respond(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage(), request);
     }
 
     /**

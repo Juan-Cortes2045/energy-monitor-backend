@@ -33,6 +33,10 @@ public class BrokerAccessService implements AuthorizeBrokerAccess {
     private static final Pattern BACKEND_TOPIC =
             Pattern.compile(Pattern.quote(TOPIC_PREFIX) + "(\\+|[^/+#]+)/(telemetry|status)");
 
+    /** The command topic of one device, which only the backend writes. */
+    private static final Pattern COMMAND_TOPIC =
+            Pattern.compile(Pattern.quote(TOPIC_PREFIX) + "[^/+#]+/command");
+
     private final DevicePersistencePort devices;
     private final String backendUsername;
     private final String backendPassword;
@@ -62,16 +66,20 @@ public class BrokerAccessService implements AuthorizeBrokerAccess {
             return false;
         }
         if (isBackend(username)) {
-            return access != Access.WRITE && BACKEND_TOPIC.matcher(topic).matches();
-        }
-        if (access != Access.WRITE) {
-            return false;
+            if (access == Access.WRITE) {
+                return COMMAND_TOPIC.matcher(topic).matches();
+            }
+            return BACKEND_TOPIC.matcher(topic).matches();
         }
         Optional<Device> device = devices.findByDeviceCode(username);
         if (device.isEmpty()) {
             return false;
         }
         String own = TOPIC_PREFIX + device.get().idDevice() + "/";
+        if (access != Access.WRITE) {
+            // A module only reads (subscribes to) its own command topic.
+            return topic.equals(own + "command");
+        }
         return topic.equals(own + "telemetry") || topic.equals(own + "status");
     }
 

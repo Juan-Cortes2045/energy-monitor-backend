@@ -34,6 +34,9 @@ public interface UserPersistencePort {
      */
     Optional<User> findActiveByEmail(Email email);
 
+    /** The active account created from this Google account ({@code sub}), if any. */
+    Optional<User> findActiveByGoogleSubject(String googleSubject);
+
     /**
      * Marks the user as deleted. Its row stays; {@code findActive} stops returning it.
      *

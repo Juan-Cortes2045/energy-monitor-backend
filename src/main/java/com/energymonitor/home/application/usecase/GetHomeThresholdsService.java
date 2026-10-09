@@ -1,5 +1,6 @@
 package com.energymonitor.home.application.usecase;
 
+import com.energymonitor.home.application.port.out.SystemDefaultsPort;
 import com.energymonitor.home.application.command.GetHomeThresholdsQuery;
 import com.energymonitor.home.application.exception.HomeNotFoundException;
 import com.energymonitor.home.application.port.in.GetHomeThresholds;
@@ -17,11 +18,13 @@ public class GetHomeThresholdsService implements GetHomeThresholds {
 
     private final HomeThresholdsPersistencePort thresholdsPort;
     private final UserHomePersistencePort userHomePort;
+    private final SystemDefaultsPort defaults;
 
     public GetHomeThresholdsService(HomeThresholdsPersistencePort thresholdsPort,
-                                    UserHomePersistencePort userHomePort) {
+                                    UserHomePersistencePort userHomePort, SystemDefaultsPort defaults) {
         this.thresholdsPort = thresholdsPort;
         this.userHomePort = userHomePort;
+        this.defaults = defaults;
     }
 
     @Override
@@ -32,7 +35,7 @@ public class GetHomeThresholdsService implements GetHomeThresholds {
                         "no active membership for user " + query.userId() + " in home " + query.homeId()));
 
         return thresholdsPort.findActiveByHomeId(query.homeId())
-                .map(HomeThresholdsResult::from)
+                .map(t -> HomeThresholdsResult.from(t, defaults))
                 .orElseThrow(() -> new HomeNotFoundException(
                         "no thresholds found for home " + query.homeId()));
     }

@@ -54,6 +54,7 @@ public class UserMapper {
         entity.setFailedLoginAttempts(user.failedLoginAttempts());
         entity.setLastLoginAt(Instants.truncate(user.lastLoginAt().orElse(null)));
         entity.setProfileImage(user.profileImage().orElse(null));
+        entity.setGoogleSubject(user.googleSubject().orElse(null));
     }
 
     /**
@@ -63,7 +64,7 @@ public class UserMapper {
      * @return the domain object
      */
     public User toDomain(UserEntity entity) {
-        return new User(
+        User user = new User(
                 entity.getIdUser(),
                 entity.getPersonId(),
                 PasswordHash.of(entity.getPasswordHash()),
@@ -74,5 +75,9 @@ public class UserMapper {
                 entity.getFailedLoginAttempts(),
                 entity.getLastLoginAt(),
                 entity.getProfileImage());
+        if (entity.getGoogleSubject() != null) {
+            user.bindGoogleAccount(entity.getGoogleSubject());
+        }
+        return user;
     }
 }

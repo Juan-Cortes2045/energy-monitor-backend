@@ -7,6 +7,7 @@ import com.energymonitor.security.adapter.in.web.dto.ApiError;
 import com.energymonitor.security.adapter.in.web.dto.ChangePasswordRequest;
 import com.energymonitor.security.adapter.in.web.dto.DeleteAccountRequest;
 import com.energymonitor.security.adapter.in.web.dto.ForgotPasswordRequest;
+import com.energymonitor.security.adapter.in.web.dto.GoogleLoginRequest;
 import com.energymonitor.security.adapter.in.web.dto.LoginRequest;
 import com.energymonitor.security.adapter.in.web.dto.LoginResponse;
 import com.energymonitor.security.adapter.in.web.dto.LogoutRequest;
@@ -340,6 +341,40 @@ public class AuthController {
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request,
                                                HttpServletRequest servlet) {
         SecurityLoginFlow.LoginOutcome login = loginFlow.login(request.email(), request.password(),
+                clientIp(servlet), servlet.getHeader("User-Agent"))
+                .orElseThrow(AuthenticationRejectedException::new);
+        return ResponseEntity.ok(new LoginResponse(login.accessToken(), login.refreshToken(),
+                BEARER, login.expiresInSeconds(), AccountResponse.from(login.account())));
+    }
+
+    @Operation(summary = "Sign in with Google",
+            description = "Exchanges the authorization code of Google's sign-in popup for the "
+                    + "usual credentials. The first time it creates the account with the name, "
+                    + "last name, photo and address of the Google account. An address that "
+                    + "belongs to an account registered with a password is refused with 409.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Signed in",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = LoginResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Invalid or expired code, or an "
+                    + "address Google did not verify",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "403", description = "The account is blocked or inactive",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "409", description = "The address belongs to an account "
+                    + "registered with a password",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "503", description = "Google sign-in is not configured",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ApiError.class)))
+    })
+    @PostMapping("/google")
+    public ResponseEntity<LoginResponse> loginWithGoogle(@Valid @RequestBody GoogleLoginRequest request,
+                                                         HttpServletRequest servlet) {
+        SecurityLoginFlow.LoginOutcome login = loginFlow.loginWithGoogle(request.code(),
                 clientIp(servlet), servlet.getHeader("User-Agent"))
                 .orElseThrow(AuthenticationRejectedException::new);
         return ResponseEntity.ok(new LoginResponse(login.accessToken(), login.refreshToken(),

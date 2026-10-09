@@ -285,6 +285,27 @@ MAIL_FROM=Energy Monitor <no-reply@localhost>
 
 Messages appear at <http://localhost:8025>.
 
+### Sign in with Google
+
+`POST /api/v1/auth/google {code}` exchanges the authorization code of Google's sign-in popup
+(web app) for the usual access and refresh tokens. The first time it creates the account with the
+first name, last name (when the Google account has one), photo and address of Google; the address
+starts verified and the account gets a random password nobody knows ("forgot password" sets
+one). An address that already belongs to an account registered with a password is refused with
+**409**: signing in with Google never takes over an existing account.
+
+Setup (once per environment):
+
+1. <https://console.cloud.google.com> → create (or pick) a project.
+2. **APIs & Services → OAuth consent screen** (Google Auth Platform → Branding/Audience):
+   app name, support email, audience **External**. While the app is in *Testing*, add the Google
+   accounts that may sign in under **Test users**. Scopes: `openid`, `email`, `profile`.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID**, type **Web
+   application**. *Authorized JavaScript origins*: `http://localhost:5173` (add the production
+   domain later). No redirect URI is needed (the popup uses `postmessage`).
+4. Put the client ID and secret in this `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) and the
+   same client ID in the web app's `.env.local` (`VITE_GOOGLE_CLIENT_ID`); restart both.
+
 ## 6. Build and run
 
 ```bash

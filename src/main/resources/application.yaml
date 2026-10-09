@@ -42,6 +42,11 @@ spring:
           writetimeout: 5000
 
 security:
+  google:
+    # OAuth client of type "Web application" (Google Cloud Console). Both empty = the
+    # "Sign in with Google" button answers 503. The secret never leaves the server.
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
   jwt:
     # The iss claim. A URI rather than a bare name, as RFC 7519 expects, and validated on
     # every incoming token so a token minted for another service is rejected.

@@ -70,6 +70,11 @@ class DeviceConnectivityServiceTest {
             }
 
             @Override
+            public void publish(com.energymonitor.device.api.DeviceUnlinked event) {
+                events.add(event);
+            }
+
+            @Override
             public void publish(DeviceLinked event) {
                 events.add(event);
             }

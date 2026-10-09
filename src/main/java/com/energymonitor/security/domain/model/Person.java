@@ -33,12 +33,12 @@ public class Person {
     /**
      * @param idPerson identifier, {@code VARCHAR(10)}
      * @param name     first name, required (INV-001)
-     * @param lastName last name, required (INV-001)
+     * @param lastName last name, optional: an account created from Google may have none
      */
     public Person(String idPerson, String name, String lastName) {
         this.idPerson = Preconditions.text(idPerson, "idPerson");
         this.name = Preconditions.text(name, NAME_MAX, "name");
-        this.lastName = Preconditions.text(lastName, NAME_MAX, "lastName");
+        this.lastName = Preconditions.optionalText(lastName, NAME_MAX, "lastName");
     }
 
     /** @return the identifier */
@@ -64,7 +64,7 @@ public class Person {
      */
     public void rename(String name, String lastName) {
         this.name = Preconditions.text(name, NAME_MAX, "name");
-        this.lastName = Preconditions.text(lastName, NAME_MAX, "lastName");
+        this.lastName = Preconditions.optionalText(lastName, NAME_MAX, "lastName");
     }
 
     @Override

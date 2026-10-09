@@ -1,5 +1,6 @@
 package com.energymonitor.home.application.usecase;
 
+import com.energymonitor.home.application.port.out.SystemDefaultsPort;
 import com.energymonitor.home.application.command.UpdateHomeThresholdsCommand;
 import com.energymonitor.home.application.exception.HomeAccessDeniedException;
 import com.energymonitor.home.application.exception.HomeNotFoundException;
@@ -21,11 +22,13 @@ public class UpdateHomeThresholdsService implements UpdateHomeThresholds {
 
     private final HomeThresholdsPersistencePort thresholdsPort;
     private final UserHomePersistencePort userHomePort;
+    private final SystemDefaultsPort defaults;
 
     public UpdateHomeThresholdsService(HomeThresholdsPersistencePort thresholdsPort,
-                                       UserHomePersistencePort userHomePort) {
+                                       UserHomePersistencePort userHomePort, SystemDefaultsPort defaults) {
         this.thresholdsPort = thresholdsPort;
         this.userHomePort = userHomePort;
+        this.defaults = defaults;
     }
 
     @Override
@@ -50,6 +53,21 @@ public class UpdateHomeThresholdsService implements UpdateHomeThresholds {
         thresholds.setLimit(command.limitPeriod(), command.limit());
         thresholdsPort.save(thresholds);
 
-        return HomeThresholdsResult.from(thresholds);
+        return HomeThresholdsResult.from(thresholds, defaults);
+    }
+
+    @Override
+    public HomeThresholdsResult resetToDefaults(String userId, String homeId) {
+        UserHome membership = userHomePort.findActive(userId, homeId)
+                .orElseThrow(() -> new HomeNotFoundException(
+                        "no active membership for user " + userId + " in home " + homeId));
+        if (!membership.getPermissions().canManageHome()) {
+            throw new HomeAccessDeniedException("user " + userId + " cannot manage home " + homeId);
+        }
+        HomeThresholds thresholds = thresholdsPort.findActiveByHomeId(homeId)
+                .orElseThrow(() -> new HomeNotFoundException("no thresholds found for home " + homeId));
+        thresholds.resetToDefaults(defaults.defaultDailyLimit(), defaults.defaultMonthlyLimit());
+        thresholdsPort.save(thresholds);
+        return HomeThresholdsResult.from(thresholds, defaults);
     }
 }

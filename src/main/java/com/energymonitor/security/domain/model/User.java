@@ -28,6 +28,7 @@ public class User {
     private int failedLoginAttempts;
     private Instant lastLoginAt;
     private String profileImage;
+    private String googleSubject;
 
     /**
      * Rehydrates or registers an account. Prefer {@link #register} for new accounts.
@@ -142,6 +143,20 @@ public class User {
     }
 
     /** @return profile image URL or path, empty when not provided */
+    /**
+     * The Google account ({@code sub} of its ID token) this account was created with, when it
+     * was created by signing in with Google. Accounts registered with a password have none and
+     * are never taken over by a Google sign-in with the same address.
+     */
+    public Optional<String> googleSubject() {
+        return Optional.ofNullable(googleSubject);
+    }
+
+    /** Binds the account to a Google account; done once, when it is created from Google. */
+    public void bindGoogleAccount(String subject) {
+        this.googleSubject = Preconditions.optionalText(subject, 255, "googleSubject");
+    }
+
     public Optional<String> profileImage() {
         return Optional.ofNullable(profileImage);
     }
