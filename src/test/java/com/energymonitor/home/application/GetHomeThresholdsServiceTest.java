@@ -26,7 +26,7 @@ class GetHomeThresholdsServiceTest {
         thresholdsPort.save(HomeThresholds.create("thr0000001", "hom0000001", 10.0, 300.0, true));
         userHomePort.save(UserHome.owner("use0000001", "hom0000001"));
 
-        service = new GetHomeThresholdsService(thresholdsPort, userHomePort);
+        service = new GetHomeThresholdsService(thresholdsPort, userHomePort, UpdateHomeThresholdsServiceTest.DEFAULTS);
     }
 
     @Test

@@ -162,6 +162,8 @@ public class HomeThresholds {
         }
         this.dailyLimit = daily;
         this.monthlyLimit = monthly;
+        // The defaults are set as a daily limit; the monthly one is its 30-day equivalent.
+        this.limitPeriod = LimitPeriod.DAILY;
         this.useSystemDefault = true;
     }
 

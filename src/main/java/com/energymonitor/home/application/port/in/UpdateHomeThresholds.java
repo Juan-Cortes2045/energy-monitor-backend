@@ -13,4 +13,10 @@ public interface UpdateHomeThresholds {
      * @return the updated thresholds
      */
     HomeThresholdsResult update(UpdateHomeThresholdsCommand command);
+
+    /**
+     * Goes back to the system default limits ({@code useSystemDefault = true}). Same access rules
+     * as {@link #update}: members who cannot manage the home get 403, others 404.
+     */
+    HomeThresholdsResult resetToDefaults(String userId, String homeId);
 }
