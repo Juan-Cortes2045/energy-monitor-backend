@@ -17,6 +17,7 @@ import com.energymonitor.device.application.port.in.UpdateDevice;
 import com.energymonitor.device.application.port.out.ApplianceTypePersistencePort;
 import com.energymonitor.device.application.port.out.ApplianceTypePersistencePort.ApplianceTypeEntry;
 import com.energymonitor.device.api.DeviceLinked;
+import com.energymonitor.device.api.DeviceUnlinked;
 import com.energymonitor.device.application.port.out.DeviceEventPort;
 import com.energymonitor.device.application.port.out.DeviceHomePersistencePort;
 import com.energymonitor.device.application.port.out.DevicePersistencePort;
@@ -127,6 +128,8 @@ public class HomeDeviceService implements LinkDevice, UnlinkDevice, ListHomeDevi
         // The old key stops working; the module needs to be linked again to get a new one.
         devices.save(device.relinked(device.name(), device.applianceTypeId(), device.location(),
                 device.installationDate(), identifiers.nextApiKey()));
+        // The module is told right away (MQTT command), so it offers Bluetooth to be linked again.
+        events.publish(new DeviceUnlinked(device.idDevice(), command.homeId(), clock.instant()));
     }
 
     @Override
