@@ -22,7 +22,7 @@ public class PersonEntity extends BaseAuditEntity {
     @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    @Column(name = "last_name", nullable = false, length = 100)
+    @Column(name = "last_name", length = 100)
     private String lastName;
 
     public PersonEntity() {
