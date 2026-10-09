@@ -10,6 +10,7 @@ import com.energymonitor.home.application.result.HomeThresholdsResult;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,7 +40,18 @@ public class HomeThresholdsController {
         String userId = currentUser.resolveCurrentUserId();
         HomeThresholdsResult result = getHomeThresholds.get(new GetHomeThresholdsQuery(userId, homeId));
         return new HomeThresholdsResponse(result.idThreshold(), result.homeId(),
-                result.dailyLimit(), result.monthlyLimit(), result.useSystemDefault(), result.limitPeriod());
+                result.dailyLimit(), result.monthlyLimit(), result.useSystemDefault(), result.limitPeriod(),
+                result.defaultDailyLimit(), result.defaultMonthlyLimit());
+    }
+
+    /** Applies the system default limits again (the "use system defaults" switch turned on). */
+    @PostMapping("/defaults")
+    public HomeThresholdsResponse resetToDefaults(@PathVariable String homeId) {
+        HomeThresholdsResult result = updateHomeThresholds.resetToDefaults(currentUser.resolveCurrentUserId(),
+                homeId);
+        return new HomeThresholdsResponse(result.idThreshold(), result.homeId(),
+                result.dailyLimit(), result.monthlyLimit(), result.useSystemDefault(), result.limitPeriod(),
+                result.defaultDailyLimit(), result.defaultMonthlyLimit());
     }
 
     @PutMapping
@@ -49,6 +61,7 @@ public class HomeThresholdsController {
         HomeThresholdsResult result = updateHomeThresholds.update(new UpdateHomeThresholdsCommand(
                 userId, homeId, request.limitPeriod(), request.limit()));
         return new HomeThresholdsResponse(result.idThreshold(), result.homeId(),
-                result.dailyLimit(), result.monthlyLimit(), result.useSystemDefault(), result.limitPeriod());
+                result.dailyLimit(), result.monthlyLimit(), result.useSystemDefault(), result.limitPeriod(),
+                result.defaultDailyLimit(), result.defaultMonthlyLimit());
     }
 }
