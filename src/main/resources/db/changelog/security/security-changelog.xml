@@ -32,6 +32,8 @@
     <include file="changes/security-020-drop-person-cellphone.xml" relativeToChangelogFile="true"/>
     <include file="changes/security-021-add-password-reset-token-attempts.xml" relativeToChangelogFile="true"/>
     <include file="changes/security-022-widen-user-profile-image.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-023-person-last-name-optional.xml" relativeToChangelogFile="true"/>
+    <include file="changes/security-024-add-user-google-subject.xml" relativeToChangelogFile="true"/>
     
 
 </databaseChangeLog>

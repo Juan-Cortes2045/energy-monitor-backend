@@ -18,4 +18,6 @@ public interface UserRepository extends JpaRepository<UserEntity, String> {
      * @return the account, empty when soft-deleted or unknown
      */
     Optional<UserEntity> findByEmailAndDeletedAtIsNull(String email);
+
+    Optional<UserEntity> findByGoogleSubjectAndDeletedAtIsNull(String googleSubject);
 }

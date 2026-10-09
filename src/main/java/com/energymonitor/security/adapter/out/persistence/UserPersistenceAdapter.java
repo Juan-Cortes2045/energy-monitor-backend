@@ -79,6 +79,12 @@ public class UserPersistenceAdapter implements UserPersistencePort {
     }
 
     @Override
+    public Optional<User> findActiveByGoogleSubject(String googleSubject) {
+        return repository.findByGoogleSubjectAndDeletedAtIsNull(googleSubject)
+                .map(mapper::toDomain);
+    }
+
+    @Override
     public void softDelete(String idUser, Instant deletedAt) {
         repository.findById(idUser).ifPresent(entity -> {
             entity.setDeletedAt(deletedAt);

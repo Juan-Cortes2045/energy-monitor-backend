@@ -59,6 +59,9 @@ public class UserEntity extends BaseAuditEntity {
     @Column(name = "profile_image", columnDefinition = "MEDIUMTEXT")
     private String profileImage;
 
+    @Column(name = "google_subject", length = 255)
+    private String googleSubject;
+
     public UserEntity() {
     }
 
@@ -132,6 +135,14 @@ public class UserEntity extends BaseAuditEntity {
 
     public void setLastLoginAt(Instant lastLoginAt) {
         this.lastLoginAt = lastLoginAt;
+    }
+
+    public String getGoogleSubject() {
+        return googleSubject;
+    }
+
+    public void setGoogleSubject(String googleSubject) {
+        this.googleSubject = googleSubject;
     }
 
     public String getProfileImage() {
