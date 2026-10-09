@@ -69,7 +69,7 @@ class BrokerAccessServiceTest {
     }
 
     @Test
-    void backendReadsEveryDeviceButNeverPublishes() {
+    void backendReadsEveryDeviceAndOnlyWritesCommands() {
         assertTrue(service.authorize("em-backend", "energy-monitor/devices/+/telemetry", Access.SUBSCRIBE));
         assertTrue(service.authorize("em-backend", "energy-monitor/devices/+/status", Access.SUBSCRIBE));
         assertTrue(service.authorize("em-backend", "energy-monitor/devices/DEV0000001/telemetry", Access.READ));
@@ -78,6 +78,18 @@ class BrokerAccessServiceTest {
         assertFalse(service.authorize("em-backend", "#", Access.SUBSCRIBE));
         assertFalse(service.authorize("em-backend", "energy-monitor/devices/#", Access.SUBSCRIBE));
         assertFalse(service.authorize("em-backend", "$SYS/broker/uptime", Access.READ));
+
+        assertTrue(service.authorize("em-backend", "energy-monitor/devices/DEV0000001/command", Access.WRITE));
+        assertFalse(service.authorize("em-backend", "energy-monitor/devices/+/command", Access.WRITE));
+    }
+
+    @Test
+    void deviceReadsOnlyItsOwnCommands() {
+        assertTrue(service.authorize("EM204", "energy-monitor/devices/DEV0000001/command", Access.SUBSCRIBE));
+        assertTrue(service.authorize("EM204", "energy-monitor/devices/DEV0000001/command", Access.READ));
+
+        assertFalse(service.authorize("EM204", "energy-monitor/devices/DEV0000002/command", Access.SUBSCRIBE));
+        assertFalse(service.authorize("EM204", "energy-monitor/devices/DEV0000001/command", Access.WRITE));
     }
 
     @Test
