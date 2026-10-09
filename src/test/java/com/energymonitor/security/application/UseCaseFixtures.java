@@ -84,6 +84,13 @@ public final class UseCaseFixtures {
         }
 
         @Override
+        public Optional<User> findActiveByGoogleSubject(String googleSubject) {
+            return byId.values().stream()
+                    .filter(user -> user.googleSubject().filter(googleSubject::equals).isPresent())
+                    .findFirst();
+        }
+
+        @Override
         public void softDelete(String idUser, Instant deletedAt) {
             byId.remove(idUser);
         }

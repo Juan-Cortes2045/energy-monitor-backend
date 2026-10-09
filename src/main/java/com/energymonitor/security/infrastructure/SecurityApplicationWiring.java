@@ -1,5 +1,8 @@
 package com.energymonitor.security.infrastructure;
 
+import com.energymonitor.security.application.port.in.SignInWithGoogle;
+import com.energymonitor.security.application.port.out.ProfileImageFetcherPort;
+import com.energymonitor.security.application.usecase.SignInWithGoogleService;
 import com.energymonitor.security.api.EmailVerificationDeliveryPort;
 import com.energymonitor.security.api.PasswordResetDeliveryPort;
 import com.energymonitor.security.api.UserProfileQuery;
@@ -203,6 +206,19 @@ public class SecurityApplicationWiring {
                 new RegisterUserService(users, persons, policies, hasher, identifiers, audits,
                         clock),
                 RegisterUser.class);
+    }
+
+    @Bean
+    public SignInWithGoogle signInWithGoogle(UserPersistencePort users, PersonPersistencePort persons,
+                                             PasswordHasherPort hasher, TokenGeneratorPort tokens,
+                                             ProfileImageFetcherPort images,
+                                             IdentifierGeneratorPort identifiers,
+                                             AuditLogPersistencePort audits, Clock clock,
+                                             PlatformTransactionManager transactions) {
+        return transactional(transactions,
+                new SignInWithGoogleService(users, persons, hasher, tokens, images, identifiers, audits,
+                        clock),
+                SignInWithGoogle.class);
     }
 
     @Bean
