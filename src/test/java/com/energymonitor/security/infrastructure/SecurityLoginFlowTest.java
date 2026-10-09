@@ -74,12 +74,18 @@ class SecurityLoginFlowTest {
     @Mock
     private IdentifierGeneratorPort identifiers;
 
+    @Mock
+    private com.energymonitor.security.application.port.out.GoogleIdentityPort google;
+
+    @Mock
+    private com.energymonitor.security.application.port.in.SignInWithGoogle signInWithGoogle;
+
     private SecurityLoginFlow flow;
 
     /** Builds the flow explicitly so the clock is pinned instead of mocked. */
     private SecurityLoginFlow flowWith(JwtTokenIssuer issuer) {
         return new SecurityLoginFlow(authenticateUser, createUserSession, refreshTokens, hasher,
-                secrets, identifiers, issuer, Clock.fixed(NOW, ZoneOffset.UTC));
+                secrets, identifiers, issuer, Clock.fixed(NOW, ZoneOffset.UTC), google, signInWithGoogle);
     }
 
     @BeforeEach
@@ -257,5 +263,42 @@ class SecurityLoginFlowTest {
         }
         sb.append("-----END ").append(type).append("-----\n");
         java.nio.file.Files.writeString(path, sb.toString());
+    }
+
+    @Test
+    void googleSignInIsUnavailableWithoutAClient() {
+        given(google.isConfigured()).willReturn(false);
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.energymonitor.security.application.exception.GoogleSignInUnavailableException.class,
+                () -> flow.loginWithGoogle("code", "10.0.0.1", "JUnit"));
+    }
+
+    @Test
+    void anInvalidGoogleCodeOpensNoSession() {
+        given(google.isConfigured()).willReturn(true);
+        given(google.exchange("bad")).willReturn(Optional.empty());
+
+        assertTrue(flow.loginWithGoogle("bad", "10.0.0.1", "JUnit").isEmpty());
+        verify(createUserSession, never()).create(any());
+    }
+
+    @Test
+    void aValidGoogleCodeOpensTheUsualSession() {
+        var googleIdentity = new com.energymonitor.security.application.result.GoogleIdentity(
+                "g-1", "someone@example.com", true, "Some", "One", "Some One", null);
+        given(google.isConfigured()).willReturn(true);
+        given(google.exchange("good")).willReturn(Optional.of(googleIdentity));
+        given(signInWithGoogle.signIn(googleIdentity, "10.0.0.1")).willReturn(Optional.of(identity()));
+        given(createUserSession.create(any())).willReturn(session());
+        given(secrets.generateToken()).willReturn("the-refresh-token");
+        given(identifiers.generate()).willReturn("rft0000001");
+        given(hasher.hash("the-refresh-token")).willReturn("hash-of-the-refresh-token");
+
+        var outcome = flow.loginWithGoogle("good", "10.0.0.1", "JUnit");
+
+        assertTrue(outcome.isPresent());
+        assertEquals("the-refresh-token", outcome.orElseThrow().refreshToken());
+        assertEquals("USR0000001", outcome.orElseThrow().account().idUser());
     }
 }

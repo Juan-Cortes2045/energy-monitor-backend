@@ -1,5 +1,8 @@
 package com.energymonitor.security.infrastructure;
 
+import com.energymonitor.security.application.exception.GoogleSignInUnavailableException;
+import com.energymonitor.security.application.port.in.SignInWithGoogle;
+import com.energymonitor.security.application.port.out.GoogleIdentityPort;
 import com.energymonitor.security.application.command.AuthenticateUserCommand;
 import com.energymonitor.security.application.command.CreateUserSessionCommand;
 import com.energymonitor.security.application.port.in.AuthenticateUser;
@@ -48,11 +51,16 @@ public class SecurityLoginFlow {
     private final IdentifierGeneratorPort identifiers;
     private final JwtTokenIssuer tokenIssuer;
     private final Clock clock;
+    private final GoogleIdentityPort google;
+    private final SignInWithGoogle signInWithGoogle;
 
     public SecurityLoginFlow(AuthenticateUser authenticateUser, CreateUserSession createUserSession,
                              RefreshTokenPersistencePort refreshTokens, RefreshTokenHasherPort hasher,
                              TokenGeneratorPort tokenGenerator, IdentifierGeneratorPort identifiers,
-                             JwtTokenIssuer tokenIssuer, Clock clock) {
+                             JwtTokenIssuer tokenIssuer, Clock clock, GoogleIdentityPort google,
+                             SignInWithGoogle signInWithGoogle) {
+        this.google = google;
+        this.signInWithGoogle = signInWithGoogle;
         this.authenticateUser = authenticateUser;
         this.createUserSession = createUserSession;
         this.refreshTokens = refreshTokens;
@@ -95,7 +103,27 @@ public class SecurityLoginFlow {
         if (!result.isSuccess()) {
             return Optional.empty();
         }
-        AuthenticatedUser identity = result.user().orElseThrow();
+        return Optional.of(open(result.user().orElseThrow(), ipAddress, userAgent));
+    }
+
+    /**
+     * Signs in with the authorization code of Google's popup, creating the account the first
+     * time. The call to Google happens before, and outside, the transaction of the use case.
+     *
+     * @return empty when the code is invalid or Google did not verify the address
+     * @throws GoogleSignInUnavailableException when no Google client is configured
+     */
+    public Optional<LoginOutcome> loginWithGoogle(String authorizationCode, String ipAddress,
+                                                  String userAgent) {
+        if (!google.isConfigured()) {
+            throw new GoogleSignInUnavailableException("Google sign-in is not configured");
+        }
+        return google.exchange(authorizationCode)
+                .flatMap(identity -> signInWithGoogle.signIn(identity, ipAddress))
+                .map(identity -> open(identity, ipAddress, userAgent));
+    }
+
+    private LoginOutcome open(AuthenticatedUser identity, String ipAddress, String userAgent) {
         UserSession session = createUserSession.create(
                 new CreateUserSessionCommand(identity.idUser(), ipAddress, userAgent));
 
@@ -108,7 +136,7 @@ public class SecurityLoginFlow {
         refreshTokens.save(RefreshToken.root(idRefreshToken, session.idUserSession(),
                 hasher.hash(rawToken), now, now.plus(REFRESH_TOKEN_TTL)));
 
-        return Optional.of(new LoginOutcome(tokenIssuer.issue(identity), rawToken,
-                tokenIssuer.accessTokenTtl().toSeconds(), identity));
+        return new LoginOutcome(tokenIssuer.issue(identity), rawToken,
+                tokenIssuer.accessTokenTtl().toSeconds(), identity);
     }
 }
