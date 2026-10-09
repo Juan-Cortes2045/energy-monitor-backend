@@ -46,6 +46,7 @@ class HomeDeviceServiceTest {
     private final Map<String, Device> devices = new HashMap<>();
     private final Map<String, String> homeByDevice = new HashMap<>();
     private int sequence;
+    private final List<com.energymonitor.device.api.DeviceUnlinked> unlinkedEvents = new java.util.ArrayList<>();
     private final List<DeviceLinked> linkedEvents = new java.util.ArrayList<>();
 
     private final HomeDeviceService service = new HomeDeviceService(
@@ -164,6 +165,11 @@ class HomeDeviceServiceTest {
                 }
 
                 @Override
+                public void publish(com.energymonitor.device.api.DeviceUnlinked event) {
+                    unlinkedEvents.add(event);
+                }
+
+                @Override
                 public void publish(DeviceLinked event) {
                     linkedEvents.add(event);
                 }
@@ -218,6 +224,8 @@ class HomeDeviceServiceTest {
         String id = linked.device().idDevice();
 
         service.unlink(new UnlinkDeviceCommand(OWNER, HOME, id));
+        assertEquals(1, unlinkedEvents.size());
+        assertEquals(id, unlinkedEvents.get(0).deviceId());
 
         assertTrue(service.list(OWNER, HOME).isEmpty());
         assertNotEquals(linked.apiKey(), devices.get(id).apiKey());

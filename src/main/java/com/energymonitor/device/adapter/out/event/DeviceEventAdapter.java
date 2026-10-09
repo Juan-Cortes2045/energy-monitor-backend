@@ -3,6 +3,7 @@ package com.energymonitor.device.adapter.out.event;
 import com.energymonitor.device.api.DeviceConnectivityLost;
 import com.energymonitor.device.api.DeviceConnectivityRestored;
 import com.energymonitor.device.api.DeviceLinked;
+import com.energymonitor.device.api.DeviceUnlinked;
 import com.energymonitor.device.application.port.out.DeviceEventPort;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -31,6 +32,11 @@ public class DeviceEventAdapter implements DeviceEventPort {
 
     @Override
     public void publish(DeviceLinked event) {
+        publisher.publishEvent(event);
+    }
+
+    @Override
+    public void publish(DeviceUnlinked event) {
         publisher.publishEvent(event);
     }
 }
