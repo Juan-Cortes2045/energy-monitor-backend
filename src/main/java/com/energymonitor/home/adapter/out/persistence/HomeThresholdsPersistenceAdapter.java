@@ -1,5 +1,6 @@
 package com.energymonitor.home.adapter.out.persistence;
 
+import com.energymonitor.home.adapter.out.persistence.support.Instants;
 import com.energymonitor.home.adapter.out.persistence.entity.HomeThresholdsEntity;
 import com.energymonitor.home.adapter.out.persistence.mapper.HomeThresholdsMapper;
 import com.energymonitor.home.adapter.out.persistence.repository.HomeThresholdsRepository;
@@ -39,5 +40,13 @@ public class HomeThresholdsPersistenceAdapter implements HomeThresholdsPersisten
     public Optional<HomeThresholds> findActiveByHomeId(String homeId) {
         return repository.findByHomeIdAndDeletedAtIsNull(homeId)
                 .map(mapper::toDomain);
+    }
+
+    @Override
+    public void removeByHomeId(String homeId) {
+        repository.findByHomeIdAndDeletedAtIsNull(homeId).ifPresent(entity -> {
+            entity.setDeletedAt(Instants.now());
+            repository.save(entity);
+        });
     }
 }
