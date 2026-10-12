@@ -19,6 +19,7 @@ import com.energymonitor.home.adapter.in.web.dto.JoinHomeRequest;
 import com.energymonitor.home.adapter.in.web.dto.UserHomeResponse;
 import com.energymonitor.home.application.command.CreateHomeCommand;
 import com.energymonitor.home.application.command.JoinHomeCommand;
+import com.energymonitor.home.application.command.DeleteHomeCommand;
 import com.energymonitor.home.application.command.LeaveHomeCommand;
 import com.energymonitor.home.application.command.ListHomesQuery;
 import com.energymonitor.home.application.command.ListMembersQuery;
@@ -26,6 +27,7 @@ import com.energymonitor.home.application.command.RemoveUserCommand;
 import com.energymonitor.home.application.command.ToggleFavoriteCommand;
 import com.energymonitor.home.application.port.in.CreateHome;
 import com.energymonitor.home.application.port.in.JoinHome;
+import com.energymonitor.home.application.port.in.DeleteHome;
 import com.energymonitor.home.application.port.in.LeaveHome;
 import com.energymonitor.home.application.port.in.ListHomes;
 import com.energymonitor.home.application.port.in.ListMembers;
@@ -54,9 +56,10 @@ public class HomeController {
     private final ToggleFavorite toggleFavorite;
     private final RemoveUser removeUser;
     private final LeaveHome leaveHome;
+    private final DeleteHome deleteHome;
     private final CurrentUserResolver currentUser;
 
-    public HomeController(CreateHome createHome, JoinHome joinHome, ListHomes listHomes, ListMembers listMembers, ToggleFavorite toggleFavorite, RemoveUser removeUser,LeaveHome leaveHome, CurrentUserResolver currentUser) {
+    public HomeController(CreateHome createHome, JoinHome joinHome, ListHomes listHomes, ListMembers listMembers, ToggleFavorite toggleFavorite, RemoveUser removeUser,LeaveHome leaveHome, DeleteHome deleteHome, CurrentUserResolver currentUser) {
         this.createHome = createHome;
         this.joinHome = joinHome;
         this.listHomes = listHomes;
@@ -64,6 +67,7 @@ public class HomeController {
         this.toggleFavorite = toggleFavorite;
         this.removeUser = removeUser;
         this.leaveHome = leaveHome;
+        this.deleteHome = deleteHome;
         this.currentUser = currentUser;
     }
 
@@ -118,5 +122,15 @@ public class HomeController {
     public void leaveHome(@PathVariable String homeId) {
         String userId = currentUser.resolveCurrentUserId();
         leaveHome.leave(new LeaveHomeCommand(userId, homeId));
+    }
+
+    /**
+     * Deletes the home for everyone (OWNER only, 403 for members, 404 for outsiders). Its devices
+     * are unlinked, not deleted.
+     */
+    @DeleteMapping("/{homeId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteHome(@PathVariable String homeId) {
+        deleteHome.delete(new DeleteHomeCommand(currentUser.resolveCurrentUserId(), homeId));
     }
 }

@@ -77,6 +77,9 @@ class HomeControllerTest {
     private JoinHome joinHome;
 
     @MockitoBean
+    private com.energymonitor.home.application.port.in.DeleteHome deleteHome;
+
+    @MockitoBean
     private ListHomes listHomes;
 
     @MockitoBean
@@ -258,6 +261,41 @@ class HomeControllerTest {
         mockMvc.perform(delete("/api/v1/homes/{homeId}/members/me", HOME_ID)
                         .with(asUser(USER_ID)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void ownerDeletesTheHomeWith204() throws Exception {
+        mockMvc.perform(delete("/api/v1/homes/{homeId}", HOME_ID).with(asUser(USER_ID)))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verify(deleteHome).delete(
+                new com.energymonitor.home.application.command.DeleteHomeCommand(USER_ID, HOME_ID));
+    }
+
+    @Test
+    void memberCannotDeleteTheHome403() throws Exception {
+        org.mockito.Mockito.doThrow(new com.energymonitor.home.application.exception.HomeAccessDeniedException("member"))
+                .when(deleteHome).delete(any(com.energymonitor.home.application.command.DeleteHomeCommand.class));
+
+        mockMvc.perform(delete("/api/v1/homes/{homeId}", HOME_ID).with(asUser(USER_ID)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void outsiderDeletingAHomeGets404() throws Exception {
+        org.mockito.Mockito.doThrow(new com.energymonitor.home.application.exception.HomeNotFoundException("none"))
+                .when(deleteHome).delete(any(com.energymonitor.home.application.command.DeleteHomeCommand.class));
+
+        mockMvc.perform(delete("/api/v1/homes/{homeId}", HOME_ID).with(asUser(USER_ID)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deletingAHomeWithoutATokenIsRefused() throws Exception {
+        // The CSRF token is present so the refusal is about the missing caller, not about CSRF.
+        mockMvc.perform(delete("/api/v1/homes/{homeId}", HOME_ID).with(csrf()))
+                .andExpect(status().isUnauthorized());
+        org.mockito.Mockito.verifyNoInteractions(deleteHome);
     }
 
     @Test
