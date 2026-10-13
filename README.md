@@ -392,8 +392,9 @@ without it.
 Devices (ESP32 + PZEM-004T) publish telemetry over **MQTT with TLS** to Eclipse Mosquitto. The
 broker lives in `devices/docker` and delegates authentication and topic ACL to this backend
 (`POST /internal/mqtt/auth/user` and `/acl`, mosquitto-go-auth), so a device registered in the
-`device` table can connect with its `device_code` / `api_key` and nothing else is configured in
-the broker. Full contract and firmware steps: `devices/README.md`.
+`device` table can connect with its `device_code` / API key and nothing else is configured in
+the broker. Only the SHA-256 of each key is stored (`device.api_key_hash`); the key in clear is
+returned once, when the module is linked or gets new credentials, and cannot be read back. Full contract and firmware steps: `devices/README.md`.
 
 1. `.env`: `MQTT_BACKEND_USER`, `MQTT_BACKEND_PASS` (any random value) and
    `DEVICE_MQTT_PUBLIC_HOST` = the LAN IP of this PC (`hostname -I`, never `localhost`). That IP
@@ -521,7 +522,7 @@ docker run --rm --network host --user "$(id -u):$(id -g)" \
 | `Too many connections` in a few persistence tests | the backend is running while the suite runs; both use the same MySQL. Run the failing class alone or stop the backend |
 | Broker logs `context deadline exceeded` calling `backend:8080` | backend stopped, or the ufw rule of section 9 is missing |
 | Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: re-run `generate-dev-certs.sh` and restart the broker |
-| Device logs `rc=4` / `rc=5` | `device_code` / `api_key` do not match the `device` table (link it again from the web) |
+| Device logs `rc=4` / `rc=5` | `device_code` / API key do not match the `device` table (link it again from the web) |
 | Container: `Failed to read the RSA private key PEM` | the container user cannot read the key: see section 12 |
 
 ## Useful commands

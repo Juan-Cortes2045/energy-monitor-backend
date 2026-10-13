@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Device API keys stop being stored in clear: only their SHA-256 (hex) is kept. This step adds
+        the column and fills it from the existing keys, so the modules already linked keep logging
+        in with the key they hold. SHA2(api_key, 256) returns the same lowercase hex as ApiKeyHash.of.
+        The clear column is dropped by device-008, in a separate changeset because MySQL commits
+        each DDL statement on its own.
+    -->
+    <changeSet id="device-007-add-api-key-hash" author="JuanCortes2045">
+        <comment>device.api_key_hash holds the SHA-256 of the API key, filled from api_key.</comment>
+        <addColumn tableName="device">
+            <column name="api_key_hash" type="VARCHAR(64)" afterColumn="api_key"/>
+        </addColumn>
+        <sql dbms="mysql">UPDATE device SET api_key_hash = SHA2(api_key, 256)</sql>
+        <addNotNullConstraint tableName="device" columnName="api_key_hash" columnDataType="VARCHAR(64)"/>
+
+        <rollback>
+            <dropColumn tableName="device" columnName="api_key_hash"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

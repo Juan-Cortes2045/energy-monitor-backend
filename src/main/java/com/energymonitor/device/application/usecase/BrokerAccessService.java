@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  *   <li><strong>The backend</strong>, with the credentials of its own configuration. It may only
  *       subscribe to and read the telemetry and status topics of every device.</li>
  *   <li><strong>A device</strong>, which logs in with its {@code device_code} as username and its
- *       {@code api_key} as password. It may only publish on its own two topics, so a device cannot
+ *       API key as password; only the key's hash is stored ({@code ApiKeyHash}). It may only publish on its own two topics, so a device cannot
  *       impersonate another one or read anything.</li>
  * </ul>
  *
@@ -56,7 +56,7 @@ public class BrokerAccessService implements AuthorizeBrokerAccess {
             return !isBlank(backendPassword) && secretEquals(password, backendPassword);
         }
         return devices.findByDeviceCode(username)
-                .map(device -> secretEquals(password, device.apiKey()))
+                .map(device -> device.acceptsApiKey(password))
                 .orElse(false);
     }
 

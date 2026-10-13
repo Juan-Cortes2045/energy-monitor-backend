@@ -68,6 +68,12 @@ class HomeExceptionHandlerTest {
     @MockitoBean
     private LeaveHome leaveHome;
 
+    @MockitoBean
+    private com.energymonitor.home.application.port.in.DeleteHome deleteHome;
+
+    @MockitoBean
+    private com.energymonitor.home.application.port.in.TransferHomeOwnership transferOwnership;
+
     @Test
     void missingUserIdentityReturns401() throws Exception {
         // No token in the security context: the real resolver raises MissingUserIdentityException,

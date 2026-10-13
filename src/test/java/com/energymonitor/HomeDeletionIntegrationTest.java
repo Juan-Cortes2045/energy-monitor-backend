@@ -95,8 +95,8 @@ class HomeDeletionIntegrationTest extends JwtKeyedTest {
         assertThat(thresholds.findActiveByHomeId("hdh0000001")).isEmpty();
         assertThat(deviceApi.getHomeId("hdd0000001")).isEmpty();
         // The module survives the home, with a new key, ready to be linked elsewhere.
-        assertThat(devices.findById("hdd0000001")).hasValueSatisfying(
-                device -> assertThat(device.apiKey()).isNotEqualTo("hd-device-api-key"));
+        assertThat(deviceApi.validateCredentials("HD0001", "hd-device-api-key")).isFalse();
+        assertThat(devices.findById("hdd0000001")).isPresent();
     }
 
     @Test
