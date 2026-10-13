@@ -1,6 +1,7 @@
 package com.energymonitor.device.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -186,7 +187,11 @@ class HomeDeviceServiceTest {
 
         assertEquals("refrigerator", result.device().applianceType());
         assertEquals(HOME, homeByDevice.get(result.device().idDevice()));
-        assertEquals(result.apiKey(), devices.get(result.device().idDevice()).apiKey());
+        Device stored = devices.get(result.device().idDevice());
+        assertTrue(stored.acceptsApiKey(result.apiKey()));
+        // Only the hash is kept: the key handed out never reaches storage.
+        assertNotEquals(result.apiKey(), stored.apiKeyHash());
+        assertEquals(com.energymonitor.device.domain.model.ApiKeyHash.of(result.apiKey()), stored.apiKeyHash());
         assertEquals(1, service.list(GUEST, HOME).size());
         assertEquals(List.of(new DeviceLinked(result.device().idDevice(), HOME, "Nevera", OWNER,
                 Instant.parse("2026-10-08T00:00:00Z"))), linkedEvents);
@@ -228,7 +233,7 @@ class HomeDeviceServiceTest {
         assertEquals(id, unlinkedEvents.get(0).deviceId());
 
         assertTrue(service.list(OWNER, HOME).isEmpty());
-        assertNotEquals(linked.apiKey(), devices.get(id).apiKey());
+        assertFalse(devices.get(id).acceptsApiKey(linked.apiKey()));
         // and it can be linked again, to any home
         service.link(link(OWNER, OTHER_HOME, "EM204"));
         assertEquals(OTHER_HOME, homeByDevice.get(id));
@@ -245,7 +250,8 @@ class HomeDeviceServiceTest {
         Device after = devices.get(before.idDevice());
         assertEquals("TV sala", edited.name());
         assertEquals("livingRoom", after.location());
-        assertEquals(before.apiKey(), after.apiKey());
+        assertEquals(before.apiKeyHash(), after.apiKeyHash());
+        assertTrue(after.acceptsApiKey(linked.apiKey()));
         assertEquals(before.installationDate(), after.installationDate());
     }
 
@@ -271,7 +277,8 @@ class HomeDeviceServiceTest {
 
         Device after = devices.get(before.idDevice());
         assertNotEquals(linked.apiKey(), reissued.apiKey());
-        assertEquals(reissued.apiKey(), after.apiKey());
+        assertTrue(after.acceptsApiKey(reissued.apiKey()));
+        assertFalse(after.acceptsApiKey(linked.apiKey()));
         assertEquals(before.installationDate(), after.installationDate());
         assertEquals(1, linkedEvents.size());
         assertThrows(NotHomeOwnerException.class, () -> service.reissue(GUEST, HOME, before.idDevice()));
@@ -282,13 +289,13 @@ class HomeDeviceServiceTest {
         String a = service.link(link(OWNER, HOME, "EM0001")).device().idDevice();
         String b = service.link(link(OWNER, HOME, "EM0002")).device().idDevice();
         String other = service.link(link(OWNER, OTHER_HOME, "EM0003")).device().idDevice();
-        String keyA = devices.get(a).apiKey();
+        String hashA = devices.get(a).apiKeyHash();
 
         assertEquals(2, service.unlinkAll(HOME));
 
         assertTrue(!homeByDevice.containsKey(a) && !homeByDevice.containsKey(b));
         assertEquals(OTHER_HOME, homeByDevice.get(other));
-        assertNotEquals(keyA, devices.get(a).apiKey());
+        assertNotEquals(hashA, devices.get(a).apiKeyHash());
         assertTrue(devices.containsKey(a), "the module is unlinked, not deleted");
         assertEquals(java.util.Set.of(a, b),
                 unlinkedEvents.stream().map(e -> e.deviceId()).collect(java.util.stream.Collectors.toSet()));

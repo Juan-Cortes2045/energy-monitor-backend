@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 
 class BrokerAccessServiceTest {
 
-    private static final Device DEVICE = new Device("DEV0000001", "Medidor", "appl000001", null, null,
+    private static final Device DEVICE = Device.create("DEV0000001", "Medidor", "appl000001", null, null,
             Instant.parse("2026-10-01T00:00:00Z"), "EM204", "device-api-key-123456");
 
     private final DevicePersistencePort devices = new DevicePersistencePort() {
@@ -42,6 +42,13 @@ class BrokerAccessServiceTest {
         assertFalse(service.authenticate("EM999", "device-api-key-123456"));
         assertFalse(service.authenticate("EM204", ""));
         assertFalse(service.authenticate(null, null));
+    }
+
+    @Test
+    void theStoredHashIsNotAPassword() {
+        // Somebody who read the table holds only the hash; the broker hashes what it receives,
+        // so the hash itself does not log in.
+        assertFalse(service.authenticate("EM204", DEVICE.apiKeyHash()));
     }
 
     @Test

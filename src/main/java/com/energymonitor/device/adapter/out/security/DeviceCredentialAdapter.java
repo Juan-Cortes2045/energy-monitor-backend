@@ -1,10 +1,11 @@
 package com.energymonitor.device.adapter.out.security;
 
 import com.energymonitor.device.application.port.out.DevicePersistencePort;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import org.springframework.stereotype.Component;
 
+/**
+ * Checks a device's code and API key against the stored hash of the key.
+ */
 @Component
 public class DeviceCredentialAdapter {
 
@@ -19,8 +20,7 @@ public class DeviceCredentialAdapter {
             return false;
         }
         return devicePersistencePort.findByDeviceCode(deviceCode)
-                .map(d -> MessageDigest.isEqual(apiKey.getBytes(StandardCharsets.UTF_8),
-                        d.apiKey().getBytes(StandardCharsets.UTF_8)))
+                .map(d -> d.acceptsApiKey(apiKey))
                 .orElse(false);
     }
 }

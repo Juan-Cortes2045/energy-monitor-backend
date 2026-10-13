@@ -32,8 +32,9 @@ public class DeviceEntity extends BaseAuditEntity {
     @Column(name = "device_code", nullable = false, length = 6, unique = true)
     private String deviceCode;
 
-    @Column(name = "api_key", nullable = false, length = 100)
-    private String apiKey;
+    /** SHA-256 of the key, hex; the key itself is never stored (device-007/008). */
+    @Column(name = "api_key_hash", nullable = false, length = 64)
+    private String apiKeyHash;
 
     public String getIdDevice() {
         return idDevice;
@@ -91,11 +92,11 @@ public class DeviceEntity extends BaseAuditEntity {
         this.deviceCode = deviceCode;
     }
 
-    public String getApiKey() {
-        return apiKey;
+    public String getApiKeyHash() {
+        return apiKeyHash;
     }
 
-    public void setApiKey(String apiKey) {
-        this.apiKey = apiKey;
+    public void setApiKeyHash(String apiKeyHash) {
+        this.apiKeyHash = apiKeyHash;
     }
 }
