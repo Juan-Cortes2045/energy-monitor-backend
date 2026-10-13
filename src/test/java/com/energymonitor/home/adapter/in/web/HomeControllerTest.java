@@ -80,6 +80,9 @@ class HomeControllerTest {
     private com.energymonitor.home.application.port.in.DeleteHome deleteHome;
 
     @MockitoBean
+    private com.energymonitor.home.application.port.in.TransferHomeOwnership transferOwnership;
+
+    @MockitoBean
     private ListHomes listHomes;
 
     @MockitoBean
@@ -296,6 +299,72 @@ class HomeControllerTest {
         mockMvc.perform(delete("/api/v1/homes/{homeId}", HOME_ID).with(csrf()))
                 .andExpect(status().isUnauthorized());
         org.mockito.Mockito.verifyNoInteractions(deleteHome);
+    }
+
+    @Test
+    void ownerTransfersTheHome204() throws Exception {
+        mockMvc.perform(put("/api/v1/homes/{homeId}/owner", HOME_ID).with(asUser(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newOwnerId\":\"" + OTHER_USER_ID + "\"}"))
+                .andExpect(status().isNoContent());
+
+        verify(transferOwnership).transfer(
+                new com.energymonitor.home.application.command.TransferHomeOwnershipCommand(
+                        USER_ID, HOME_ID, OTHER_USER_ID));
+    }
+
+    @Test
+    void memberCannotTransferTheHome403() throws Exception {
+        org.mockito.Mockito.doThrow(new com.energymonitor.home.application.exception.HomeAccessDeniedException("member"))
+                .when(transferOwnership).transfer(any(
+                        com.energymonitor.home.application.command.TransferHomeOwnershipCommand.class));
+
+        mockMvc.perform(put("/api/v1/homes/{homeId}/owner", HOME_ID).with(asUser(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newOwnerId\":\"" + OTHER_USER_ID + "\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void transferringToANonMemberGets404() throws Exception {
+        org.mockito.Mockito.doThrow(new UserHomeNotFoundException("not a member"))
+                .when(transferOwnership).transfer(any(
+                        com.energymonitor.home.application.command.TransferHomeOwnershipCommand.class));
+
+        mockMvc.perform(put("/api/v1/homes/{homeId}/owner", HOME_ID).with(asUser(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newOwnerId\":\"" + OTHER_USER_ID + "\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void transferringToAnOwnerGets409() throws Exception {
+        org.mockito.Mockito.doThrow(new HomeConflictException("already owner"))
+                .when(transferOwnership).transfer(any(
+                        com.energymonitor.home.application.command.TransferHomeOwnershipCommand.class));
+
+        mockMvc.perform(put("/api/v1/homes/{homeId}/owner", HOME_ID).with(asUser(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newOwnerId\":\"" + USER_ID + "\"}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void transferWithoutANewOwnerIs400() throws Exception {
+        mockMvc.perform(put("/api/v1/homes/{homeId}/owner", HOME_ID).with(asUser(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newOwnerId\":\"\"}"))
+                .andExpect(status().isBadRequest());
+        org.mockito.Mockito.verifyNoInteractions(transferOwnership);
+    }
+
+    @Test
+    void transferWithoutATokenIsRefused() throws Exception {
+        mockMvc.perform(put("/api/v1/homes/{homeId}/owner", HOME_ID).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newOwnerId\":\"" + OTHER_USER_ID + "\"}"))
+                .andExpect(status().isUnauthorized());
+        org.mockito.Mockito.verifyNoInteractions(transferOwnership);
     }
 
     @Test

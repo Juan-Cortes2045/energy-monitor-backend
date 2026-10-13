@@ -140,10 +140,16 @@ public final class HomeUseCaseFixtures {
     public static class FakeHomeEventPort implements com.energymonitor.home.application.port.out.HomeEventPort {
 
         public final List<com.energymonitor.home.api.HomeDeleted> deleted = new ArrayList<>();
+        public final List<com.energymonitor.home.api.HomeOwnershipTransferred> transferred = new ArrayList<>();
 
         @Override
         public void publish(com.energymonitor.home.api.HomeDeleted event) {
             deleted.add(event);
+        }
+
+        @Override
+        public void publish(com.energymonitor.home.api.HomeOwnershipTransferred event) {
+            transferred.add(event);
         }
     }
 
@@ -171,6 +177,11 @@ public final class HomeUseCaseFixtures {
             return memberships.stream()
                     .filter(m -> m.userId().equals(userId) && m.homeId().equals(homeId))
                     .findFirst();
+        }
+
+        @Override
+        public Optional<UserHome> lockActive(String userId, String homeId) {
+            return findActive(userId, homeId);
         }
 
         @Override
