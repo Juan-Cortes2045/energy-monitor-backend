@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        The keys in clear are dropped; from here on only api_key_hash exists (see device-007).
+
+        Rollback: a hash cannot be turned back into the key, so api_key comes back holding the hash.
+        That keeps the column NOT NULL and the old code starting, but every module then has to be
+        linked again (or get a new key with "reconnect") before it can log in to the broker.
+    -->
+    <changeSet id="device-008-drop-clear-api-key" author="JuanCortes2045">
+        <comment>The API keys in clear are removed from device.</comment>
+        <dropColumn tableName="device" columnName="api_key"/>
+
+        <rollback>
+            <addColumn tableName="device">
+                <column name="api_key" type="VARCHAR(100)" afterColumn="device_code"/>
+            </addColumn>
+            <sql dbms="mysql">UPDATE device SET api_key = api_key_hash</sql>
+            <addNotNullConstraint tableName="device" columnName="api_key" columnDataType="VARCHAR(100)"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

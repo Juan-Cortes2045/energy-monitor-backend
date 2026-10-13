@@ -117,8 +117,7 @@ class HomeOwnershipTransferIntegrationTest extends JwtKeyedTest {
 
         assertThat(thresholds.findActiveByHomeId(HOME)).isPresent();
         assertThat(deviceApi.getHomeId("otd0000001")).contains(HOME);
-        assertThat(devices.findById("otd0000001")).hasValueSatisfying(
-                device -> assertThat(device.apiKey()).isEqualTo("ot-device-api-key"));
+        assertThat(deviceApi.validateCredentials("OT0001", "ot-device-api-key")).isTrue();
     }
 
     @Test

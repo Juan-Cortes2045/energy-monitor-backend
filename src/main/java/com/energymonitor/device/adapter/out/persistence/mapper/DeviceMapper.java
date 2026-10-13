@@ -19,7 +19,7 @@ public class DeviceMapper {
                 entity.getDescription(),
                 entity.getInstallationDate(),
                 entity.getDeviceCode(),
-                entity.getApiKey());
+                entity.getApiKeyHash());
     }
 
     public DeviceEntity toEntity(Device device) {
@@ -34,7 +34,7 @@ public class DeviceMapper {
         entity.setDescription(device.description());
         entity.setInstallationDate(device.installationDate());
         entity.setDeviceCode(device.deviceCode());
-        entity.setApiKey(device.apiKey());
+        entity.setApiKeyHash(device.apiKeyHash());
         return entity;
     }
 }
