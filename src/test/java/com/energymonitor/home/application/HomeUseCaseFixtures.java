@@ -126,6 +126,25 @@ public final class HomeUseCaseFixtures {
         public Optional<HomeThresholds> findActiveByHomeId(String homeId) {
             return Optional.ofNullable(byHomeId.get(homeId));
         }
+
+        @Override
+        public void removeByHomeId(String homeId) {
+            HomeThresholds removed = byHomeId.remove(homeId);
+            if (removed != null) {
+                byId.remove(removed.idThreshold());
+            }
+        }
+    }
+
+    /** Records the home events instead of publishing them. */
+    public static class FakeHomeEventPort implements com.energymonitor.home.application.port.out.HomeEventPort {
+
+        public final List<com.energymonitor.home.api.HomeDeleted> deleted = new ArrayList<>();
+
+        @Override
+        public void publish(com.energymonitor.home.api.HomeDeleted event) {
+            deleted.add(event);
+        }
     }
 
     public static class FakeUserHomePersistencePort implements UserHomePersistencePort {

@@ -17,8 +17,11 @@ class RemoveDeletedAccountServiceTest {
             new HomeUseCaseFixtures.FakeHomePersistencePort();
     private final HomeUseCaseFixtures.FakeUserHomePersistencePort memberships =
             new HomeUseCaseFixtures.FakeUserHomePersistencePort();
-    private final RemoveDeletedAccountService service =
-            new RemoveDeletedAccountService(homes, memberships);
+    private final HomeUseCaseFixtures.FakeHomeThresholdsPersistencePort thresholds =
+            new HomeUseCaseFixtures.FakeHomeThresholdsPersistencePort();
+    private final HomeUseCaseFixtures.FakeHomeEventPort events = new HomeUseCaseFixtures.FakeHomeEventPort();
+    private final RemoveDeletedAccountService service = new RemoveDeletedAccountService(homes, memberships,
+            thresholds, events, java.time.Clock.fixed(HomeUseCaseFixtures.NOW, java.time.ZoneOffset.UTC));
 
     @BeforeEach
     void seed() {
@@ -57,5 +60,8 @@ class RemoveDeletedAccountServiceTest {
         assertThat(memberships.listActiveByHomeId("hom0000002"))
                 .extracting(UserHome::userId).containsExactly("use0000002");
         assertThat(memberships.listActiveByUser("use0000001")).isEmpty();
+        // Same propagation as an owner deleting it: the device module unlinks its modules.
+        assertThat(events.deleted).extracting(com.energymonitor.home.api.HomeDeleted::homeId)
+                .containsExactly("hom0000001");
     }
 }

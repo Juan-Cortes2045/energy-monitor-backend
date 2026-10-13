@@ -23,4 +23,7 @@ public interface HomeThresholdsPersistencePort {
      * @return the thresholds, empty when soft-deleted or missing
      */
     Optional<HomeThresholds> findActiveByHomeId(String homeId);
+
+    /** Soft-deletes the thresholds of a home, which only exist together with it. */
+    void removeByHomeId(String homeId);
 }

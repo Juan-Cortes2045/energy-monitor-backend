@@ -13,6 +13,7 @@ import com.energymonitor.device.application.port.in.ListApplianceTypes;
 import com.energymonitor.device.application.port.in.ListHomeDevices;
 import com.energymonitor.device.application.port.in.ReissueDeviceCredentials;
 import com.energymonitor.device.application.port.in.UnlinkDevice;
+import com.energymonitor.device.application.port.in.UnlinkHomeDevices;
 import com.energymonitor.device.application.port.in.UpdateDevice;
 import com.energymonitor.device.application.port.out.ApplianceTypePersistencePort;
 import com.energymonitor.device.application.port.out.ApplianceTypePersistencePort.ApplianceTypeEntry;
@@ -47,7 +48,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class HomeDeviceService implements LinkDevice, UnlinkDevice, ListHomeDevices, ListApplianceTypes,
-        UpdateDevice, ReissueDeviceCredentials {
+        UpdateDevice, ReissueDeviceCredentials, UnlinkHomeDevices {
 
     private final DevicePersistencePort devices;
     private final DeviceHomePersistencePort deviceHomes;
@@ -123,13 +124,25 @@ public class HomeDeviceService implements LinkDevice, UnlinkDevice, ListHomeDevi
     @Override
     public void unlink(UnlinkDeviceCommand command) {
         requireOwner(command.userId(), command.homeId());
-        Device device = deviceOfHome(command.homeId(), command.deviceId());
+        detach(deviceOfHome(command.homeId(), command.deviceId()), command.homeId());
+    }
+
+    @Override
+    public int unlinkAll(String homeId) {
+        List<DeviceHome> links = deviceHomes.findByHomeId(homeId);
+        for (DeviceHome link : links) {
+            devices.findById(link.deviceId()).ifPresent(device -> detach(device, homeId));
+        }
+        return links.size();
+    }
+
+    private void detach(Device device, String homeId) {
         deviceHomes.unlink(device.idDevice());
         // The old key stops working; the module needs to be linked again to get a new one.
         devices.save(device.relinked(device.name(), device.applianceTypeId(), device.location(),
                 device.installationDate(), identifiers.nextApiKey()));
         // The module is told right away (MQTT command), so it offers Bluetooth to be linked again.
-        events.publish(new DeviceUnlinked(device.idDevice(), command.homeId(), clock.instant()));
+        events.publish(new DeviceUnlinked(device.idDevice(), homeId, clock.instant()));
     }
 
     @Override
