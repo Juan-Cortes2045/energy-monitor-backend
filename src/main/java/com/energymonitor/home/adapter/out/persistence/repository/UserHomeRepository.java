@@ -3,8 +3,13 @@ package com.energymonitor.home.adapter.out.persistence.repository;
 import com.energymonitor.home.adapter.out.persistence.entity.UserHomeEntity;
 import com.energymonitor.home.adapter.out.persistence.entity.UserHomeId;
 import com.energymonitor.home.domain.model.Role;
+import jakarta.persistence.LockModeType;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -27,4 +32,14 @@ public interface UserHomeRepository extends JpaRepository<UserHomeEntity, UserHo
      * @return how many members hold that role and have not been removed
      */
     long countByIdHomeIdAndRoleAndDeletedAtIsNull(String homeId, Role role);
+
+    /**
+     * Loads an active membership with {@code SELECT ... FOR UPDATE}; must run inside a transaction.
+     *
+     * @param id the membership key
+     * @return the membership, empty when soft-deleted or missing
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from UserHomeEntity m where m.id = :id and m.deletedAt is null")
+    Optional<UserHomeEntity> lockActiveById(@Param("id") UserHomeId id);
 }

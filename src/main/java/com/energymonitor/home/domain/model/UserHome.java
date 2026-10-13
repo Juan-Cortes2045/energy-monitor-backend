@@ -15,6 +15,8 @@ import java.util.Objects;
  *   <li>HOME-INV-003: only a user with {@code canManageHome()} can remove others</li>
  *   <li>HOME-INV-004: an OWNER cannot be removed from a home</li>
  *   <li>HOME-INV-008: a user cannot have two active memberships in the same home</li>
+ *   <li>HOME-INV-015: an ownership transfer keeps the number of owners: the owner becomes a
+ *       MEMBER in the same step in which the member becomes OWNER</li>
  * </ul>
  *
  * <p>Maps to the {@code user_home} table.
@@ -150,6 +152,17 @@ public class UserHome {
         if (this.role == Role.OWNER && !otherOwnersExist) {
             throw new IllegalStateException("the only OWNER cannot leave the home");
         }
+    }
+
+    /**
+     * The same membership with another role, keeping the favourite mark. Used by the ownership
+     * transfer, which swaps the roles of the owner and the chosen member.
+     *
+     * @param newRole the role the user takes
+     * @return a new membership with that role
+     */
+    public UserHome withRole(Role newRole) {
+        return new UserHome(userId, homeId, newRole, favorite);
     }
 
     /**

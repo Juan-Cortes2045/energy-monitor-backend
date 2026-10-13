@@ -41,6 +41,19 @@ public interface UserHomePersistencePort {
     Optional<UserHome> findActive(String userId, String homeId);
 
     /**
+     * Finds an active membership and locks its row until the current transaction ends.
+     *
+     * <p>Used by the ownership transfer: two transfers of the same home started at the same time
+     * would otherwise both read the caller as OWNER and leave two owners behind. With the caller's
+     * row locked, the second one waits and then finds a MEMBER.
+     *
+     * @param userId the user
+     * @param homeId the home
+     * @return the membership, empty when soft-deleted or missing
+     */
+    Optional<UserHome> lockActive(String userId, String homeId);
+
+    /**
      * Lists all active memberships of a user.
      *
      * @param userId the user

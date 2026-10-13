@@ -62,6 +62,12 @@ public class UserHomePersistenceAdapter implements UserHomePersistencePort {
     }
 
     @Override
+    public Optional<UserHome> lockActive(String userId, String homeId) {
+        return repository.lockActiveById(new UserHomeId(userId, homeId))
+                .map(mapper::toDomain);
+    }
+
+    @Override
     public List<UserHome> listActiveByUser(String userId) {
         return repository.findByIdUserIdAndDeletedAtIsNull(userId).stream()
                 .map(mapper::toDomain)
