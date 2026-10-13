@@ -1,5 +1,8 @@
 package com.energymonitor.home.application.usecase;
 
+import com.energymonitor.home.application.port.out.HomeEventPort;
+import com.energymonitor.home.application.port.out.HomeThresholdsPersistencePort;
+import java.time.Clock;
 import com.energymonitor.home.application.port.in.RemoveDeletedAccount;
 import com.energymonitor.home.application.port.out.HomePersistencePort;
 import com.energymonitor.home.application.port.out.UserHomePersistencePort;
@@ -20,11 +23,19 @@ public class RemoveDeletedAccountService implements RemoveDeletedAccount {
 
     private final HomePersistencePort homePort;
     private final UserHomePersistencePort userHomePort;
+    private final HomeThresholdsPersistencePort thresholdsPort;
+    private final HomeEventPort events;
+    private final Clock clock;
 
     public RemoveDeletedAccountService(HomePersistencePort homePort,
-                                       UserHomePersistencePort userHomePort) {
+                                       UserHomePersistencePort userHomePort,
+                                       HomeThresholdsPersistencePort thresholdsPort, HomeEventPort events,
+                                       Clock clock) {
         this.homePort = homePort;
         this.userHomePort = userHomePort;
+        this.thresholdsPort = thresholdsPort;
+        this.events = events;
+        this.clock = clock;
     }
 
     @Override
@@ -42,9 +53,8 @@ public class RemoveDeletedAccountService implements RemoveDeletedAccount {
         for (var membership : memberships) {
             String homeId = membership.homeId();
             if (isOnlyOwner(membership, homeId)) {
-                userHomePort.listActiveByHomeId(homeId)
-                        .forEach(member -> userHomePort.remove(member.userId(), homeId));
-                homePort.remove(homeId);
+                // Same end as an owner deleting it: thresholds go and its devices are unlinked.
+                HomeRemoval.remove(homeId, userId, homePort, userHomePort, thresholdsPort, events, clock);
             } else {
                 userHomePort.remove(userId, homeId);
             }

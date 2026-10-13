@@ -276,4 +276,21 @@ class HomeDeviceServiceTest {
         assertEquals(1, linkedEvents.size());
         assertThrows(NotHomeOwnerException.class, () -> service.reissue(GUEST, HOME, before.idDevice()));
     }
+
+    @Test
+    void deletingAHomeUnlinksEveryModuleOfIt() {
+        String a = service.link(link(OWNER, HOME, "EM0001")).device().idDevice();
+        String b = service.link(link(OWNER, HOME, "EM0002")).device().idDevice();
+        String other = service.link(link(OWNER, OTHER_HOME, "EM0003")).device().idDevice();
+        String keyA = devices.get(a).apiKey();
+
+        assertEquals(2, service.unlinkAll(HOME));
+
+        assertTrue(!homeByDevice.containsKey(a) && !homeByDevice.containsKey(b));
+        assertEquals(OTHER_HOME, homeByDevice.get(other));
+        assertNotEquals(keyA, devices.get(a).apiKey());
+        assertTrue(devices.containsKey(a), "the module is unlinked, not deleted");
+        assertEquals(java.util.Set.of(a, b),
+                unlinkedEvents.stream().map(e -> e.deviceId()).collect(java.util.stream.Collectors.toSet()));
+    }
 }
