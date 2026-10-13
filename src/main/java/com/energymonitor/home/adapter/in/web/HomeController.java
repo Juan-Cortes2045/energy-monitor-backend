@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.energymonitor.home.adapter.in.web.dto.CreateHomeRequest;
 import com.energymonitor.home.adapter.in.web.dto.HomeResponse;
 import com.energymonitor.home.adapter.in.web.dto.JoinHomeRequest;
+import com.energymonitor.home.adapter.in.web.dto.TransferHomeOwnershipRequest;
 import com.energymonitor.home.adapter.in.web.dto.UserHomeResponse;
 import com.energymonitor.home.application.command.CreateHomeCommand;
 import com.energymonitor.home.application.command.JoinHomeCommand;
@@ -25,6 +26,7 @@ import com.energymonitor.home.application.command.ListHomesQuery;
 import com.energymonitor.home.application.command.ListMembersQuery;
 import com.energymonitor.home.application.command.RemoveUserCommand;
 import com.energymonitor.home.application.command.ToggleFavoriteCommand;
+import com.energymonitor.home.application.command.TransferHomeOwnershipCommand;
 import com.energymonitor.home.application.port.in.CreateHome;
 import com.energymonitor.home.application.port.in.JoinHome;
 import com.energymonitor.home.application.port.in.DeleteHome;
@@ -33,6 +35,7 @@ import com.energymonitor.home.application.port.in.ListHomes;
 import com.energymonitor.home.application.port.in.ListMembers;
 import com.energymonitor.home.application.port.in.RemoveUser;
 import com.energymonitor.home.application.port.in.ToggleFavorite;
+import com.energymonitor.home.application.port.in.TransferHomeOwnership;
 import com.energymonitor.home.application.result.HomeMembershipResult;
 import com.energymonitor.home.application.result.HomeResult;
 import com.energymonitor.home.application.result.UserHomeResult;
@@ -57,9 +60,10 @@ public class HomeController {
     private final RemoveUser removeUser;
     private final LeaveHome leaveHome;
     private final DeleteHome deleteHome;
+    private final TransferHomeOwnership transferOwnership;
     private final CurrentUserResolver currentUser;
 
-    public HomeController(CreateHome createHome, JoinHome joinHome, ListHomes listHomes, ListMembers listMembers, ToggleFavorite toggleFavorite, RemoveUser removeUser,LeaveHome leaveHome, DeleteHome deleteHome, CurrentUserResolver currentUser) {
+    public HomeController(CreateHome createHome, JoinHome joinHome, ListHomes listHomes, ListMembers listMembers, ToggleFavorite toggleFavorite, RemoveUser removeUser,LeaveHome leaveHome, DeleteHome deleteHome, TransferHomeOwnership transferOwnership, CurrentUserResolver currentUser) {
         this.createHome = createHome;
         this.joinHome = joinHome;
         this.listHomes = listHomes;
@@ -68,6 +72,7 @@ public class HomeController {
         this.removeUser = removeUser;
         this.leaveHome = leaveHome;
         this.deleteHome = deleteHome;
+        this.transferOwnership = transferOwnership;
         this.currentUser = currentUser;
     }
 
@@ -132,5 +137,18 @@ public class HomeController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteHome(@PathVariable String homeId) {
         deleteHome.delete(new DeleteHomeCommand(currentUser.resolveCurrentUserId(), homeId));
+    }
+
+    /**
+     * Hands the home over to one of its members (OWNER only). The caller stays in the home as a
+     * MEMBER. 403 for members, 404 when the caller or the new owner is not in the home, 409 when
+     * the new owner already owns it.
+     */
+    @PutMapping("/{homeId}/owner")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void transferOwnership(@PathVariable String homeId,
+                                  @Valid @RequestBody TransferHomeOwnershipRequest request) {
+        transferOwnership.transfer(new TransferHomeOwnershipCommand(
+                currentUser.resolveCurrentUserId(), homeId, request.newOwnerId()));
     }
 }

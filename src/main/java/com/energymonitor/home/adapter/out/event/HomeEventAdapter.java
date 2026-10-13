@@ -1,6 +1,7 @@
 package com.energymonitor.home.adapter.out.event;
 
 import com.energymonitor.home.api.HomeDeleted;
+import com.energymonitor.home.api.HomeOwnershipTransferred;
 import com.energymonitor.home.application.port.out.HomeEventPort;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -19,6 +20,11 @@ public class HomeEventAdapter implements HomeEventPort {
 
     @Override
     public void publish(HomeDeleted event) {
+        publisher.publishEvent(event);
+    }
+
+    @Override
+    public void publish(HomeOwnershipTransferred event) {
         publisher.publishEvent(event);
     }
 }
