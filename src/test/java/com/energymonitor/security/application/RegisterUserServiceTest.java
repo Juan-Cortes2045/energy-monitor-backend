@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.energymonitor.security.api.AccountRegistered;
 import com.energymonitor.security.application.command.RegisterUserCommand;
 import com.energymonitor.security.application.exception.EmailAlreadyRegisteredException;
 import com.energymonitor.security.application.exception.PasswordPolicyViolationException;
@@ -16,6 +17,7 @@ import com.energymonitor.security.domain.model.UserStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -36,8 +38,11 @@ class RegisterUserServiceTest {
             new UseCaseFixtures.FakeIdentifierGeneratorPort();
     private final UseCaseFixtures.FakeAuditLogPersistencePort audits =
             new UseCaseFixtures.FakeAuditLogPersistencePort();
+    private final UseCaseFixtures.FakeAccountEventPublisherPort events =
+            new UseCaseFixtures.FakeAccountEventPublisherPort();
     private final RegisterUserService register =
-            new RegisterUserService(users, persons, policies, hasher, identifiers, audits, CLOCK);
+            new RegisterUserService(users, persons, policies, hasher, identifiers, audits, events,
+                    CLOCK);
 
     private RegisterUserCommand command(String email, String password) {
         return new RegisterUserCommand(email, password, "Ada", "Lovelace",
@@ -52,6 +57,22 @@ class RegisterUserServiceTest {
         assertTrue(hasher.matches(UseCaseFixtures.PASSWORD, user.passwordHash()));
         assertTrue(persons.findActive(user.idPerson()).isPresent());
         assertTrue(users.findActive(user.idUser()).isPresent());
+    }
+
+    @Test
+    void announcesTheNewAccountSoAdministratorsAreTold() {
+        User user = register.register(command("ada@example.com", UseCaseFixtures.PASSWORD));
+
+        assertEquals(List.of(new AccountRegistered(user.idUser(), "ada@example.com", CLOCK.instant())),
+                events.eventsOf(AccountRegistered.class));
+    }
+
+    @Test
+    void announcesNothingWhenTheRegistrationIsRefused() {
+        assertThrows(PasswordPolicyViolationException.class,
+                () -> register.register(command("ada@example.com", "short")));
+
+        assertTrue(events.events().isEmpty());
     }
 
     @Test

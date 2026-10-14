@@ -4,6 +4,8 @@ import com.energymonitor.security.application.command.RegisterUserCommand;
 import com.energymonitor.security.application.exception.EmailAlreadyRegisteredException;
 import com.energymonitor.security.application.exception.PasswordPolicyViolationException;
 import com.energymonitor.security.application.port.in.RegisterUser;
+import com.energymonitor.security.api.AccountRegistered;
+import com.energymonitor.security.application.port.out.AccountEventPublisherPort;
 import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.PasswordHasherPort;
@@ -30,19 +32,22 @@ public class RegisterUserService implements RegisterUser {
     private final PasswordHasherPort passwordHasher;
     private final IdentifierGeneratorPort identifiers;
     private final AuditLogPersistencePort auditLogPort;
+    private final AccountEventPublisherPort events;
     private final Clock clock;
 
     public RegisterUserService(UserPersistencePort userPort, PersonPersistencePort personPort,
                                PasswordPolicyPersistencePort passwordPolicyPort,
                                PasswordHasherPort passwordHasher,
                                IdentifierGeneratorPort identifiers,
-                               AuditLogPersistencePort auditLogPort, Clock clock) {
+                               AuditLogPersistencePort auditLogPort,
+                               AccountEventPublisherPort events, Clock clock) {
         this.userPort = userPort;
         this.personPort = personPort;
         this.passwordPolicyPort = passwordPolicyPort;
         this.passwordHasher = passwordHasher;
         this.identifiers = identifiers;
         this.auditLogPort = auditLogPort;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -70,6 +75,7 @@ public class RegisterUserService implements RegisterUser {
 
         auditLogPort.save(new AuditLog(identifiers.generate(), user.idUser(), AuditAction.CREATE,
                 null, command.ipAddress(), null, now));
+        events.accountRegistered(new AccountRegistered(user.idUser(), email.value(), now));
         return user;
     }
 }

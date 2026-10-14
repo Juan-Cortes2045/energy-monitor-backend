@@ -50,4 +50,18 @@ public interface NotificationRepository extends JpaRepository<NotificationEntity
             @Param("openedBefore") LocalDateTime openedBefore,
             @Param("reason") String reason,
             @Param("failed") com.energymonitor.notification.domain.model.NotificationStatus failed);
+
+    /**
+     * A recipient's notifications of one channel and source that are not deleted, newest first.
+     *
+     * @param userId the recipient
+     * @param channel the channel
+     * @param sourceType the source
+     * @param page how many to return
+     * @return the rows
+     */
+    List<NotificationEntity> findByUserIdAndChannelAndSourceTypeAndDeletedAtIsNullOrderBySentAtDesc(
+            String userId, com.energymonitor.notification.domain.model.NotificationChannel channel,
+            com.energymonitor.notification.domain.model.NotificationSourceType sourceType,
+            org.springframework.data.domain.Pageable page);
 }

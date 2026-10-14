@@ -3,6 +3,8 @@ package com.energymonitor.security.application.usecase;
 import com.energymonitor.security.application.exception.AccountNotActiveException;
 import com.energymonitor.security.application.exception.EmailAlreadyRegisteredException;
 import com.energymonitor.security.application.port.in.SignInWithGoogle;
+import com.energymonitor.security.api.AccountRegistered;
+import com.energymonitor.security.application.port.out.AccountEventPublisherPort;
 import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.PasswordHasherPort;
@@ -48,12 +50,14 @@ public class SignInWithGoogleService implements SignInWithGoogle {
     private final ProfileImageFetcherPort images;
     private final IdentifierGeneratorPort identifiers;
     private final AuditLogPersistencePort audits;
+    private final AccountEventPublisherPort events;
     private final Clock clock;
 
     public SignInWithGoogleService(UserPersistencePort users, PersonPersistencePort persons,
                                    PasswordHasherPort passwordHasher, TokenGeneratorPort tokens,
                                    ProfileImageFetcherPort images, IdentifierGeneratorPort identifiers,
-                                   AuditLogPersistencePort audits, Clock clock) {
+                                   AuditLogPersistencePort audits,
+                                   AccountEventPublisherPort events, Clock clock) {
         this.users = users;
         this.persons = persons;
         this.passwordHasher = passwordHasher;
@@ -61,6 +65,7 @@ public class SignInWithGoogleService implements SignInWithGoogle {
         this.images = images;
         this.identifiers = identifiers;
         this.audits = audits;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -106,6 +111,7 @@ public class SignInWithGoogleService implements SignInWithGoogle {
         users.save(user);
         audits.save(new AuditLog(identifiers.generate(), user.idUser(), AuditAction.CREATE, null,
                 ipAddress, null, now));
+        events.accountRegistered(new AccountRegistered(user.idUser(), email.value(), now));
         return user;
     }
 

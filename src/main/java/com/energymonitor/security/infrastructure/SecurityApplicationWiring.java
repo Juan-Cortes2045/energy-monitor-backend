@@ -6,6 +6,8 @@ import com.energymonitor.security.application.usecase.SignInWithGoogleService;
 import com.energymonitor.security.api.EmailVerificationDeliveryPort;
 import com.energymonitor.security.api.PasswordResetDeliveryPort;
 import com.energymonitor.security.api.UserProfileQuery;
+import com.energymonitor.security.api.AdministratorQuery;
+import com.energymonitor.security.application.port.in.AdministerUserAccount;
 import com.energymonitor.security.application.port.in.AssignRole;
 import com.energymonitor.security.application.port.in.AuthenticateUser;
 import com.energymonitor.security.application.port.in.ChangePassword;
@@ -16,6 +18,7 @@ import com.energymonitor.security.application.port.in.EmailVerification;
 import com.energymonitor.security.application.port.in.CreateUserSession;
 import com.energymonitor.security.application.port.in.FindUser;
 import com.energymonitor.security.application.port.in.LogoutUserSession;
+import com.energymonitor.security.application.port.in.ListUserAccounts;
 import com.energymonitor.security.application.port.in.ManageUserStatus;
 import com.energymonitor.security.application.port.in.RefreshSession;
 import com.energymonitor.security.application.port.in.RegisterUser;
@@ -40,8 +43,11 @@ import com.energymonitor.security.application.port.out.SystemRolePermissionPersi
 import com.energymonitor.security.application.port.out.SystemRolePersistencePort;
 import com.energymonitor.security.application.port.out.TokenGeneratorPort;
 import com.energymonitor.security.application.port.out.UserPersistencePort;
+import com.energymonitor.security.application.port.out.UserDirectoryPort;
 import com.energymonitor.security.application.port.out.UserSessionPersistencePort;
 import com.energymonitor.security.application.port.out.UserSystemRolePersistencePort;
+import com.energymonitor.security.application.usecase.AdministerUserAccountService;
+import com.energymonitor.security.application.usecase.AdministratorQueryService;
 import com.energymonitor.security.application.usecase.AssignRoleService;
 import com.energymonitor.security.application.usecase.AuthenticateUserService;
 import com.energymonitor.security.application.usecase.ChangePasswordService;
@@ -54,6 +60,7 @@ import com.energymonitor.security.application.usecase.UserProfileQueryService;
 import com.energymonitor.security.application.usecase.CreateUserSessionService;
 import com.energymonitor.security.application.usecase.FindUserService;
 import com.energymonitor.security.application.usecase.LogoutUserSessionService;
+import com.energymonitor.security.application.usecase.ListUserAccountsService;
 import com.energymonitor.security.application.usecase.ManageUserStatusService;
 import com.energymonitor.security.application.usecase.RefreshSessionService;
 import com.energymonitor.security.application.usecase.RegisterUserService;
@@ -110,10 +117,13 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
  *   <li>{@link LogoutUserSessionService} - session closure and its logout audit row.</li>
  *   <li>{@link AssignRoleService} / {@link RevokeRoleService} - assignment and audit row.</li>
  *   <li>{@link ManageUserStatusService} - account state and audit row.</li>
+ *   <li>{@link AdministerUserAccountService} - an administrator's change to another account,
+ *       together with the sessions it revokes.</li>
  * </ul>
  *
  * <p>{@link CreateUserSessionService}, {@link CreatePasswordResetTokenService},
- * {@link FindUserService} and {@link CheckPermissionService} are read-only or write a single
+ * {@link FindUserService}, {@link CheckPermissionService} and
+ * {@link ListUserAccountsService} are read-only or write a single
  * row, so a transaction would add nothing but an extra connection and are deliberately left
  * without a boundary.
  */
@@ -200,11 +210,12 @@ public class SecurityApplicationWiring {
     public RegisterUser registerUser(UserPersistencePort users, PersonPersistencePort persons,
                                      PasswordPolicyPersistencePort policies,
                                      PasswordHasherPort hasher, IdentifierGeneratorPort identifiers,
-                                     AuditLogPersistencePort audits, Clock clock,
+                                     AuditLogPersistencePort audits,
+                                     AccountEventPublisherPort events, Clock clock,
                                      PlatformTransactionManager transactions) {
         return transactional(transactions,
                 new RegisterUserService(users, persons, policies, hasher, identifiers, audits,
-                        clock),
+                        events, clock),
                 RegisterUser.class);
     }
 
@@ -213,11 +224,12 @@ public class SecurityApplicationWiring {
                                              PasswordHasherPort hasher, TokenGeneratorPort tokens,
                                              ProfileImageFetcherPort images,
                                              IdentifierGeneratorPort identifiers,
-                                             AuditLogPersistencePort audits, Clock clock,
+                                             AuditLogPersistencePort audits,
+                                             AccountEventPublisherPort events, Clock clock,
                                              PlatformTransactionManager transactions) {
         return transactional(transactions,
                 new SignInWithGoogleService(users, persons, hasher, tokens, images, identifiers, audits,
-                        clock),
+                        events, clock),
                 SignInWithGoogle.class);
     }
 
@@ -445,5 +457,35 @@ public class SecurityApplicationWiring {
                                            UserSystemRolePersistencePort assignments,
                                            SystemRolePermissionPersistencePort grants) {
         return new CheckPermissionService(users, permissions, roles, assignments, grants);
+    }
+
+    @Bean
+    public ListUserAccounts listUserAccounts(UserDirectoryPort directory,
+                                             UserSystemRolePersistencePort assignments,
+                                             SystemRolePersistencePort roles) {
+        return new ListUserAccountsService(directory, assignments, roles);
+    }
+
+    @Bean
+    public AdministerUserAccount administerUserAccount(UserPersistencePort users,
+                                                       SystemRolePersistencePort roles,
+                                                       UserSystemRolePersistencePort assignments,
+                                                       UserSessionPersistencePort sessions,
+                                                       ManageUserStatus manageUserStatus,
+                                                       AssignRole assignRole, RevokeRole revokeRole,
+                                                       AccountEventPublisherPort events,
+                                                       Clock clock,
+                                                       PlatformTransactionManager transactions) {
+        return transactional(transactions,
+                new AdministerUserAccountService(users, roles, assignments, sessions,
+                        manageUserStatus, assignRole, revokeRole, events, clock),
+                AdministerUserAccount.class);
+    }
+
+    @Bean
+    public AdministratorQuery administratorQuery(SystemRolePersistencePort roles,
+                                                 UserSystemRolePersistencePort assignments,
+                                                 UserPersistencePort users) {
+        return new AdministratorQueryService(roles, assignments, users);
     }
 }
