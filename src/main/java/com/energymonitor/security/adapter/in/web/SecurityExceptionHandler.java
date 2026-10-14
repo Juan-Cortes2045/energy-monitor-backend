@@ -11,6 +11,7 @@ import com.energymonitor.security.application.exception.InvalidVerificationCodeE
 import com.energymonitor.security.application.exception.PasswordPolicyViolationException;
 import com.energymonitor.security.application.exception.RoleNotFoundException;
 import com.energymonitor.security.application.exception.SecurityApplicationException;
+import com.energymonitor.security.application.exception.SelfAdministrationException;
 import com.energymonitor.security.application.exception.TooManyResetAttemptsException;
 import com.energymonitor.security.application.exception.SessionNotFoundException;
 import com.energymonitor.security.application.exception.UserNotFoundException;
@@ -42,7 +43,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *
  * <ul>
  *   <li>404 - the account, role or session the request named does not exist.</li>
- *   <li>409 - the email is already taken.</li>
+ *   <li>409 - the email is already taken, or an administrator targeted their own account.</li>
  *   <li>400 - the request was malformed or a token in it was not usable.</li>
  *   <li>401 - the presented password did not match.</li>
  *   <li>403 - the account is blocked or inactive.</li>
@@ -173,6 +174,19 @@ public class SecurityExceptionHandler {
     public ResponseEntity<ApiError> handleInvalidVerificationCode(
             InvalidVerificationCodeException exception, HttpServletRequest request) {
         return respond(HttpStatus.BAD_REQUEST, exception.getMessage(), request);
+    }
+
+    /**
+     * An administrator tried to change their own status or roles.
+     *
+     * @param exception the application failure
+     * @param request   the failed request
+     * @return 409
+     */
+    @ExceptionHandler(SelfAdministrationException.class)
+    public ResponseEntity<ApiError> handleSelfAdministration(SelfAdministrationException exception,
+                                                             HttpServletRequest request) {
+        return respond(HttpStatus.CONFLICT, exception.getMessage(), request);
     }
 
     @ExceptionHandler(AccountDeletionBlockedException.class)
