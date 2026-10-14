@@ -1,6 +1,10 @@
 package com.energymonitor.security.application;
 
+import com.energymonitor.security.api.AccountAdministered;
+import com.energymonitor.security.api.AccountDeleted;
+import com.energymonitor.security.api.AccountRegistered;
 import com.energymonitor.security.api.PasswordResetDeliveryPort;
+import com.energymonitor.security.application.port.out.AccountEventPublisherPort;
 import com.energymonitor.security.application.port.out.AuditLogPersistencePort;
 import com.energymonitor.security.application.port.out.IdentifierGeneratorPort;
 import com.energymonitor.security.application.port.out.LoginErrorLogPersistencePort;
@@ -634,6 +638,35 @@ public final class UseCaseFixtures {
             return grants.stream()
                     .filter(grant -> grant.idPermission().equals(idPermission))
                     .toList();
+        }
+    }
+
+    /** Keeps every published account event, in order. */
+    public static final class FakeAccountEventPublisherPort implements AccountEventPublisherPort {
+
+        private final List<Object> events = new ArrayList<>();
+
+        @Override
+        public void accountDeleted(AccountDeleted event) {
+            events.add(event);
+        }
+
+        @Override
+        public void accountRegistered(AccountRegistered event) {
+            events.add(event);
+        }
+
+        @Override
+        public void accountAdministered(AccountAdministered event) {
+            events.add(event);
+        }
+
+        public List<Object> events() {
+            return List.copyOf(events);
+        }
+
+        public <T> List<T> eventsOf(Class<T> type) {
+            return events.stream().filter(type::isInstance).map(type::cast).toList();
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.energymonitor.security.infrastructure;
 
+import com.energymonitor.security.domain.model.PermissionCodes;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -33,6 +34,15 @@ import org.springframework.security.web.SecurityFilterChain;
  *
  * <p>Everything else is denied by default: a new endpoint is protected unless it is added to
  * the permit list on purpose.
+ *
+ * <h2>Administration</h2>
+ *
+ * <p>{@code /api/v1/admin/**} additionally requires a global permission code, resolved through
+ * the RBAC chain by {@link PermissionAuthorization}: {@code USER.READ} to read the directory,
+ * {@code USER.MANAGE} to change an account's state and {@code ROLE.MANAGE} to change its roles;
+ * the caller's own administrator notifications also require {@code USER.READ}.
+ * Any other admin route is denied outright, so a new one stays closed until it is given a code
+ * here. Home-scoped roles (owner, member) play no part in these rules.
  *
  * <h2>CORS</h2>
  *
@@ -102,13 +112,15 @@ public class SecurityFilterChainConfiguration {
      * @param http            the builder Spring Security hands over
      * @param entryPoint      renders 401 in the shared error shape
      * @param accessDenied    renders 403 in the shared error shape
+     * @param permissions     enforces global permission codes on the admin routes
      * @return the installed filter chain
      * @throws Exception if the chain cannot be built
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                     JwtAuthenticationEntryPoint entryPoint,
-                                                    JwtAccessDeniedHandler accessDenied)
+                                                    JwtAccessDeniedHandler accessDenied,
+                                                    PermissionAuthorization permissions)
             throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -129,6 +141,20 @@ public class SecurityFilterChainConfiguration {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .requestMatchers(INFRASTRUCTURE_ENDPOINTS).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/users", "/api/v1/admin/roles",
+                                "/api/v1/admin/notifications")
+                        .access(permissions.require(PermissionCodes.USER_READ))
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/notifications/*/read")
+                        .access(permissions.require(PermissionCodes.USER_READ))
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/notifications/*")
+                        .access(permissions.require(PermissionCodes.USER_READ))
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/users/*/status")
+                        .access(permissions.require(PermissionCodes.USER_MANAGE))
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/users/*/roles/*")
+                        .access(permissions.require(PermissionCodes.ROLE_MANAGE))
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/users/*/roles/*")
+                        .access(permissions.require(PermissionCodes.ROLE_MANAGE))
+                        .requestMatchers("/api/v1/admin/**").denyAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .authenticationEntryPoint(entryPoint)

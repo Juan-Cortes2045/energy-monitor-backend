@@ -12,6 +12,7 @@ import com.energymonitor.security.application.UseCaseFixtures.FakePersonPersiste
 import com.energymonitor.security.application.UseCaseFixtures.FakeTokenGeneratorPort;
 import com.energymonitor.security.application.UseCaseFixtures.FakeUserPersistencePort;
 import com.energymonitor.security.application.exception.AccountNotActiveException;
+import com.energymonitor.security.api.AccountRegistered;
 import com.energymonitor.security.application.exception.EmailAlreadyRegisteredException;
 import com.energymonitor.security.application.result.GoogleIdentity;
 import com.energymonitor.security.application.usecase.SignInWithGoogleService;
@@ -32,13 +33,15 @@ class SignInWithGoogleServiceTest {
     private final FakeAuditLogPersistencePort audits = new FakeAuditLogPersistencePort();
     private int fetches;
 
+    private final UseCaseFixtures.FakeAccountEventPublisherPort events =
+            new UseCaseFixtures.FakeAccountEventPublisherPort();
     private final SignInWithGoogleService service = new SignInWithGoogleService(users, persons,
             new FakePasswordHasherPort(), new FakeTokenGeneratorPort(),
             url -> {
                 fetches++;
                 return Optional.of("data:image/jpeg;base64,AAAA");
             },
-            new FakeIdentifierGeneratorPort(), audits, Clock.fixed(NOW, ZoneOffset.UTC));
+            new FakeIdentifierGeneratorPort(), audits, events, Clock.fixed(NOW, ZoneOffset.UTC));
 
     private static GoogleIdentity google(String sub, String email, String given, String family) {
         return new GoogleIdentity(sub, email, true, given, family, given == null ? null : given + " X",
@@ -85,6 +88,8 @@ class SignInWithGoogleServiceTest {
         assertEquals(first.idUser(), second.idUser());
         assertEquals(1, users.users().size());
         assertEquals(1, fetches);
+        assertEquals(1, events.eventsOf(AccountRegistered.class).size(),
+                "only the sign-in that creates the account announces it");
     }
 
     @Test
