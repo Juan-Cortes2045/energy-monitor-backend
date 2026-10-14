@@ -8,5 +8,8 @@ public enum NotificationChannel {
     /** Email delivery channel. */
     EMAIL,
     /** Web Push (RFC 8030) to a browser subscription. */
-    PUSH
+    PUSH,
+
+    /** Shown inside the web app; never leaves the platform. */
+    IN_APP
 }
