@@ -25,5 +25,8 @@ public enum NotificationSourceType {
     RECOMMENDATION,
 
     /** A message sent by the security module, such as a password recovery code. */
-    SECURITY
+    SECURITY,
+
+    /** A change on the platform an administrator is told about. */
+    ADMINISTRATION
 }

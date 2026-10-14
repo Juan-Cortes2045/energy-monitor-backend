@@ -212,6 +212,84 @@ publishes `AccountDeleted` and the home module reacts to it, so either everythin
 nothing is. An access token issued before the deletion keeps working until it expires, at most
 15 minutes; no refresh token can renew it.
 
+### Administrators and global roles (RBAC)
+
+There are two kinds of roles, and they never mix:
+
+- **Home roles** (`OWNER`, `MEMBER`) are kept per home by the home module and decide what a user
+  may do *inside that home*.
+- **Global roles** (RBAC: `system_role` → `system_role_permission` → `permission`, assigned
+  through `user_system_role`) decide what a user may do *on the platform*. Today there is one,
+  `ADMIN`, seeded by `security-025-seed-admin-role` with three permission codes:
+
+| Code | Allows | Routes |
+|---|---|---|
+| `USER.READ` | read the user directory and the role list | `GET /api/v1/admin/users?q=&page=&size=` (size 1–50, default 20), `GET /api/v1/admin/roles` |
+| `USER.MANAGE` | move another account to `ACTIVE`, `INACTIVE` or `BLOCKED` | `PUT /api/v1/admin/users/{idUser}/status` with `{"status":"BLOCKED"}` |
+| `ROLE.MANAGE` | grant or revoke a global role | `PUT` / `DELETE /api/v1/admin/users/{idUser}/roles/{roleName}` |
+
+How it behaves:
+
+- The filter chain checks the code on every request, reading it from the database rather than
+  from the token: a granted or revoked role, or a blocked account, takes effect on the next
+  request. Without the code the answer is `403`; without a token, `401`. Any other
+  `/api/v1/admin/**` route is denied.
+- `ADMIN` gives **no access to any home**. An administrator who is not a member of a home cannot
+  read it, exactly like any other user.
+- An administrator cannot change their own status or roles (`409`), so nobody locks themselves
+  out by accident; another administrator has to do it.
+- Moving an account out of `ACTIVE` revokes its sessions, so it cannot refresh. Its current
+  access token still works on the non-admin routes until it expires (at most 15 minutes).
+- Every change is written to `audit_log`. `GET /api/v1/auth/permissions` returns the caller's
+  codes; the web uses it to show or hide the administration screen.
+
+**The first administrator.** No account is an administrator after installing: granting a global
+privilege by default would hand the platform to whoever registered first. Register the account
+normally, then grant it the role once in MySQL:
+
+```bash
+docker compose exec mysql mysql -u energy_app -p energy_monitor -e "
+  INSERT INTO user_system_role (user_id, system_role_id, assigned_at)
+  SELECT id_user, 'rol0000001', NOW() FROM user
+  WHERE email = 'admin@example.com' AND deleted_at IS NULL;"
+```
+
+Use the real address (lower case, as it was registered). Sign out and in again on the web, or
+reload it, and **Administration** appears in the menu. From there that administrator can grant
+`ADMIN` to other accounts; the SQL is only needed for the first one. To undo it by hand:
+`DELETE FROM user_system_role WHERE system_role_id = 'rol0000001' AND user_id = '<id_user>';`.
+
+**Administrator notifications.** Administrators are told, inside the web app, about:
+
+| Event (`security::api`) | Published when | Who receives it |
+|---|---|---|
+| `AccountRegistered` | an account is created (registration or first Google sign-in) | every active administrator |
+| `AccountAdministered` | an administrator changes another account's status, or grants or revokes a role (not on repeats) | every active administrator except the one who made the change |
+
+The notification module listens after commit (a registration that rolls back notifies nobody) and
+stores one row per administrator in `notification`, with channel `IN_APP` and source
+`ADMINISTRATION` (`notification-004-add-in-app-admin-notifications`). Only the message key and the
+affected account are stored; the web builds the text. These notifications are not sent by mail
+or push.
+
+| Route (requires `USER.READ`, only the caller's own notifications) | Purpose |
+|---|---|
+| `GET /api/v1/admin/notifications` | latest 50, newest first, with the affected account's name and address |
+| `PUT /api/v1/admin/notifications/{id}/read` | mark one as read (`204`; `404` if it is not the caller's) |
+| `DELETE /api/v1/admin/notifications/{id}` | delete one (`204`; `404` if it is not the caller's) |
+
+**What an administrator sees on the web.** An account holding `ADMIN` gets only the
+administration experience: it lands on **Administration** after signing in, and its menu holds
+Administration, Notifications (the administrator notifications above) and Settings (language,
+theme, help). The home screens (dashboard, homes, favorites) redirect it to Administration. This
+is a web decision only: the backend still lets that account call the home endpoints, so use a
+dedicated account to administer and a regular one for your homes.
+
+Not done yet: email or push for administrator notifications, managing support content and the
+documentation from Settings, and refusing the home endpoints to administrators on the server.
+
+The mobile app has no administration screens; it only uses the regular endpoints.
+
 ### Gmail app password
 
 Gmail does not accept the account password from an application. Create an app
@@ -523,6 +601,7 @@ docker run --rm --network host --user "$(id -u):$(id -g)" \
 | Broker logs `context deadline exceeded` calling `backend:8080` | backend stopped, or the ufw rule of section 9 is missing |
 | Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: re-run `generate-dev-certs.sh` and restart the broker |
 | Device logs `rc=4` / `rc=5` | `device_code` / API key do not match the `device` table (link it again from the web) |
+| `403` on `/api/v1/admin/**`, or no **Administration** in the web menu | the account does not hold `ADMIN`: grant it as in "Administrators and global roles", then reload the web |
 | Container: `Failed to read the RSA private key PEM` | the container user cannot read the key: see section 12 |
 
 ## Useful commands
