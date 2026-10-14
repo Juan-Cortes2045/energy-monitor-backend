@@ -14,8 +14,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,10 +30,11 @@ class DeleteAccountServiceTest {
             new UseCaseFixtures.FakeUserSessionPersistencePort();
     private final UseCaseFixtures.FakeAuditLogPersistencePort audits =
             new UseCaseFixtures.FakeAuditLogPersistencePort();
-    private final List<AccountDeleted> published = new ArrayList<>();
+    private final UseCaseFixtures.FakeAccountEventPublisherPort events =
+            new UseCaseFixtures.FakeAccountEventPublisherPort();
 
     private final DeleteAccountService service = new DeleteAccountService(users, persons, sessions,
-            new UseCaseFixtures.FakePasswordHasherPort(), audits, published::add,
+            new UseCaseFixtures.FakePasswordHasherPort(), audits, events,
             new UseCaseFixtures.FakeIdentifierGeneratorPort(), Clock.fixed(NOW, ZoneOffset.UTC));
 
     @BeforeEach
@@ -56,7 +55,7 @@ class DeleteAccountServiceTest {
         assertThat(sessions.findActive("ses0000001").orElseThrow().closedAt()).contains(NOW);
         assertThat(audits.logs()).singleElement()
                 .satisfies(log -> assertThat(log.action()).isEqualTo(AuditAction.DELETE));
-        assertThat(published).containsExactly(new AccountDeleted("use0000001", NOW));
+        assertThat(events.events()).containsExactly(new AccountDeleted("use0000001", NOW));
     }
 
     @Test
@@ -69,6 +68,6 @@ class DeleteAccountServiceTest {
         assertThat(users.findActive("use0000001")).isPresent();
         assertThat(persons.findActive("per0000001")).isPresent();
         assertThat(sessions.findActive("ses0000001").orElseThrow().closedAt()).isEmpty();
-        assertThat(published).isEmpty();
+        assertThat(events.events()).isEmpty();
     }
 }
