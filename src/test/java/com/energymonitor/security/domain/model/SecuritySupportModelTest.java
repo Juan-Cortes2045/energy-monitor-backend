@@ -38,12 +38,26 @@ class SecuritySupportModelTest {
         }
 
         @Test
-        @DisplayName("refuses a missing first or last name")
+        @DisplayName("refuses a missing first name")
         void refusesMissingNames() {
             assertThatThrownBy(() -> new Person("PER0000001", " ", "Restrepo"))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("name");
-            assertThatThrownBy(() -> new Person("PER0000001", "Ana", null))
+            assertThatThrownBy(() -> new Person("PER0000001", null, "Restrepo"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("name");
+        }
+
+        /**
+         * An absent last name is legal, not an error: an account created from Google may bring
+         * none, and {@code Person} documents it as optional. A last name that is present but
+         * empty is a different thing and is still refused.
+         */
+        @Test
+        @DisplayName("accepts an absent last name but not a blank one")
+        void lastNameIsOptional() {
+            assertThat(new Person("PER0000001", "Ana", null).lastName()).isNull();
+            assertThatThrownBy(() -> new Person("PER0000001", "Ana", "  "))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("lastName");
         }
