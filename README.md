@@ -1,39 +1,46 @@
 # Energy Monitor Backend
 
-Backend for Energy Monitor, built with Spring Boot 4.1.1 on Java 21.
+Backend for Energy Monitor, built with Spring Boot 4.1.1 on Java 21. The firmware of the
+ESP32 + PZEM-004T V3 meter that publishes to it lives in [`firmware/`](firmware/README.md); MySQL
+and the MQTT broker run from the
+[energy-monitor-infra](https://github.com/Juan-Cortes2045/energy-monitor-infra) repository.
 
 ## Requirements
 
 - Java 21 or later
-- Docker and Docker Compose, for MySQL 8 and the MQTT broker
-- OpenSSL, to generate the RSA key pair, the VAPID keys and the broker's TLS certificate
+- Docker and Docker Compose, for MySQL 8 and the MQTT broker, which run from the
+  [energy-monitor-infra](https://github.com/Juan-Cortes2045/energy-monitor-infra) repository
+  cloned at `../../infra`
+- OpenSSL, to generate the RSA key pair and the VAPID keys
 - No Maven install needed: use the bundled `./mvnw` (`mvnw.cmd` on Windows)
 
 ## Quick start on a new machine
 
-The whole system runs on one PC in development: MySQL and the backend (this repository), the
-MQTT broker (`devices/docker`), the web app (`frontend/energy-monitor-web`) and the ESP32 on the
-same Wi-Fi. In order:
+The whole system runs on one PC in development: MySQL and the MQTT broker (from `infra`), the
+backend (this repository), the web app (`frontend/energy-monitor-web`) and the ESP32 on the same
+Wi-Fi. `infra` can also run the backend and the web app in containers (`docker compose up -d
+--build`, see `infra/README.md`); the steps below are for working on the backend from this
+repository. In order:
 
 | # | Step | Where |
 |---|---|---|
 | 1 | `cp .env.example .env` and fill every `CHANGE_ME` | section 1 |
-| 2 | `docker compose up -d` (MySQL) | section 2 |
+| 2 | MySQL and the broker from `infra` (development mode) | section 2 |
 | 3 | `cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml` | section 3 |
 | 4 | Generate the RSA key pair for JWT | section 4 |
 | 5 | Mail account (Gmail app password) | section 5 |
 | 6 | `./mvnw spring-boot:run` → `http://localhost:8080/actuator/health` says `UP` | section 6 |
-| 7 | MQTT broker: TLS certificate, firewall rule, `docker compose up -d` in `devices/docker` | section 9 |
+| 7 | MQTT broker: already started in step 2; firewall rule on Linux | section 9 |
 | 8 | Optional: VAPID keys for browser push | section 10 |
 | 9 | Web app: `npm install`, `npm run dev` | `frontend/energy-monitor-web/README.md` |
-| 10 | Firmware: flash the ESP32 and link it from the web | `devices/README.md` |
+| 10 | Firmware: flash the ESP32 and link it from the web | `firmware/README.md` |
 
 The backend has to be up before the broker accepts any connection: Mosquitto asks it to
 authenticate every client, including the backend itself (it retries every 10 s on its own).
 
 ## 1. Database credentials
 
-Copy the example file and set your own passwords:
+Copy the example file:
 
 ```bash
 cp .env.example .env
@@ -43,21 +50,28 @@ cp .env.example .env
 Copy-Item .env.example .env
 ```
 
-`.env` is gitignored and must never be committed.
+Set `SPRING_DATASOURCE_PASSWORD` to `MYSQL_PASSWORD` of `infra/.env`: MySQL is created by `infra`,
+not by this repository. `.env` is gitignored and must never be committed.
 
-## 2. Start the database
+## 2. Start the database and the broker
+
+MySQL and the MQTT broker run from the `infra` repository. With the backend on this machine
+(`./mvnw`), start only those two, in development mode:
 
 ```bash
-docker compose up -d
+cd ../../infra
+./prepare.sh        # first time only: infra/.env, keys and the broker certificate
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d mysql mosquitto
 docker compose ps
 ```
 
-Wait until the container reports `healthy`. It creates the `energy_monitor`
-schema and the application user from the values in `.env`.
+Wait until `mysql` reports `healthy`. It creates the `energy_monitor` schema and the `energy_app`
+user from `infra/.env`. If the full stack was up, stop its backend first
+(`docker compose stop backend frontend`): two backends would store every reading twice.
 
 ## 3. Application configuration
 
-Copy the example profile and set the same password you put in `.env`:
+Copy the example profile and set the same password (`MYSQL_PASSWORD` of `infra/.env`):
 
 ```bash
 cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml
@@ -245,16 +259,13 @@ How it behaves:
 
 **The first administrator.** No account is an administrator after installing: granting a global
 privilege by default would hand the platform to whoever registered first. Register the account
-normally, then grant it the role once in MySQL:
+normally, then grant it the role once with the script of the `infra` repository (it reads the
+MySQL root password from `infra/.env`, and gives the role back if it had been revoked):
 
 ```bash
-docker compose exec mysql mysql -u energy_app -p energy_monitor -e "
-  INSERT INTO user_system_role (user_id, system_role_id, assigned_at)
-  SELECT id_user, 'rol0000001', NOW() FROM user
-  WHERE email = 'admin@example.com' AND deleted_at IS NULL;"
-```
-
-Use the real address (lower case, as it was registered). Sign out and in again on the web, or
+cd ../../infra
+./make-admin.sh admin@example.com
+``` Sign out and in again on the web, or
 reload it, and **Administration** appears in the menu. From there that administrator can grant
 `ADMIN` to other accounts; the SQL is only needed for the first one. To undo it by hand:
 `DELETE FROM user_system_role WHERE system_role_id = 'rol0000001' AND user_id = '<id_user>';`.
@@ -433,7 +444,7 @@ against a single allowance.
 
 The suite is not hermetic: the persistence tests run against the real database,
 because Liquibase owns the schema and Hibernate only validates it. Start it first
-(section 2).
+(section 2, from `infra`).
 
 Those tests need `SPRING_DATASOURCE_PASSWORD`. A handful of test classes activate
 the `test` profile, and `spring.profiles.default: local` only applies when no
@@ -442,14 +453,14 @@ local credentials **is not loaded**. The `test` profile therefore has to be told
 the password, and it reads that one variable:
 
 ```properties
-SPRING_DATASOURCE_PASSWORD=  # same value as MYSQL_PASSWORD
+SPRING_DATASOURCE_PASSWORD=  # same value as MYSQL_PASSWORD of infra/.env
 ```
 
 Put it in `.env`, which the application imports automatically
 (`spring.config.import`), so nothing has to be exported:
 
 ```bash
-docker compose up -d     # wait until healthy
+(cd ../../infra && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d mysql mosquitto)
 ./mvnw test
 ```
 
@@ -468,33 +479,29 @@ without it.
 ## 9. MQTT broker and devices
 
 Devices (ESP32 + PZEM-004T) publish telemetry over **MQTT with TLS** to Eclipse Mosquitto. The
-broker lives in `devices/docker` and delegates authentication and topic ACL to this backend
+broker runs from the `infra` repository (`infra/mosquitto/mosquitto.conf`) and delegates
+authentication and topic ACL to this backend
 (`POST /internal/mqtt/auth/user` and `/acl`, mosquitto-go-auth), so a device registered in the
 `device` table can connect with its `device_code` / API key and nothing else is configured in
 the broker. Only the SHA-256 of each key is stored (`device.api_key_hash`); the key in clear is
-returned once, when the module is linked or gets new credentials, and cannot be read back. Full contract and firmware steps: `devices/README.md`.
+returned once, when the module is linked or gets new credentials, and cannot be read back. Full contract and firmware steps: `firmware/README.md`.
 
 1. `.env`: `MQTT_BACKEND_USER`, `MQTT_BACKEND_PASS` (any random value) and
    `DEVICE_MQTT_PUBLIC_HOST` = the LAN IP of this PC (`hostname -I`, never `localhost`). That IP
-   is what the web app hands to a module when it is linked.
-2. TLS certificate for the broker, valid for the IPs of this PC (re-run it if the IP changes):
-
-   ```bash
-   cd ../../devices/docker
-   ./mosquitto/generate-dev-certs.sh
-   ```
-
-3. Linux with `ufw` only: the broker container calls the backend on the host, which ufw blocks.
-   Allow the Docker networks, not the LAN:
+   is what the web app hands to a module when it is linked. Put the same IP in
+   `DEVICE_MQTT_PUBLIC_HOST` of `infra/.env`: `infra/prepare.sh` adds it to the broker's TLS
+   certificate (re-run it, and restart the broker, if the IP changes).
+2. Linux with `ufw` only: in development mode the broker container calls the backend on the host,
+   which ufw blocks. Allow the Docker networks, not the LAN:
 
    ```bash
    sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp comment 'mosquitto -> backend'
    ```
 
-4. Start the broker (with the backend already running):
+3. The broker was started in section 2. Check that the backend connected:
 
    ```bash
-   docker compose up -d
+   cd ../../infra
    docker compose logs -f mosquitto   # the backend shows up as energy-monitor-backend-telemetry / -status
    ```
 
@@ -565,32 +572,11 @@ stores a recommendation when a rule matches:
 
 ## 12. Docker image
 
-`Dockerfile` builds the production image (Temurin 21, runs as a non-root user, uid 10001).
-`devices/docker/docker-compose.prod.yml` builds it and runs it next to MySQL and the broker on a
-server; that compose file and `devices/README.md` section 7 describe the deployment.
-
-To try the image on this machine (with MySQL and the broker of sections 2 and 9 running, and the
-local backend **stopped**, or two backends would store every reading twice):
-
-```bash
-docker build -t energy-monitor-backend .
-docker run --rm --network host --user "$(id -u):$(id -g)" \
-  --env-file .env \
-  -e SPRING_PROFILES_ACTIVE=prod \
-  -e SPRING_DATASOURCE_URL='jdbc:mysql://localhost:3306/energy_monitor?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true' \
-  -e SPRING_DATASOURCE_USERNAME=energy_app \
-  -e SPRING_DATASOURCE_PASSWORD=<same as MYSQL_PASSWORD> \
-  -e SECURITY_JWT_PRIVATE_KEY_PATH=/run/keys/private.pem \
-  -e SECURITY_JWT_PUBLIC_KEY_PATH=/run/keys/public.pem \
-  -v "$HOME/.energy-monitor/keys:/run/keys:ro" \
-  energy-monitor-backend
-```
-
-- Any profile other than `local` works (`prod` above): `application-local.yaml` is not inside
-  the image, so every setting comes from the environment.
-- `--user "$(id -u):$(id -g)"` lets the container read your `private.pem` (mode 600). On a
-  server, either make the key readable by uid 10001 or set `BACKEND_UID`/`BACKEND_GID` in the
-  production compose.
+`Dockerfile` builds the image (Temurin 21, runs as a non-root user, uid 10001). The `infra`
+repository builds it and runs it next to MySQL, the broker and the web app:
+`infra/docker-compose.yml` on this machine and `infra/docker-compose.prod.yml` on a server (see
+`infra/README.md`). Every setting comes from the environment: `application-local.yaml` is not
+inside the image, and any profile other than `local` works (`prod`).
 
 ## 13. Troubleshooting
 
@@ -599,18 +585,19 @@ docker run --rm --network host --user "$(id -u):$(id -g)" \
 | Tests fail with `Access denied for user 'energymonitor'` | `.env` sets `SPRING_DATASOURCE_USERNAME` to something other than `energy_app`: remove it |
 | `Too many connections` in a few persistence tests | the backend is running while the suite runs; both use the same MySQL. Run the failing class alone or stop the backend |
 | Broker logs `context deadline exceeded` calling `backend:8080` | backend stopped, or the ufw rule of section 9 is missing |
-| Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: re-run `generate-dev-certs.sh` and restart the broker |
+| Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: update `DEVICE_MQTT_PUBLIC_HOST` in `infra/.env`, re-run `infra/prepare.sh` and restart the broker |
 | Device logs `rc=4` / `rc=5` | `device_code` / API key do not match the `device` table (link it again from the web) |
 | `403` on `/api/v1/admin/**`, or no **Administration** in the web menu | the account does not hold `ADMIN`: grant it as in "Administrators and global roles", then reload the web |
-| Container: `Failed to read the RSA private key PEM` | the container user cannot read the key: see section 12 |
+| Container: `Failed to read the RSA private key PEM` | the container user cannot read the key: `BACKEND_UID`/`BACKEND_GID` in `infra/.env` must own `infra/keys` (`infra/prepare.sh` sets them) |
+| `Access denied for user 'energy_app'` when starting or testing | `application-local.yaml` / `SPRING_DATASOURCE_PASSWORD` do not match `MYSQL_PASSWORD` of `infra/.env` |
 
 ## Useful commands
 
 | Command | Purpose |
 |---|---|
-| `docker compose stop` | Stop the database, keeping its data |
-| `docker compose start` | Start it again |
-| `docker compose down -v` | Delete the container and its data, rebuilding the schema from Liquibase on the next run |
+| `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d mysql mosquitto` (in `infra`) | Start MySQL and the broker |
+| `docker compose stop` (in `infra`) | Stop them, keeping the data |
+| `docker compose down -v` (in `infra`) | Delete the containers and their data, rebuilding the schema from Liquibase on the next run |
 
 Liquibase owns the database schema. Hibernate only validates it and never
 creates or alters a table.
