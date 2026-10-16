@@ -1,9 +1,11 @@
 package com.energymonitor.notification.adapter.in.web;
 
 import com.energymonitor.notification.adapter.in.web.dto.NotificationPreferencesDto;
+import com.energymonitor.notification.adapter.in.web.dto.PushDeviceRequest;
 import com.energymonitor.notification.adapter.in.web.dto.PushSubscriptionRequest;
 import com.energymonitor.notification.application.usecase.ManageNotificationChannels;
 import com.energymonitor.notification.domain.model.NotificationPreference;
+import com.energymonitor.notification.domain.model.PushDevicePlatform;
 import jakarta.validation.Valid;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -18,7 +20,11 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The caller's notification channels: mail and push preferences, and push subscriptions.
+ * The caller's notification channels: mail and push preferences, and where alerts can be delivered.
+ *
+ * <p>Two transports, because they are different protocols and are configured differently: browsers
+ * subscribe with Web Push and need a VAPID key, apps register a relay token and need a relay
+ * credential.
  */
 @RestController
 @RequestMapping("/api/v1/notifications")
@@ -44,10 +50,10 @@ public class NotificationChannelsController {
         return toDto(userId, channels.update(userId, request.emailEnabled(), request.pushEnabled()));
     }
 
-    /** The VAPID public key a browser needs to subscribe; 404 when push is not configured. */
+    /** The VAPID public key a browser needs to subscribe; 404 when Web Push is not configured. */
     @GetMapping("/push/public-key")
     public ResponseEntity<Map<String, String>> publicKey() {
-        if (!channels.pushAvailable()) {
+        if (!channels.webPushAvailable()) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(Map.of("publicKey", channels.pushPublicKey()));
@@ -67,6 +73,35 @@ public class NotificationChannelsController {
         if (endpoint != null) {
             channels.unsubscribe(currentUser.resolveCurrentUserId(), endpoint);
         }
+    }
+
+    /**
+     * Registers this installation for app push. Called by the app on every start, so an installation
+     * that was logged out and back in on another account ends up owned by the right one.
+     */
+    @PostMapping("/push/devices")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void registerDevice(@Valid @RequestBody PushDeviceRequest request) {
+        channels.registerDevice(currentUser.resolveCurrentUserId(), request.token(),
+                PushDevicePlatform.valueOf(request.platform().name()));
+    }
+
+    @PostMapping("/push/devices/remove")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unregisterDevice(@RequestBody Map<String, String> request) {
+        String token = request.get("token");
+        if (token != null) {
+            channels.unregisterDevice(currentUser.resolveCurrentUserId(), token);
+        }
+    }
+
+    /** Lets an app decide whether to ask for notification permission at all. */
+    @GetMapping("/push/devices/available")
+    public ResponseEntity<Map<String, Boolean>> appPushAvailable() {
+        if (!channels.appPushAvailable()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(Map.of("available", true));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
