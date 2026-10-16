@@ -22,10 +22,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -314,16 +316,41 @@ public class SecurityExceptionHandler {
     }
 
     /**
+     * A query parameter or path variable could not be converted to its declared type.
+     *
+     * @param exception the framework failure
+     * @param request   the failed request
+     * @return 400
+     */
+    @ExceptionHandler(TypeMismatchException.class)
+    public ResponseEntity<ApiError> handleTypeMismatch(TypeMismatchException exception,
+                                                       HttpServletRequest request) {
+        LOG.debug("Type mismatch on {}", request.getRequestURI(), exception);
+        return respond(HttpStatus.BAD_REQUEST, "Malformed request parameter.", request);
+    }
+
+    /**
      * Anything unanticipated. The message is generic on purpose and the detail goes to the
      * log only.
      *
+     * <p>Failures Spring MVC already classifies ({@link ErrorResponse}: a missing required
+     * parameter, an unknown route, an unsupported media type...) keep the framework's status, so
+     * a client mistake is not reported as a server failure.
+     *
      * @param exception the failure
      * @param request   the failed request
-     * @return 500 without internals
+     * @return the framework's status for an {@link ErrorResponse}, otherwise 500 without internals
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception exception,
                                                      HttpServletRequest request) {
+        if (exception instanceof ErrorResponse errorResponse) {
+            HttpStatus status = HttpStatus.resolve(errorResponse.getStatusCode().value());
+            if (status != null && status.is4xxClientError()) {
+                LOG.debug("{} on {}", exception.getClass().getSimpleName(), request.getRequestURI());
+                return respond(status, null, request);
+            }
+        }
         LOG.error("Unhandled failure on {}", request.getRequestURI(), exception);
         return respond(HttpStatus.INTERNAL_SERVER_ERROR,
                 "An unexpected error occurred.", request);
