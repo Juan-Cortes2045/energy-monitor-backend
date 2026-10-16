@@ -128,6 +128,10 @@ notification:
     vapid-public-key: ${NOTIFICATION_VAPID_PUBLIC_KEY:}
     vapid-private-key: ${NOTIFICATION_VAPID_PRIVATE_KEY:}
     subject: ${NOTIFICATION_VAPID_SUBJECT:mailto:support.energymonitor@gmail.com}
+    # Credential of the push relay the mobile apps publish through (Expo: "expo push token" in the
+    # project dashboard). Unlike the VAPID pair this is safe to rotate: it authorises us with the
+    # relay, it is not baked into any installation. Empty = app push disabled.
+    expo-access-token: ${EXPO_ACCESS_TOKEN:}
 
 management:
   endpoints:
