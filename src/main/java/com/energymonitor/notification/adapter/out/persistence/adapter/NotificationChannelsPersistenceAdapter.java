@@ -14,7 +14,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Preferences and push subscriptions: what a user wants and where it can be reached.
+ * Preferences and push subscriptions: what a user wants and which browsers accepted to receive it.
+ *
+ * <p>App installations are deliberately not here. {@link PushDevicePersistenceAdapter} holds those,
+ * because a relay token and a browser subscription are different shapes rather than two kinds of
+ * the same one, and folding them into one adapter would only make the differences harder to see.
+ * The two are cleaned up together from {@code ManageNotificationChannels#forget}.
  */
 @Component
 public class NotificationChannelsPersistenceAdapter implements NotificationPreferencePort, PushSubscriptionPort {

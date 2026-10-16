@@ -9,4 +9,5 @@
     <include file="changes/notification-002-create-notification-preference.xml" relativeToChangelogFile="true"/>
     <include file="changes/notification-003-create-push-subscription.xml" relativeToChangelogFile="true"/>
     <include file="changes/notification-004-add-in-app-admin-notifications.xml" relativeToChangelogFile="true"/>
+    <include file="changes/notification-005-create-push-device.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
