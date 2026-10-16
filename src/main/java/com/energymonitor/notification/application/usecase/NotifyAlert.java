@@ -7,9 +7,12 @@ import com.energymonitor.notification.application.port.out.NotificationPreferenc
 import com.energymonitor.notification.application.port.out.NotificationRecordPort;
 import com.energymonitor.notification.application.port.out.PushSenderPort;
 import com.energymonitor.notification.application.port.out.PushSubscriptionPort;
+import com.energymonitor.notification.application.port.out.PushDevicePort;
+import com.energymonitor.notification.application.port.out.RelayPushSenderPort;
 import com.energymonitor.notification.domain.model.NotificationChannel;
 import com.energymonitor.notification.domain.model.NotificationPreference;
 import com.energymonitor.notification.domain.model.NotificationSourceType;
+import com.energymonitor.notification.domain.model.PushDevice;
 import com.energymonitor.notification.domain.model.PushSubscription;
 import com.energymonitor.notification.infrastructure.mail.EmailSender;
 import java.time.LocalDateTime;
@@ -27,8 +30,9 @@ import tools.jackson.databind.ObjectMapper;
  *
  * <ul>
  *   <li><strong>Mail</strong> to the account address when {@code emailEnabled}.</li>
- *   <li><strong>Push</strong> to every browser the member subscribed when {@code pushEnabled};
- *       a subscription the push service reports as gone is deleted.</li>
+ *   <li><strong>Push</strong> when {@code pushEnabled}, to every browser the member subscribed and
+ *       every app installation registered, each through the transport it can actually be reached
+ *       with. One the push service reports as gone is dropped, so the list stops growing.</li>
  * </ul>
  *
  * <p>Every attempt is a row of the delivery log ({@code notification}), one per recipient and
@@ -42,7 +46,9 @@ public class NotifyAlert {
     private final HomeDirectoryPort directory;
     private final NotificationPreferencePort preferences;
     private final PushSubscriptionPort subscriptions;
+    private final PushDevicePort devices;
     private final PushSenderPort push;
+    private final RelayPushSenderPort relayPush;
     private final EmailSender mailer;
     private final NotificationRecordPort records;
     private final NotificationIdentifierPort identifiers;
@@ -50,14 +56,17 @@ public class NotifyAlert {
     private final String webUrl;
 
     public NotifyAlert(HomeDirectoryPort directory, NotificationPreferencePort preferences,
-                       PushSubscriptionPort subscriptions, PushSenderPort push, EmailSender mailer,
+                       PushSubscriptionPort subscriptions, PushDevicePort devices, PushSenderPort push,
+                       RelayPushSenderPort relayPush, EmailSender mailer,
                        NotificationRecordPort records, NotificationIdentifierPort identifiers,
                        ObjectMapper objectMapper,
                        @Value("${notification.web-url:http://localhost:5173}") String webUrl) {
         this.directory = directory;
         this.preferences = preferences;
         this.subscriptions = subscriptions;
+        this.devices = devices;
         this.push = push;
+        this.relayPush = relayPush;
         this.mailer = mailer;
         this.records = records;
         this.identifiers = identifiers;
@@ -92,7 +101,10 @@ public class NotifyAlert {
                 if (preference.emailEnabled() && recipient != null && recipient.email() != null) {
                     sendMail(source, idAlert, homeId, messageKey, recipient, message);
                 }
-                if (preference.pushEnabled() && push.isConfigured()) {
+                // Either transport counts: an installation-only deployment has no VAPID key, and a
+                // browser-only one has no relay credential. Requiring both would disable push for
+                // whichever setup is actually deployed.
+                if (preference.pushEnabled() && (push.isConfigured() || relayPush.isConfigured())) {
                     sendPush(source, idAlert, homeId, userId, messageKey, message);
                 }
             } catch (RuntimeException e) {
@@ -131,8 +143,13 @@ public class NotifyAlert {
 
     private void sendPush(NotificationSourceType source, String idAlert, String homeId, String userId,
                           String messageKey, AlertMessages.Message message) {
-        List<PushSubscription> browsers = subscriptions.findByUser(userId);
-        if (browsers.isEmpty()) {
+        // A transport that is not configured is not attempted at all: asking it would only produce a
+        // row of the log saying so, once per member, on every alert.
+        List<PushSubscription> browsers =
+                push.isConfigured() ? subscriptions.findByUser(userId) : List.of();
+        List<PushDevice> installations =
+                relayPush.isConfigured() ? devices.findByUser(userId) : List.of();
+        if (browsers.isEmpty() && installations.isEmpty()) {
             return;
         }
         String payload = objectMapper.writeValueAsString(Map.of(
@@ -150,6 +167,24 @@ public class NotifyAlert {
                 case GONE -> {
                     records.recordFailure(id, "subscription gone: " + result.detail());
                     subscriptions.deleteByEndpoint(browser.endpoint());
+                }
+                case FAILED -> records.recordFailure(id, result.detail());
+            }
+        }
+
+        for (PushDevice installation : installations) {
+            String id = identifiers.generate();
+            records.openForSending(id, userId, homeId, source, idAlert, messageKey,
+                    NotificationChannel.PUSH);
+            RelayPushSenderPort.Result result =
+                    relayPush.send(installation.token(), message.title(), message.body(), "/notifications");
+            switch (result.outcome()) {
+                case DELIVERED -> records.recordSent(id, LocalDateTime.now());
+                case GONE -> {
+                    // The relay keeps tokens of uninstalled apps for a while; keeping ours would
+                    // mean retrying an installation that no longer exists.
+                    records.recordFailure(id, "device token gone: " + result.detail());
+                    devices.deleteByToken(installation.token());
                 }
                 case FAILED -> records.recordFailure(id, result.detail());
             }
