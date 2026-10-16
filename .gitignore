@@ -38,3 +38,14 @@ build/
 src/main/resources/application-local.yaml
 # RSA keys
 *.pem
+
+### Firmware (firmware/README.md) ###
+# Per-device setup-portal password and optional development defaults: copy secrets.h.example.
+firmware/esp32-pzem-monitor/secrets.h
+# Development CA of the broker, written by infra/prepare.sh
+firmware/esp32-pzem-monitor/dev_ca.h
+# Arduino build output
+firmware/**/build/
+firmware/**/*.bin
+firmware/**/*.elf
+firmware/**/*.map

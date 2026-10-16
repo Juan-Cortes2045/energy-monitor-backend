@@ -1,6 +1,6 @@
 # Imagen de produccion del backend. Se construye desde la raiz del repositorio:
 #   docker build -t energy-monitor-backend .
-# La usa devices/docker/docker-compose.prod.yml.
+# La usan infra/docker-compose.yml (pila local) e infra/docker-compose.prod.yml (servidor).
 
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /src
