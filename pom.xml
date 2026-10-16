@@ -208,6 +208,33 @@
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
 
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!--
+						The "test" profile is activated here for every test in the suite, because only a
+						few dozen classes annotated themselves with @ActiveProfiles("test") and the rest
+						were silently running against the default profile. That mattered for two reasons,
+						both of them about what a test must not touch:
+
+						1. application-test.yaml keeps the MQTT client-id separate from the running
+						   backend's. The broker evicts any client that connects with an id already in
+						   use, so a test context used to evict the backend, the backend reconnected,
+						   evicted the test's connection, and both adapters flapped every few seconds
+						   until the test finished.
+						2. It also isolates the rest: the test-only pepper, and
+						   recommendation.enabled=false, which stops the hourly evaluator from running
+						   against the shared database.
+
+						@ActiveProfiles on a test class still wins over this, so a class can opt out.
+					-->
+					<systemPropertyVariables>
+						<spring.profiles.active>test</spring.profiles.active>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
+
 		</plugins>
 	</build>
 
