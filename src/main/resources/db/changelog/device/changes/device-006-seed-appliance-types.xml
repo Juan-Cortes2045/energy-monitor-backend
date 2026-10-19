@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        The appliance catalog the web pairing flow offers. Names are stable keys that the clients
+        translate. INSERT IGNORE keeps rows a database already has (the first three were inserted
+        by hand in some local databases), so the changeset is safe on both fresh and existing ones.
+    -->
+    <changeSet id="device-006-seed-appliance-types" author="JuanCortes2045">
+        <comment>Seed the appliance_type catalog.</comment>
+        <sql dbms="mysql">
+            INSERT IGNORE INTO appliance_type (id_appliance_type, name) VALUES
+                ('appl000001', 'refrigerator'),
+                ('appl000002', 'air_conditioner'),
+                ('appl000003', 'lighting'),
+                ('appl000004', 'washing_machine'),
+                ('appl000005', 'television'),
+                ('appl000006', 'microwave'),
+                ('appl000007', 'computer'),
+                ('appl000008', 'water_heater'),
+                ('appl000009', 'other')
+        </sql>
+
+        <rollback>
+            <sql dbms="mysql">
+                DELETE FROM appliance_type WHERE id_appliance_type IN
+                    ('appl000004', 'appl000005', 'appl000006', 'appl000007', 'appl000008', 'appl000009')
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="measurement-001-create-measurement" author="JuanCortes2045">
+        <comment>Single electrical reading produced by a device. device_id references device.device at application level only, no SQL foreign key across bounded contexts. date_time is the business timestamp of the reading, created_at is the audit timestamp.</comment>
+
+        <createTable tableName="measurement">
+            <column name="id_measurement" type="VARCHAR(10)">
+                <constraints primaryKey="true" primaryKeyName="pk_measurement" nullable="false"/>
+            </column>
+            <column name="device_id" type="VARCHAR(10)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="date_time" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="voltage" type="DOUBLE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="current" type="DOUBLE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="active_power" type="DOUBLE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="stored_energy" type="DOUBLE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <rollback>
+            <dropTable tableName="measurement"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

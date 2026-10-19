@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="device-003-create-device-status-log" author="JuanCortes2045">
+        <comment>History of the device connection state. device_id is nullable following the log-table pattern.</comment>
+
+        <createTable tableName="device_status_log">
+            <column name="id_device_status" type="VARCHAR(10)">
+                <constraints primaryKey="true" primaryKeyName="pk_device_status_log" nullable="false"/>
+            </column>
+            <column name="device_id" type="VARCHAR(10)">
+                <constraints foreignKeyName="fk_device_status_log_device_id"
+                              references="device(id_device)"/>
+            </column>
+            <column name="status" type="ENUM('ONLINE', 'OFFLINE')">
+                <constraints nullable="false"/>
+            </column>
+            <column name="signal_strength" type="INT"/>
+            <column name="last_seen" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <rollback>
+            <dropTable tableName="device_status_log"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

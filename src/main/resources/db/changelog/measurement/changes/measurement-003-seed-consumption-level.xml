@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="measurement-003-seed-consumption-level" author="JuanCortes2045">
+        <comment>Seed data for consumption_level: LOW, MEDIUM, HIGH, CRITICAL. Ranges are watts of active power, [min_limit, max_limit). The CRITICAL upper bound is a sentinel for "unbounded". Initial values, tunable by operations without a code change.</comment>
+
+        <insert tableName="consumption_level">
+            <column name="id_consumption_level" value="low0000001"/>
+            <column name="name" value="LOW"/>
+            <column name="description" value="Efficient consumption, below the typical base load"/>
+            <column name="min_limit" valueNumeric="0"/>
+            <column name="max_limit" valueNumeric="500"/>
+        </insert>
+        <insert tableName="consumption_level">
+            <column name="id_consumption_level" value="medi000001"/>
+            <column name="name" value="MEDIUM"/>
+            <column name="description" value="Moderate consumption, typical of regular household use"/>
+            <column name="min_limit" valueNumeric="500"/>
+            <column name="max_limit" valueNumeric="1500"/>
+        </insert>
+        <insert tableName="consumption_level">
+            <column name="id_consumption_level" value="high000001"/>
+            <column name="name" value="HIGH"/>
+            <column name="description" value="High consumption, above the efficient range"/>
+            <column name="min_limit" valueNumeric="1500"/>
+            <column name="max_limit" valueNumeric="3000"/>
+        </insert>
+        <insert tableName="consumption_level">
+            <column name="id_consumption_level" value="crit000001"/>
+            <column name="name" value="CRITICAL"/>
+            <column name="description" value="Critical consumption, immediate attention recommended"/>
+            <column name="min_limit" valueNumeric="3000"/>
+            <column name="max_limit" valueNumeric="1000000"/>
+        </insert>
+
+        <rollback>
+            <delete tableName="consumption_level">
+                <where>id_consumption_level IN ('low0000001', 'medi000001', 'high000001', 'crit000001')</where>
+            </delete>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

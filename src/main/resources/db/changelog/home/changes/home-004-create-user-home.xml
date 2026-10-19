@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="home-004-create-user-home" author="JuanCortes2045">
+        <comment>Membership of a user in a home. user_id references security.user at application level only, no SQL foreign key across bounded contexts.</comment>
+
+        <createTable tableName="user_home">
+            <column name="user_id" type="VARCHAR(10)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="home_id" type="VARCHAR(10)">
+                <constraints nullable="false"
+                              foreignKeyName="fk_user_home_home_id"
+                              references="home(id_home)"/>
+            </column>
+            <column name="role" type="ENUM('OWNER', 'MEMBER')">
+                <constraints nullable="false"/>
+            </column>
+            <column name="favorite" type="BOOLEAN">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <addPrimaryKey tableName="user_home"
+                       columnNames="user_id, home_id"
+                       constraintName="pk_user_home"/>
+
+        <rollback>
+            <dropTable tableName="user_home"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
