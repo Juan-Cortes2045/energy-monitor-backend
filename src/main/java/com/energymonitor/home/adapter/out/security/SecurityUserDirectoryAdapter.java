@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Reads user names and addresses from the security module's public API.
+ * Reads user names and addresses from the security service, through {@code security::api}.
  *
  * <p>When the security service does not answer, the lists of members and homes are still shown,
  * only without names and addresses.

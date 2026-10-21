@@ -6,8 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.energymonitor.home.application.usecase.CheckAccountDeletionService;
 import com.energymonitor.home.application.usecase.RemoveDeletedAccountService;
 import com.energymonitor.home.domain.model.Home;
+import com.energymonitor.home.domain.model.Role;
 import com.energymonitor.home.domain.model.UserHome;
-import com.energymonitor.security.api.AccountDeletionBlockedException;
+import com.energymonitor.home.application.exception.AccountDeletionBlockedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,13 +41,35 @@ class RemoveDeletedAccountServiceTest {
     }
 
     @Test
-    @DisplayName("refuses, and drops nothing, while the user is the only owner of a home with other members")
-    void refusesWhenSoleOwnerOfAPopulatedHome() {
-        assertThatThrownBy(() -> service.remove("use0000001"))
-                .isInstanceOf(AccountDeletionBlockedException.class);
+    @DisplayName("hands a home it owned alone to the oldest member left, instead of refusing")
+    void transfersToTheOldestMember() {
+        memberships.save(UserHome.member("use0000003", "hom0000001"));
+
+        service.remove("use0000001");
 
         assertThat(homes.findActive("hom0000001")).isPresent();
-        assertThat(memberships.listActiveByUser("use0000001")).hasSize(2);
+        assertThat(memberships.findActive("use0000002", "hom0000001"))
+                .map(UserHome::role).contains(Role.OWNER);
+        assertThat(memberships.findActive("use0000003", "hom0000001"))
+                .map(UserHome::role).contains(Role.MEMBER);
+        assertThat(memberships.listActiveByUser("use0000001")).isEmpty();
+        assertThat(events.transferred).singleElement().satisfies(transfer -> {
+            assertThat(transfer.homeId()).isEqualTo("hom0000001");
+            assertThat(transfer.previousOwnerId()).isEqualTo("use0000001");
+            assertThat(transfer.newOwnerId()).isEqualTo("use0000002");
+        });
+        assertThat(events.deleted).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a second delivery of the same deletion changes nothing")
+    void isIdempotent() {
+        service.remove("use0000001");
+        service.remove("use0000001");
+
+        assertThat(events.transferred).hasSize(1);
+        assertThat(memberships.listActiveByHomeId("hom0000001"))
+                .extracting(UserHome::userId).containsExactly("use0000002");
     }
 
     @Test

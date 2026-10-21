@@ -3,9 +3,7 @@ package com.energymonitor.home.application.usecase;
 import com.energymonitor.home.application.port.in.CheckAccountDeletion;
 import com.energymonitor.home.application.port.out.UserHomePersistencePort;
 import com.energymonitor.home.domain.model.Role;
-import com.energymonitor.home.domain.model.UserHome;
-import com.energymonitor.security.api.AccountDeletionBlockedException;
-import java.util.List;
+import com.energymonitor.home.application.exception.AccountDeletionBlockedException;
 
 /**
  * Refuses the deletion of an account that is the only owner of a home still having other members:
@@ -22,18 +20,7 @@ public class CheckAccountDeletionService implements CheckAccountDeletion {
 
     @Override
     public void ensureDeletable(String userId) {
-        ensureDeletable(userHomePort.listActiveByUser(userId), userHomePort);
-    }
-
-    /**
-     * The rule, shared with {@link RemoveDeletedAccountService}, which checks it again when the
-     * deletion arrives.
-     *
-     * @param memberships  the active memberships of the account
-     * @param userHomePort where the other members are read
-     */
-    static void ensureDeletable(List<UserHome> memberships, UserHomePersistencePort userHomePort) {
-        for (var membership : memberships) {
+        for (var membership : userHomePort.listActiveByUser(userId)) {
             String homeId = membership.homeId();
             if (membership.role() == Role.OWNER
                     && userHomePort.countActiveOwnersByHomeId(homeId) == 1
