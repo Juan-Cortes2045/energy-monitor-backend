@@ -5,19 +5,25 @@ ESP32 + PZEM-004T V3 meter that publishes to it lives in [`firmware/`](firmware/
 and the MQTT broker run from the
 [energy-monitor-infra](https://github.com/Juan-Cortes2045/energy-monitor-infra) repository.
 
+Accounts, sign-in, sessions, password recovery and global roles are served by the security
+service (`../en-monitor-security-service`). This backend validates the access tokens it issues,
+asks it for permissions, names and administrators, and hears its account events over RabbitMQ
+(section 12).
+
 ## Requirements
 
 - Java 21 or later
 - Docker and Docker Compose, for MySQL 8 and the MQTT broker, which run from the
   [energy-monitor-infra](https://github.com/Juan-Cortes2045/energy-monitor-infra) repository
   cloned at `../../infra`
+- The security service (`../en-monitor-security-service`) running, for anything that signs in
 - OpenSSL, to generate the RSA key pair and the VAPID keys
 - No Maven install needed: use the bundled `./mvnw` (`mvnw.cmd` on Windows)
 
 ## Quick start on a new machine
 
-The whole system runs on one PC in development: MySQL and the MQTT broker (from `infra`), the
-backend (this repository), the web app (`frontend/energy-monitor-web`) and the ESP32 on the same
+The whole system runs on one PC in development: MySQL, RabbitMQ and the MQTT broker (from
+`infra`), the security service, the backend (this repository), the web app (`frontend/energy-monitor-web`) and the ESP32 on the same
 Wi-Fi. `infra` can also run the backend and the web app in containers (`docker compose up -d
 --build`, see `infra/README.md`); the steps below are for working on the backend from this
 repository. In order:
@@ -27,7 +33,7 @@ repository. In order:
 | 1 | `cp .env.example .env` and fill every `CHANGE_ME` | section 1 |
 | 2 | MySQL and the broker from `infra` (development mode) | section 2 |
 | 3 | `cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml` | section 3 |
-| 4 | Generate the RSA key pair for JWT | section 4 |
+| 4 | Point at the public key of the security service; same `INTERNAL_API_TOKEN` in both | section 4 |
 | 5 | Mail account (Gmail app password) | section 5 |
 | 6 | `./mvnw spring-boot:run` → `http://localhost:8080/actuator/health` says `UP` | section 6 |
 | 7 | MQTT broker: already started in step 2; firewall rule on Linux | section 9 |
@@ -83,223 +89,41 @@ Copy-Item src\main\resources\application-local.yaml.example src\main\resources\a
 
 This file is gitignored as well.
 
-## 4. RSA keys for JWT (RS256)
+## 4. Access tokens (public key of the security service)
 
-Access tokens are signed with RS256, so the application needs an RSA key pair.
-The `.pem` files are gitignored and must never be committed.
+The security service signs the access tokens (RS256) with its private key. This backend only
+validates them, so it needs **the public key only**: the same `public.pem` the security service
+is given, generated as its README explains. The private key never goes here.
 
-**Linux and macOS:**
+Set the path once, in `.env` or in `application-local.yaml`:
 
-```bash
-mkdir -p ~/.energy-monitor/keys
-chmod 700 ~/.energy-monitor/keys
-
-openssl genpkey -algorithm RSA -out ~/.energy-monitor/keys/private.pem -pkeyopt rsa_keygen_bits:2048
-chmod 600 ~/.energy-monitor/keys/private.pem
-
-openssl rsa -in ~/.energy-monitor/keys/private.pem -pubout -out ~/.energy-monitor/keys/public.pem
-chmod 644 ~/.energy-monitor/keys/public.pem
+```properties
+SECURITY_JWT_PUBLIC_KEY_PATH=/home/you/.energy-monitor/keys/public.pem
 ```
-
-**Windows (PowerShell):**
-
-```powershell
-New-Item -ItemType Directory -Force "$HOME\.energy-monitor\keys"
-
-openssl genpkey -algorithm RSA -out "$HOME\.energy-monitor\keys\private.pem" -pkeyopt rsa_keygen_bits:2048
-openssl rsa -in "$HOME\.energy-monitor\keys\private.pem" -pubout -out "$HOME\.energy-monitor\keys\public.pem"
-```
-
-On Windows, restrict access to the private key through the file properties, or
-keep it in a user-only folder. OpenSSL ships with Git for Windows; if it is not
-on your `PATH`, run these from Git Bash.
-
-PKCS#1 keys (`openssl genrsa` with `openssl rsa -RSAPublicKey_out`) are also
-accepted, but PKCS#8 is the recommended format.
-
-### Key paths
-
-The application needs to be told where those two files are. There are two ways, and
-they are equivalent.
-
-**Once per shell session:**
-
-```bash
-export SECURITY_JWT_PRIVATE_KEY_PATH=$HOME/.energy-monitor/keys/private.pem
-export SECURITY_JWT_PUBLIC_KEY_PATH=$HOME/.energy-monitor/keys/public.pem
-```
-
-```powershell
-$env:SECURITY_JWT_PRIVATE_KEY_PATH = "$HOME\.energy-monitor\keys\private.pem"
-$env:SECURITY_JWT_PUBLIC_KEY_PATH  = "$HOME\.energy-monitor\keys\public.pem"
-```
-
-**Permanently, in `application-local.yaml`** — this is what survives closing the terminal,
-so it is the one to use if you run the application often:
 
 ```yaml
 security:
   jwt:
-    private-key-path: /home/you/.energy-monitor/keys/private.pem
     public-key-path: /home/you/.energy-monitor/keys/public.pem
 ```
 
-Write the path **absolute**. Java does not expand `~`, so `~/.energy-monitor/keys/private.pem`
-is taken literally and the key comes back unreadable. On Windows use `C:\Users\you\.energy-monitor\keys\private.pem`.
+Write the path **absolute**. Java does not expand `~`, so `~/.energy-monitor/keys/public.pem`
+is taken literally and the key comes back unreadable. On Windows use
+`C:\Users\you\.energy-monitor\keys\public.pem`. X.509 (`openssl rsa -pubout`) and PKCS#1
+(`openssl rsa -RSAPublicKey_out`) are both accepted.
 
-In the copy created from `application-local.yaml.example` the two properties default to empty
-and read from those environment variables, so leaving them empty there keeps both routes open.
+The application refuses to start when the key is missing, unreadable or a private key, and the
+error message names the path it could not read. The issuer (`security.jwt.issuer`) must match the
+service's; both keep `https://energy-monitor-backend`.
 
-The application refuses to start when a key is missing, unreadable or invalid,
-and the error message names the path it could not read.
+The same `INTERNAL_API_TOKEN` goes in this `.env` and in the service's (section 12), and
+`SECURITY_SERVICE_URL` says where it answers (`http://localhost:8082` by default).
 
-## 5. Email delivery (password recovery and email verification)
+## 5. Email delivery (verification, recovery and alert mail)
 
-Password recovery and email verification mails are sent over SMTP. Every credential comes from the
+The verification and recovery codes the security service hands over (section 12), and the alerts
+of section 10, are mailed from here over SMTP. Every credential comes from the
 environment; none is ever written into a committed file.
-
-### The recovery code, and why it is short
-
-`POST /password/forgot` mails a **six-digit code**, valid for 15 minutes and usable
-once. Six digits is a usability decision — a person has to read it off a screen and
-type it back — and on its own it would be no defence at all, about 20 bits. Two
-other things carry the weight:
-
-- **A pepper.** What is stored in `password_reset_token.reset_token_hash` is
-  `HMAC-SHA256(code, pepper)`, not a plain digest. A plain digest of a six-digit
-  code can be reversed from a database dump in seconds: a million candidates, all
-  cheap to hash. The pepper lives in the configuration, not in the table, so a
-  leaked dump yields nothing usable.
-- **A rate limit.** Ten redemption attempts per caller address per 15 minutes,
-  counted whether the code presented was right or wrong. The endpoint answers `429`
-  with `Retry-After` past that, which is what makes a small space survivable.
-
-One further rule does a lot of quiet work: **issuing a code consumes whatever codes
-the account already held.** With several outstanding, the rate limit would bound
-guessing only after being multiplied by how many an attacker could first arrange to
-have.
-
-Generate the pepper with `openssl rand -hex 32` and set it as `security.reset.pepper`
-in `application-local.yaml`. The application refuses to start without it, the same
-way it refuses to start without a signing key. Changing it invalidates every code
-already issued, and codes issued before the peppered digest was introduced can no
-longer be redeemed.
-
-What was deliberately **not** done: BCrypt. It is the obvious way to make a small
-secret expensive, and it is wrong here for a structural reason — it is salted, so the
-same code hashes differently every time, and redemption resolves a code to its row
-*by* hashing the presented value. With BCrypt there would be nothing stable to look
-up.
-
-Known limits, stated plainly: the attempt counter lives in memory, so it is per
-instance, resets on restart, and cannot be shared between replicas. Behind a load
-balancer, add a rate limiter there too. And because the limit is keyed by address,
-everyone behind one NAT shares it, which is why the allowance is generous enough to
-absorb an office.
-
-### The email verification code
-
-Registering mails a six-digit code to the new address. `POST /api/v1/auth/email/verify`
-with `{email, code}` marks the address as verified; `POST /api/v1/auth/email/verification/resend`
-sends the current code again and always answers `202`, like the recovery request.
-
-The code is derived, not stored: `HMAC-SHA256` with the same pepper, over the account, its
-address and the current fifteen-minute window, reduced to six digits. A code is accepted during
-its window and the next one, so it lives between 15 and 30 minutes, and changing the address
-invalidates it. Guessing is bounded twice: the per-address limit above, and five attempts per
-address per window, so spreading guesses over many callers does not help.
-
-An unverified account can still sign in. Verification records that the address works; it does
-not gate access.
-
-### Deleting an account
-
-`POST /api/v1/auth/account/delete` with `{password}` deletes the caller's own account after
-checking the password (`401` when it is wrong, `204` when done). It is a soft delete: `user` and
-`person` get `deleted_at`, the account's sessions are closed and its home memberships removed.
-The address is released: the deleted row keeps `deleted+<id_user>@deleted.invalid` instead, so
-the same address can register a new account. A
-home the account is the only member of is deleted with it. If the account is the only owner of a
-home that still has other members, the request is refused with `409` and a readable `message`:
-the ownership must be handed over or the members removed first. Both modules write inside one transaction: the security module
-publishes `AccountDeleted` and the home module reacts to it, so either everything is deleted or
-nothing is. An access token issued before the deletion keeps working until it expires, at most
-15 minutes; no refresh token can renew it.
-
-### Administrators and global roles (RBAC)
-
-There are two kinds of roles, and they never mix:
-
-- **Home roles** (`OWNER`, `MEMBER`) are kept per home by the home module and decide what a user
-  may do *inside that home*.
-- **Global roles** (RBAC: `system_role` → `system_role_permission` → `permission`, assigned
-  through `user_system_role`) decide what a user may do *on the platform*. Today there is one,
-  `ADMIN`, seeded by `security-025-seed-admin-role` with three permission codes:
-
-| Code | Allows | Routes |
-|---|---|---|
-| `USER.READ` | read the user directory and the role list | `GET /api/v1/admin/users?q=&page=&size=` (size 1–50, default 20), `GET /api/v1/admin/roles` |
-| `USER.MANAGE` | move another account to `ACTIVE`, `INACTIVE` or `BLOCKED` | `PUT /api/v1/admin/users/{idUser}/status` with `{"status":"BLOCKED"}` |
-| `ROLE.MANAGE` | grant or revoke a global role | `PUT` / `DELETE /api/v1/admin/users/{idUser}/roles/{roleName}` |
-
-How it behaves:
-
-- The filter chain checks the code on every request, reading it from the database rather than
-  from the token: a granted or revoked role, or a blocked account, takes effect on the next
-  request. Without the code the answer is `403`; without a token, `401`. Any other
-  `/api/v1/admin/**` route is denied.
-- `ADMIN` gives **no access to any home**. An administrator who is not a member of a home cannot
-  read it, exactly like any other user.
-- An administrator cannot change their own status or roles (`409`), so nobody locks themselves
-  out by accident; another administrator has to do it.
-- Moving an account out of `ACTIVE` revokes its sessions, so it cannot refresh. Its current
-  access token still works on the non-admin routes until it expires (at most 15 minutes).
-- Every change is written to `audit_log`. `GET /api/v1/auth/permissions` returns the caller's
-  codes; the web uses it to show or hide the administration screen.
-
-**The first administrator.** No account is an administrator after installing: granting a global
-privilege by default would hand the platform to whoever registered first. Register the account
-normally, then grant it the role once with the script of the `infra` repository (it reads the
-MySQL root password from `infra/.env`, and gives the role back if it had been revoked):
-
-```bash
-cd ../../infra
-./make-admin.sh admin@example.com
-``` Sign out and in again on the web, or
-reload it, and **Administration** appears in the menu. From there that administrator can grant
-`ADMIN` to other accounts; the SQL is only needed for the first one. To undo it by hand:
-`DELETE FROM user_system_role WHERE system_role_id = 'rol0000001' AND user_id = '<id_user>';`.
-
-**Administrator notifications.** Administrators are told, inside the web app, about:
-
-| Event (`security::api`) | Published when | Who receives it |
-|---|---|---|
-| `AccountRegistered` | an account is created (registration or first Google sign-in) | every active administrator |
-| `AccountAdministered` | an administrator changes another account's status, or grants or revokes a role (not on repeats) | every active administrator except the one who made the change |
-
-The notification module listens after commit (a registration that rolls back notifies nobody) and
-stores one row per administrator in `notification`, with channel `IN_APP` and source
-`ADMINISTRATION` (`notification-004-add-in-app-admin-notifications`). Only the message key and the
-affected account are stored; the web builds the text. These notifications are not sent by mail
-or push.
-
-| Route (requires `USER.READ`, only the caller's own notifications) | Purpose |
-|---|---|
-| `GET /api/v1/admin/notifications` | latest 50, newest first, with the affected account's name and address |
-| `PUT /api/v1/admin/notifications/{id}/read` | mark one as read (`204`; `404` if it is not the caller's) |
-| `DELETE /api/v1/admin/notifications/{id}` | delete one (`204`; `404` if it is not the caller's) |
-
-**What an administrator sees on the web.** An account holding `ADMIN` gets only the
-administration experience: it lands on **Administration** after signing in, and its menu holds
-Administration, Notifications (the administrator notifications above) and Settings (language,
-theme, help). The home screens (dashboard, homes, favorites) redirect it to Administration. This
-is a web decision only: the backend still lets that account call the home endpoints, so use a
-dedicated account to administer and a regular one for your homes.
-
-Not done yet: email or push for administrator notifications, managing support content and the
-documentation from Settings, and refusing the home endpoints to administrators on the server.
-
-The mobile app has no administration screens; it only uses the regular endpoints.
 
 ### Gmail app password
 
@@ -344,8 +168,8 @@ current shell, in which case export `MAIL_USERNAME` and `MAIL_PASSWORD` yourself
 
 The application starts with no mail configured. A send attempt is then recorded
 as `FAILED` in the `notification` table with the reason, rather than breaking
-the context. That is deliberate: the recovery endpoint answers `202` whether or
-not the account exists, so a mail failure must never change what the caller sees.
+the context. That is deliberate: the security service answers the recovery request with `202`
+whether or not the account exists, so a mail failure must never change what the caller sees.
 
 Every attempt is written to `notification` before the message leaves and closed
 afterwards, so `SENT` and `FAILED` are both auditable and a retry is possible.
@@ -374,27 +198,6 @@ MAIL_FROM=Energy Monitor <no-reply@localhost>
 
 Messages appear at <http://localhost:8025>.
 
-### Sign in with Google
-
-`POST /api/v1/auth/google {code}` exchanges the authorization code of Google's sign-in popup
-(web app) for the usual access and refresh tokens. The first time it creates the account with the
-first name, last name (when the Google account has one), photo and address of Google; the address
-starts verified and the account gets a random password nobody knows ("forgot password" sets
-one). An address that already belongs to an account registered with a password is refused with
-**409**: signing in with Google never takes over an existing account.
-
-Setup (once per environment):
-
-1. <https://console.cloud.google.com> → create (or pick) a project.
-2. **APIs & Services → OAuth consent screen** (Google Auth Platform → Branding/Audience):
-   app name, support email, audience **External**. While the app is in *Testing*, add the Google
-   accounts that may sign in under **Test users**. Scopes: `openid`, `email`, `profile`.
-3. **APIs & Services → Credentials → Create credentials → OAuth client ID**, type **Web
-   application**. *Authorized JavaScript origins*: `http://localhost:5173` (add the production
-   domain later). No redirect URI is needed (the popup uses `postmessage`).
-4. Put the client ID and secret in this `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) and the
-   same client ID in the web app's `.env.local` (`VITE_GOOGLE_CLIENT_ID`); restart both.
-
 ## 6. Build and run
 
 ```bash
@@ -412,29 +215,11 @@ The API listens on `http://localhost:8080`. Swagger UI is served at
 
 ## 7. Running behind a reverse proxy
 
-The application records `request.getRemoteAddr()` as the caller's address and
-**ignores `X-Forwarded-For`**. A header the client sets is not evidence of
-anything: the password-recovery attempt limiter is keyed on that address, so a
-per-request header would hand out a fresh allowance every time and defeat it.
-
-The cost of that choice is that behind a proxy every request looks like it comes
-from the proxy, and the recovery rate limit therefore becomes one limit shared by
-all users. A deployment in that position must configure the container's trusted
-proxy handling, in the profile of that deployment rather than in `application.yaml`:
-
-```properties
-server.forward-headers-strategy=native
-```
-
-Tomcat's `RemoteIpValve` then validates the header against the internal proxies
-it knows about and rewrites `getRemoteAddr()` with the real client address. Do
-this in the container rather than in application code: the decision about which
-peers may set the header belongs to the deployment's configuration, because only
-the deployment knows who sits in front of it.
-
-While that is not configured, expect two visible effects: every audit row shows
-the proxy's address, and a burst of recovery attempts from unrelated users counts
-against a single allowance.
+The application reads the caller's address from `request.getRemoteAddr()` and **ignores
+`X-Forwarded-For`**: a header the client sets is not evidence of anything. The internal routes
+(`/internal/mqtt/auth/**` and `/internal/accounts/**`) trust a caller partly by that address, so
+behind a proxy every request would look like it came from the proxy. A public reverse proxy must
+therefore **never forward `/internal/**`**; the web image's nginx forwards `/api/` only.
 
 ## 8. Running the tests
 
@@ -469,12 +254,11 @@ password resolves to an empty string and the persistence tests fail with
 `Access denied for user 'energy_app'` rather than connecting to something they
 were not meant to.
 
-Nothing else has to be exported. `application-test.yaml` carries its own RSA key
-paths, defaulting to `~/.energy-monitor/keys`, and a **test-only pepper** for the
-recovery codes, committed on purpose so every machine hashes identically. That
-pepper is confined to this file: outside the `test` profile the pepper is still
-required through `SECURITY_RESET_PEPPER`, and the application refuses to start
-without it.
+Nothing else has to be exported. The tests that boot the application generate a key pair of
+their own and sign their tokens with it, as the security service would; `application-test.yaml`
+carries a test-only `INTERNAL_API_TOKEN` and points the security service at an address where
+nothing listens, so the suite never reaches a service running on this machine. Neither the
+security service nor RabbitMQ is needed.
 
 ## 9. MQTT broker and devices
 
@@ -570,16 +354,18 @@ stores a recommendation when a rule matches:
 - The rules need history: the evening-peak and standby rules work after a few days of readings,
   the week-over-week comparison after two weeks and the per-device comparison after four.
 
-### Messages from the security service (RabbitMQ)
+## 12. The security service
 
-The security bounded context is moving to its own service (`en-monitor-security-service`).
-What it announces arrives here through RabbitMQ, on the topic exchange `energy-monitor.security`:
+### Messages (RabbitMQ)
+
+What the security service announces arrives here through RabbitMQ, on the topic exchange
+`energy-monitor.security`:
 
 | Queue | Routing keys | What this backend does |
 |---|---|---|
-| `energy-monitor-backend.notification.account-events` | `account.registered`, `account.administered` | In-app notices to the administrators |
+| `energy-monitor-backend.notification.account-events` | `account.registered`, `account.administered`, `account.deleted` | In-app notices to the administrators; a deleted account's mail and push preferences and devices are dropped |
 | `energy-monitor-backend.notification.mail` | `mail.email-verification`, `mail.password-reset` | Mails the code |
-| `energy-monitor-backend.home.account-deleted` | `account.deleted` | Drops the memberships and the homes the account alone owned |
+| `energy-monitor-backend.home.account-deleted` | `account.deleted` | Drops the memberships and the homes nobody else is left in |
 
 - The queues are declared here at startup, durable, each with a `.dlq` dead-letter queue: a
   message that fails three attempts (1, 2 and 4 s apart) is moved there instead of blocking the
@@ -587,6 +373,10 @@ What it announces arrives here through RabbitMQ, on the topic exchange `energy-m
 - A message may arrive twice. The administrator notices are written once (same account, message
   and instant), a mail request reuses its message id as the id of the delivery record, and the
   account cleanup finds nothing left to remove the second time.
+- The security service asks first whether an account may go (below) and does not delete the only
+  owner of a home that still has other members. If one slips through anyway (a member joined in
+  between), the oldest remaining member becomes the owner and `HomeOwnershipTransferred` is
+  published, so a home is never left without one.
 - Connection: `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USERNAME` and `RABBITMQ_PASSWORD`. The
   consumers are active, so **without a reachable broker `/actuator/health` reports DOWN**. The
   test profile does not start them and needs no broker.
@@ -600,12 +390,59 @@ owner of a home with other members). The path has its own filter chain: the call
 token configured in the security service. Without a token every call is refused. The reverse
 proxy must not forward `/internal/**`.
 
-The client for the other direction is ready under `security/adapter/out/remote` (permissions,
-profiles in one request per list, administrators; cached 30 s, 60 s and 30 s with Caffeine) and
-is connected when the security module is removed from this backend. Until then the module still
-answers in process. When the service does not answer, the member list shows no names.
+In the other direction this backend asks the service, with the same token
+(`security/adapter/out/remote`):
 
-## 12. Docker image
+| Route of the security service | Used for | Cached | When it does not answer |
+|---|---|---|---|
+| `GET /internal/users/{id}/permissions` | `USER.READ` on `/api/v1/admin/notifications` | 30 s | `503` |
+| `POST /internal/users/profiles` | names in the member list, alert mail addresses, administrator notifications | 60 s | names left out; alert mail skipped, push still sent |
+| `GET /internal/administrators` | who receives the administrator notifications | 30 s | the message is retried, then dead-lettered |
+
+A call waits 1 s for the connection and 2 s for the answer (`security.service.*`). A failure is
+never cached, so the next request tries again.
+
+### Administrator notifications
+
+Administrators (accounts holding the global `ADMIN` role of the security service) are told,
+inside the web app, about:
+
+| Message | Sent when | Who receives it |
+|---|---|---|
+| `account.registered` | an account is created (registration or first Google sign-in) | every active administrator |
+| `account.administered` | an administrator changes another account's status, or grants or revokes a role (not on repeats) | every active administrator except the one who made the change |
+
+The security service sends them only once the change is committed (a registration that rolls back
+notifies nobody). The notification module asks it who the administrators are and stores one row
+per administrator in `notification`, with channel `IN_APP` and source
+`ADMINISTRATION` (`notification-004-add-in-app-admin-notifications`). Only the message key and the
+affected account are stored; the web builds the text. These notifications are not sent by mail
+or push.
+
+| Route (requires `USER.READ`, only the caller's own notifications) | Purpose |
+|---|---|
+| `GET /api/v1/admin/notifications` | latest 50, newest first, with the affected account's name and address (left out while the security service does not answer) |
+| `PUT /api/v1/admin/notifications/{id}/read` | mark one as read (`204`; `404` if it is not the caller's) |
+| `DELETE /api/v1/admin/notifications/{id}` | delete one (`204`; `404` if it is not the caller's) |
+
+**What an administrator sees on the web.** An account holding `ADMIN` gets only the
+administration experience: it lands on **Administration** after signing in, and its menu holds
+Administration, Notifications (the administrator notifications above) and Settings (language,
+theme, help). The home screens (dashboard, homes, favorites) redirect it to Administration. This
+is a web decision only: the backend still lets that account call the home endpoints, so use a
+dedicated account to administer and a regular one for your homes.
+
+`USER.READ` is asked to the security service on each request and cached 30 seconds, so a role
+granted or revoked takes effect within that time. While the service does not answer these routes
+answer `503`; any other `/api/v1/admin/**` route of this backend is denied. The user directory and
+the roles (`/api/v1/admin/users`, `/api/v1/admin/roles`) are served by the security service.
+
+Not done yet: email or push for administrator notifications, managing support content and the
+documentation from Settings, and refusing the home endpoints to administrators on the server.
+
+The mobile app has no administration screens; it only uses the regular endpoints.
+
+## 13. Docker image
 
 `Dockerfile` builds the image (Temurin 21, runs as a non-root user, uid 10001). The `infra`
 repository builds it and runs it next to MySQL, the broker and the web app:
@@ -613,7 +450,7 @@ repository builds it and runs it next to MySQL, the broker and the web app:
 `infra/README.md`). Every setting comes from the environment: `application-local.yaml` is not
 inside the image, and any profile other than `local` works (`prod`).
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
@@ -622,8 +459,10 @@ inside the image, and any profile other than `local` works (`prod`).
 | Broker logs `context deadline exceeded` calling `backend:8080` | backend stopped, or the ufw rule of section 9 is missing |
 | Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: update `DEVICE_MQTT_PUBLIC_HOST` in `infra/.env`, re-run `infra/prepare.sh` and restart the broker |
 | Device logs `rc=4` / `rc=5` | `device_code` / API key do not match the `device` table (link it again from the web) |
-| `403` on `/api/v1/admin/**`, or no **Administration** in the web menu | the account does not hold `ADMIN`: grant it as in "Administrators and global roles", then reload the web |
-| Container: `Failed to read the RSA private key PEM` | the container user cannot read the key: `BACKEND_UID`/`BACKEND_GID` in `infra/.env` must own `infra/keys` (`infra/prepare.sh` sets them) |
+| `403` on `/api/v1/admin/**`, or no **Administration** in the web menu | the account does not hold `ADMIN`: grant it as the security service's README explains, then reload the web |
+| `503` on `/api/v1/admin/notifications`, members without names | the security service does not answer, or `INTERNAL_API_TOKEN` differs between the two `.env` files |
+| `401` on every request with a fresh token | `SECURITY_JWT_PUBLIC_KEY_PATH` is not the public key of the security service's pair |
+| Container: `Failed to read the RSA public key PEM` | the container user cannot read the key: `BACKEND_UID`/`BACKEND_GID` in `infra/.env` must own `infra/keys` (`infra/prepare.sh` sets them) |
 | `Access denied for user 'energy_app'` when starting or testing | `application-local.yaml` / `SPRING_DATASOURCE_PASSWORD` do not match `MYSQL_PASSWORD` of `infra/.env` |
 
 ## Useful commands
