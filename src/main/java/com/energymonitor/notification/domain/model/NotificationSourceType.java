@@ -13,7 +13,7 @@ package com.energymonitor.notification.domain.model;
  * it was phrased. Collapsing them would force a wording change to be a data migration.
  *
  * <p>{@link #SECURITY} exists because recovery codes are sent by this module on behalf of another
- * one: the source row lives in the security module and is referenced by identifier, with no foreign
+ * one: the source row lives in the security service and is referenced by identifier, with no foreign
  * key, which is what keeps the two independent.
  */
 public enum NotificationSourceType {
@@ -24,7 +24,7 @@ public enum NotificationSourceType {
     /** A message about a recommendation issued for a home. */
     RECOMMENDATION,
 
-    /** A message sent by the security module, such as a password recovery code. */
+    /** A message sent by the security service, such as a password recovery code. */
     SECURITY,
 
     /** A change on the platform an administrator is told about. */

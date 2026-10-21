@@ -17,12 +17,6 @@ import com.energymonitor.home.application.port.out.UserHomePersistencePort;
 import com.energymonitor.home.domain.model.Home;
 import com.energymonitor.home.domain.model.HomeThresholds;
 import com.energymonitor.home.domain.model.UserHome;
-import com.energymonitor.security.application.port.out.PasswordHasherPort;
-import com.energymonitor.security.application.port.out.PersonPersistencePort;
-import com.energymonitor.security.application.port.out.UserPersistencePort;
-import com.energymonitor.security.domain.model.Email;
-import com.energymonitor.security.domain.model.Person;
-import com.energymonitor.security.domain.model.User;
 import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,12 +43,6 @@ class HomeDeletionIntegrationTest extends JwtKeyedTest {
     @Autowired
     private DeleteHome deleteHome;
     @Autowired
-    private UserPersistencePort users;
-    @Autowired
-    private PersonPersistencePort persons;
-    @Autowired
-    private PasswordHasherPort hasher;
-    @Autowired
     private HomePersistencePort homes;
     @Autowired
     private UserHomePersistencePort memberships;
@@ -67,15 +55,8 @@ class HomeDeletionIntegrationTest extends JwtKeyedTest {
     @Autowired
     private DeviceApi deviceApi;
 
-    private void seedUser(String idUser, String idPerson, String email) {
-        persons.save(new Person(idPerson, "Ada", "Lovelace"));
-        users.save(User.register(idUser, idPerson, hasher.hash("StrongPass1!"), Email.of(email), NOW, null));
-    }
-
     @BeforeEach
     void seed() {
-        seedUser("hdu0000001", "hdp0000001", "hd.owner@example.com");
-        seedUser("hdu0000002", "hdp0000002", "hd.member@example.com");
         homes.save(Home.create("hdh0000001", "Casa", "hous000001", "Calle 1", "HDH00001", null, NOW));
         thresholds.save(HomeThresholds.create("hdt0000001", "hdh0000001", 6.0, 180.0, true));
         memberships.save(UserHome.owner("hdu0000001", "hdh0000001"));

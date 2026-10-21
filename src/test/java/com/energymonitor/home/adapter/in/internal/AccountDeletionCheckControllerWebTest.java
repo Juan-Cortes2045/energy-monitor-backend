@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.energymonitor.home.application.port.in.CheckAccountDeletion;
-import com.energymonitor.security.api.AccountDeletionBlockedException;
+import com.energymonitor.home.application.exception.AccountDeletionBlockedException;
 import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

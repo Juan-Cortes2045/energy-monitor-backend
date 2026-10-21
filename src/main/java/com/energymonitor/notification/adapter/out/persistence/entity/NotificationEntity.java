@@ -30,7 +30,7 @@ public class NotificationEntity extends BaseAuditEntity {
     /**
      * The account the message is for, referenced by identifier and not by a foreign key.
      *
-     * <p>No constraint on purpose: the row lives in the security module's schema, and a foreign key
+     * <p>No constraint on purpose: the row belongs to the security service, and a foreign key
      * would make this module unable to be created, migrated or reasoned about without that schema
      * beside it. The reference is by identifier only.
      */

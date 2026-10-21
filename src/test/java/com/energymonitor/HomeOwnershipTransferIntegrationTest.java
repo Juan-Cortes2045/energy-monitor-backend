@@ -23,12 +23,6 @@ import com.energymonitor.home.domain.model.Home;
 import com.energymonitor.home.domain.model.HomeThresholds;
 import com.energymonitor.home.domain.model.Role;
 import com.energymonitor.home.domain.model.UserHome;
-import com.energymonitor.security.application.port.out.PasswordHasherPort;
-import com.energymonitor.security.application.port.out.PersonPersistencePort;
-import com.energymonitor.security.application.port.out.UserPersistencePort;
-import com.energymonitor.security.domain.model.Email;
-import com.energymonitor.security.domain.model.Person;
-import com.energymonitor.security.domain.model.User;
 import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,12 +57,6 @@ class HomeOwnershipTransferIntegrationTest extends JwtKeyedTest {
     @Autowired
     private DeleteHome deleteHome;
     @Autowired
-    private UserPersistencePort users;
-    @Autowired
-    private PersonPersistencePort persons;
-    @Autowired
-    private PasswordHasherPort hasher;
-    @Autowired
     private HomePersistencePort homes;
     @Autowired
     private UserHomePersistencePort memberships;
@@ -83,16 +71,8 @@ class HomeOwnershipTransferIntegrationTest extends JwtKeyedTest {
     @Autowired
     private ApplicationEvents events;
 
-    private void seedUser(String idUser, String idPerson, String email) {
-        persons.save(new Person(idPerson, "Ada", "Lovelace"));
-        users.save(User.register(idUser, idPerson, hasher.hash("StrongPass1!"), Email.of(email), NOW, null));
-    }
-
     @BeforeEach
     void seed() {
-        seedUser(OWNER, "otp0000001", "ot.owner@example.com");
-        seedUser(MEMBER, "otp0000002", "ot.member@example.com");
-        seedUser(OUTSIDER, "otp0000003", "ot.outsider@example.com");
         homes.save(Home.create(HOME, "Casa", "hous000001", "Calle 1", "OTH00001", null, NOW));
         thresholds.save(HomeThresholds.create("ott0000001", HOME, 6.0, 180.0, true));
         memberships.save(UserHome.owner(OWNER, HOME));

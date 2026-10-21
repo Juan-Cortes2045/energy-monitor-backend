@@ -4,29 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.containsStringIgnoringCase;
 import static org.hamcrest.Matchers.not;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.energymonitor.security.application.port.in.CheckPermission;
-import com.energymonitor.security.application.port.in.RegisterUser;
-import com.energymonitor.security.application.port.in.RefreshSession;
-import com.energymonitor.security.application.result.AuthenticatedUser;
-import com.energymonitor.security.domain.model.Email;
-import com.energymonitor.security.domain.model.UserStatus;
-import java.time.Instant;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -53,19 +42,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
     private MockMvc mvc;
 
     @Autowired
-    private JwtTokenIssuer tokenIssuer;
-
-    @Autowired
     private CorsConfigurationSource corsConfigurationSource;
-
-    @MockitoBean
-    private RegisterUser registerUser;
-
-    @MockitoBean
-    private RefreshSession refreshSession;
-
-    @MockitoBean
-    private CheckPermission checkPermission;
 
     private CorsConfiguration policyFor(String path) {
         return corsConfigurationSource
@@ -76,7 +53,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Test
     void answersAPreflightFromAnAllowedOrigin() throws Exception {
-        mvc.perform(options("/api/v1/auth/login")
+        mvc.perform(options("/api/v1/homes")
                         .header("Origin", ALLOWED)
                         .header("Access-Control-Request-Method", "POST")
                         .header("Access-Control-Request-Headers", "content-type"))
@@ -88,7 +65,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
     void publishesTheMethodThePreflightAskedAbout() throws Exception {
         // The browser decides whether to send the real request from these headers alone, so a
         // preflight that answered 200 without naming the method would be treated as a failure.
-        mvc.perform(options("/api/v1/auth/login")
+        mvc.perform(options("/api/v1/homes")
                         .header("Origin", ALLOWED)
                         .header("Access-Control-Request-Method", "POST"))
                 .andExpect(status().isOk())
@@ -97,7 +74,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Test
     void publishesTheHeadersThePreflightAskedAbout() throws Exception {
-        mvc.perform(options("/api/v1/auth/login")
+        mvc.perform(options("/api/v1/homes")
                         .header("Origin", ALLOWED)
                         .header("Access-Control-Request-Method", "POST")
                         .header("Access-Control-Request-Headers", "authorization"))
@@ -147,7 +124,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Test
     void letsTheBrowserCacheThePreflightAnswer() throws Exception {
-        mvc.perform(options("/api/v1/auth/login")
+        mvc.perform(options("/api/v1/homes")
                         .header("Origin", ALLOWED)
                         .header("Access-Control-Request-Method", "POST"))
                 .andExpect(status().isOk())
@@ -159,7 +136,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
         // A preflight carries no Authorization header by definition: the browser sends it before
         // it knows whether the real request will be allowed. Demanding a token here would make
         // every authenticated endpoint unreachable from a browser.
-        mvc.perform(options("/api/v1/auth/account")
+        mvc.perform(options("/api/v1/homes/x")
                         .header("Origin", ALLOWED)
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isOk())
@@ -168,7 +145,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Test
     void refusesAPreflightFromAnOriginThatIsNotAllowed() throws Exception {
-        mvc.perform(options("/api/v1/auth/login")
+        mvc.perform(options("/api/v1/homes")
                         .header("Origin", FOREIGN)
                         .header("Access-Control-Request-Method", "POST"))
                 .andExpect(status().isForbidden())
@@ -179,7 +156,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
     void refusesAMethodThatIsNotInThePolicy() throws Exception {
         // OPTIONS is permitted, so a preflight asking for a verb the API does not offer must not
         // be answered with a wildcard that would let the browser go on to attempt it.
-        mvc.perform(options("/api/v1/auth/login")
+        mvc.perform(options("/api/v1/homes")
                         .header("Origin", ALLOWED)
                         .header("Access-Control-Request-Method", "PATCH"))
                 .andExpect(status().isForbidden())
@@ -213,13 +190,9 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Test
     void stampsTheAllowOriginHeaderOnARealCrossOriginResponse() throws Exception {
-        given(checkPermission.listGrantedCodes(any())).willReturn(List.of());
-        var identity = new AuthenticatedUser("USR0000001", "PER0000001",
-                Email.of("someone@example.com"), UserStatus.ACTIVE, Instant.now(), null);
-
-        mvc.perform(get("/api/v1/auth/permissions")
+        mvc.perform(get("/api/v1/homes")
                         .header("Origin", ALLOWED)
-                        .header("Authorization", "Bearer " + tokenIssuer.issue(identity)))
+                        .header("Authorization", bearer("USR0000001")))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED));
     }
@@ -228,17 +201,17 @@ class SecurityCorsWebTest extends JwtKeyedTest {
     void answersARejectedRequestWithTheCORSHeaderToo() throws Exception {
         // A 401 the browser cannot read is indistinguishable from a network failure, which is the
         // most confusing symptom a cross-origin client can be handed. The header has to be there.
-        mvc.perform(get("/api/v1/auth/permissions").header("Origin", ALLOWED))
+        mvc.perform(get("/api/v1/homes").header("Origin", ALLOWED))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED));
     }
 
     @Test
     void refusesToStampAllowOriginForAnOriginThatIsNotAllowed() throws Exception {
-        mvc.perform(post("/api/v1/auth/login")
+        mvc.perform(post("/api/v1/homes")
                         .header("Origin", FOREIGN)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"a@example.com\",\"password\":\"x\"}"))
+                        .content("{\"name\":\"Casa\"}"))
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
     }
 
@@ -246,12 +219,12 @@ class SecurityCorsWebTest extends JwtKeyedTest {
     void echoesEveryConfiguredOriginRatherThanCollapsingThemIntoOne() throws Exception {
         // The browser compares the value it receives against the origin it sent, so answering
         // with a fixed string for two different origins would break one of them.
-        mvc.perform(options("/api/v1/auth/login")
+        mvc.perform(options("/api/v1/homes")
                         .header("Origin", ALLOWED)
                         .header("Access-Control-Request-Method", "POST"))
                 .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED));
 
-        mvc.perform(options("/api/v1/auth/login")
+        mvc.perform(options("/api/v1/homes")
                         .header("Origin", OTHER_ALLOWED)
                         .header("Access-Control-Request-Method", "POST"))
                 .andExpect(header().string("Access-Control-Allow-Origin", OTHER_ALLOWED));
@@ -261,7 +234,7 @@ class SecurityCorsWebTest extends JwtKeyedTest {
     void leavesASameOriginRequestWithoutCORSHeaders() throws Exception {
         // No Origin header means the browser is not enforcing CORS, so emitting the headers would
         // be noise. It also means non-browser clients are unaffected by this policy entirely.
-        mvc.perform(post("/api/v1/auth/login")
+        mvc.perform(post("/api/v1/homes")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
@@ -271,9 +244,9 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Test
     void publishesBothConfiguredOriginsAndNoOthers() {
-        assertThat(policyFor("/api/v1/auth/login").getAllowedOrigins())
+        assertThat(policyFor("/api/v1/homes").getAllowedOrigins())
                 .containsExactly(ALLOWED, OTHER_ALLOWED);
-        assertThat(policyFor("/api/v1/auth/login").getAllowedOriginPatterns()).isEmpty();
+        assertThat(policyFor("/api/v1/homes").getAllowedOriginPatterns()).isEmpty();
     }
 
     @Test
@@ -285,21 +258,21 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Test
     void keepsCredentialsOffSoNoCookieCouldEverRideAlong() {
-        assertThat(policyFor("/api/v1/auth/login").getAllowCredentials()).isFalse();
+        assertThat(policyFor("/api/v1/homes").getAllowCredentials()).isFalse();
     }
 
     @Test
     void neverPublishesAWildcardOrigin() {
         // A wildcard would let any site the user visits read authenticated responses.
-        assertThat(policyFor("/api/v1/auth/login").getAllowedOrigins())
+        assertThat(policyFor("/api/v1/homes").getAllowedOrigins())
                 .doesNotContain(CorsConfiguration.ALL);
-        assertThat(policyFor("/api/v1/auth/login").getAllowedOriginPatterns())
+        assertThat(policyFor("/api/v1/homes").getAllowedOriginPatterns())
                 .doesNotContain(CorsConfiguration.ALL);
     }
 
     @Test
     void publishesTheMethodsAndHeadersTheApiActuallyUses() {
-        CorsConfiguration policy = policyFor("/api/v1/auth/login");
+        CorsConfiguration policy = policyFor("/api/v1/homes");
 
         assertThat(policy.getAllowedMethods())
                 .contains("GET", "POST", "PUT", "DELETE", "OPTIONS")
@@ -310,9 +283,9 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Test
     void exposesTheAllowHeaderSoA405IsReadableFromABrowser() {
-        // The profile route answers 405 with the permitted verbs in Allow. A browser client cannot
-        // read a header the server does not name here, so without this the detail stays server
-        // side and the client sees a bare 405.
-        assertThat(policyFor("/api/v1/auth/profile").getExposedHeaders()).contains("Allow");
+        // A route answers 405 with the permitted verbs in Allow. A browser client cannot read a
+        // header the server does not name here, so without this the detail stays server side and
+        // the client sees a bare 405.
+        assertThat(policyFor("/api/v1/homes").getExposedHeaders()).contains("Allow");
     }
 }

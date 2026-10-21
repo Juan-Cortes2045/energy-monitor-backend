@@ -1,6 +1,6 @@
 package com.energymonitor.home.application.port.in;
 
-import com.energymonitor.security.api.AccountDeletionBlockedException;
+import com.energymonitor.home.application.exception.AccountDeletionBlockedException;
 
 /**
  * Input port for the security service asking, before it deletes an account, whether this module

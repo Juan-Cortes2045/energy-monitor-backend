@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
  * {@link EmailSender}, which is a transport. That split is what lets the same gateway carry a
  * verification code or an alert later without being rewritten.
  *
- * <p>The recovery secret is passed in from the security module, which is the only holder of it
+ * <p>The recovery secret is passed in from the security service, which is the only holder of it
  * in clear text. This class never stores it, logs it or returns it.
  */
 @Component
@@ -77,7 +77,7 @@ public class SendPasswordResetEmail {
      * Assembles what the log and the transport each need from one message.
      *
      * <p>The source is always {@link NotificationSourceType#SECURITY}: this module sends on behalf
-     * of the security module, and the row it refers to is the recovery token, identified by
+     * of the security service, and the row it refers to is the recovery token, identified by
      * {@code sourceId}.
      */
     private EmailSender.Delivery delivery(String idNotification, String userId, String homeId,

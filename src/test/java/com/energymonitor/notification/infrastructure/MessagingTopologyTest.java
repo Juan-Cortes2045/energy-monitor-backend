@@ -23,7 +23,7 @@ class MessagingTopologyTest {
     private static final String DLX = "energy-monitor-backend.dlx";
 
     @Test
-    @DisplayName("notification hears account events and mail requests")
+    @DisplayName("notification hears account events, deletions and mail requests")
     void notificationQueues() {
         Declarables declarables = new NotificationMessagingConfiguration()
                 .notificationQueues(EXCHANGE, DLX);
@@ -33,6 +33,7 @@ class MessagingTopologyTest {
                 .containsExactlyInAnyOrder(
                         tuple(NotificationMessagingConfiguration.ACCOUNT_EVENTS_QUEUE, "account.registered"),
                         tuple(NotificationMessagingConfiguration.ACCOUNT_EVENTS_QUEUE, "account.administered"),
+                        tuple(NotificationMessagingConfiguration.ACCOUNT_EVENTS_QUEUE, "account.deleted"),
                         tuple(NotificationMessagingConfiguration.MAIL_QUEUE, "mail.email-verification"),
                         tuple(NotificationMessagingConfiguration.MAIL_QUEUE, "mail.password-reset"));
         assertDeadLettered(declarables, NotificationMessagingConfiguration.ACCOUNT_EVENTS_QUEUE);

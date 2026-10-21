@@ -1,6 +1,5 @@
 package com.energymonitor.security.infrastructure;
 
-import com.energymonitor.security.adapter.in.web.dto.ApiError;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;

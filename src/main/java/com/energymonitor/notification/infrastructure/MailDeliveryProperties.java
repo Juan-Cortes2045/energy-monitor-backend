@@ -6,9 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Recovery settings for delivery records, bound from {@code app.mail.*}.
  *
- * <p>Queue size and thread count are not here: the queue is declared by the security module and
- * sized under {@code security.reset.executor.*}. What remains describes the two values that are
- * about a row rather than about a thread: how long a row may claim a delivery that is no longer in
+ * <p>The two values describe a row rather than a thread: how long a row may claim a delivery that is no longer in
  * flight, and how often that claim is checked.
  *
  * @param pendingThreshold how long a row may stay {@code PENDING} before the sweep closes it as

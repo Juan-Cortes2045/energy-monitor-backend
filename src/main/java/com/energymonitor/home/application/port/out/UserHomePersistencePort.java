@@ -65,7 +65,7 @@ public interface UserHomePersistencePort {
      * Lists all active memberships of a home.
      *
      * @param homeId the home
-     * @return the memberships
+     * @return the memberships, the oldest first
      */
     List<UserHome> listActiveByHomeId(String homeId);
 

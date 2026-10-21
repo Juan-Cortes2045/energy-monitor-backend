@@ -8,6 +8,8 @@ import java.util.Map;
  *
  * <p>It answers who an identifier belongs to and nothing else. Deciding whether the caller may see
  * those accounts is the asking module's job: this module does not know homes or memberships.
+ *
+ * <p>Answered by the security service and cached 60 seconds.
  */
 public interface UserProfileQuery {
 
@@ -17,6 +19,8 @@ public interface UserProfileQuery {
      * @param userIds account identifiers; duplicates and unknown ones are fine
      * @return the profile of every active account found, keyed by its identifier; an identifier
      *         with no active account is simply absent
+     * @throws SecurityServiceUnavailableException when the security service does not answer and
+     *                                             some of them are not cached
      */
     Map<String, UserProfile> findByIds(Collection<String> userIds);
 }

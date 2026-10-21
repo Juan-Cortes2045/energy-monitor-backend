@@ -1,7 +1,7 @@
 package com.energymonitor.home.adapter.in.internal;
 
 import com.energymonitor.home.application.port.in.CheckAccountDeletion;
-import com.energymonitor.security.api.AccountDeletionBlockedException;
+import com.energymonitor.home.application.exception.AccountDeletionBlockedException;
 import io.swagger.v3.oas.annotations.Hidden;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
