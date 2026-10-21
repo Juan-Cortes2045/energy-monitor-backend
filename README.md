@@ -591,6 +591,20 @@ What it announces arrives here through RabbitMQ, on the topic exchange `energy-m
   consumers are active, so **without a reachable broker `/actuator/health` reports DOWN**. The
   test profile does not start them and needs no broker.
 
+### Internal calls with the security service
+
+The security service asks this backend `GET /internal/accounts/{id}/deletion-check` before it
+deletes an account: `204` lets it go, `409` with `{message}` refuses it (the account is the only
+owner of a home with other members). The path has its own filter chain: the caller must come from
+`INTERNAL_API_ALLOWED_NETWORKS` **and** send `INTERNAL_API_TOKEN` in `X-Internal-Token`, the same
+token configured in the security service. Without a token every call is refused. The reverse
+proxy must not forward `/internal/**`.
+
+The client for the other direction is ready under `security/adapter/out/remote` (permissions,
+profiles in one request per list, administrators; cached 30 s, 60 s and 30 s with Caffeine) and
+is connected when the security module is removed from this backend. Until then the module still
+answers in process. When the service does not answer, the member list shows no names.
+
 ## 12. Docker image
 
 `Dockerfile` builds the image (Temurin 21, runs as a non-root user, uid 10001). The `infra`

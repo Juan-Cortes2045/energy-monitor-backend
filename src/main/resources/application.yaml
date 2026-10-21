@@ -167,6 +167,14 @@ management:
       # A mail server that is down is not the application's health: it must not fail the probe.
       enabled: false
 
+# Calls between this backend and the security service, both ways. Each side checks the other's
+# network and the shared token; the reverse proxy never forwards /internal/**.
+internal-api:
+  # Same value in both services. Empty refuses every call to /internal/accounts/**.
+  # Generate with: openssl rand -hex 32
+  token: ${INTERNAL_API_TOKEN:}
+  allowed-networks: ${INTERNAL_API_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
+
 mqtt:
   # The backend subscribes over the plain listener. Locally and in a compose deployment the
   # broker runs next to the backend, so this connection never leaves the host; devices use TLS.

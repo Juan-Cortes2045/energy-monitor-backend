@@ -26,6 +26,10 @@ security:
     private-key-path: ${SECURITY_JWT_PRIVATE_KEY_PATH:${user.home}/.energy-monitor/keys/private.pem}
     public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:${user.home}/.energy-monitor/keys/public.pem}
 
+internal-api:
+  # Test-only token, committed for the same reason as the pepper above.
+  token: test-only-internal-token
+
 mqtt:
   # Un client-id propio, y no decorativo: el broker expulsa a todo cliente que se
   # conecte con un id que ya está en uso. Cada prueba que levanta el contexto
