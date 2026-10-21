@@ -570,6 +570,27 @@ stores a recommendation when a rule matches:
 - The rules need history: the evening-peak and standby rules work after a few days of readings,
   the week-over-week comparison after two weeks and the per-device comparison after four.
 
+### Messages from the security service (RabbitMQ)
+
+The security bounded context is moving to its own service (`en-monitor-security-service`).
+What it announces arrives here through RabbitMQ, on the topic exchange `energy-monitor.security`:
+
+| Queue | Routing keys | What this backend does |
+|---|---|---|
+| `energy-monitor-backend.notification.account-events` | `account.registered`, `account.administered` | In-app notices to the administrators |
+| `energy-monitor-backend.notification.mail` | `mail.email-verification`, `mail.password-reset` | Mails the code |
+| `energy-monitor-backend.home.account-deleted` | `account.deleted` | Drops the memberships and the homes the account alone owned |
+
+- The queues are declared here at startup, durable, each with a `.dlq` dead-letter queue: a
+  message that fails three attempts (1, 2 and 4 s apart) is moved there instead of blocking the
+  queue.
+- A message may arrive twice. The administrator notices are written once (same account, message
+  and instant), a mail request reuses its message id as the id of the delivery record, and the
+  account cleanup finds nothing left to remove the second time.
+- Connection: `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USERNAME` and `RABBITMQ_PASSWORD`. The
+  consumers are active, so **without a reachable broker `/actuator/health` reports DOWN**. The
+  test profile does not start them and needs no broker.
+
 ## 12. Docker image
 
 `Dockerfile` builds the image (Temurin 21, runs as a non-root user, uid 10001). The `infra`

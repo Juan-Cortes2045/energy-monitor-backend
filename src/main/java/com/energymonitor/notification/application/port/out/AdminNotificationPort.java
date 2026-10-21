@@ -19,6 +19,19 @@ public interface AdminNotificationPort {
     void save(Notification notification);
 
     /**
+     * Whether an administrator already holds the notification an event produces. Events can
+     * arrive more than once from the message broker, and this is what makes the second one a
+     * no-op.
+     *
+     * @param userId     the administrator
+     * @param messageKey the key of the message
+     * @param sourceId   the account the event is about
+     * @param sentAt     when the event happened, to the second
+     * @return true when that notification was already written, deleted or not
+     */
+    boolean exists(String userId, String messageKey, String sourceId, LocalDateTime sentAt);
+
+    /**
      * @param userId the administrator
      * @param limit  how many to return
      * @return the administrator's notifications that are not deleted, newest first
