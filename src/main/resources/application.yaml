@@ -41,6 +41,24 @@ spring:
           timeout: 5000
           writetimeout: 5000
 
+  # Message broker (RabbitMQ, from infra): account events and mail requests published by the
+  # security service. Each consumer declares and binds its own queue.
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:energy-monitor}
+    password: ${RABBITMQ_PASSWORD:}
+    listener:
+      simple:
+        # A message that keeps failing is retried three times, one, two and four seconds apart,
+        # and then moved to the dead-letter queue of its queue instead of blocking the ones behind.
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+
 security:
   google:
     # OAuth client of type "Web application" (Google Cloud Console). Both empty = the
@@ -132,6 +150,12 @@ notification:
     # project dashboard). Unlike the VAPID pair this is safe to rotate: it authorises us with the
     # relay, it is not baked into any installation. Empty = app push disabled.
     expo-access-token: ${EXPO_ACCESS_TOKEN:}
+
+messaging:
+  # Topic exchange the security service publishes to, and the dead-letter exchange of the queues
+  # this application consumes.
+  security-exchange: energy-monitor.security
+  dead-letter-exchange: energy-monitor-backend.dlx
 
 management:
   endpoints:
