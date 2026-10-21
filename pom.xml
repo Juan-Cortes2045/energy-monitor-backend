@@ -99,6 +99,12 @@
 			<artifactId>spring-modulith-starter-core</artifactId>
 		</dependency>
 
+		<!-- Messaging: account events and mail requests from the security service -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
+		</dependency>
+
 		<!-- Database -->
 		<dependency>
 			<groupId>com.mysql</groupId>
@@ -165,6 +171,12 @@
 		<dependency>
 			<groupId>org.springframework.modulith</groupId>
 			<artifactId>spring-modulith-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 
