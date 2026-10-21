@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.energymonitor.notification.application.usecase.AdminNotifications;
+import com.energymonitor.notification.application.usecase.ManageNotificationChannels;
 import com.energymonitor.security.api.AccountAdministered;
 import com.energymonitor.security.api.AccountRegistered;
 import java.nio.charset.StandardCharsets;
@@ -23,8 +24,9 @@ class AccountEventsConsumerTest {
     private static final Instant OCCURRED = Instant.parse("2026-10-20T15:00:00Z");
 
     private final AdminNotifications adminNotifications = mock(AdminNotifications.class);
+    private final ManageNotificationChannels channels = mock(ManageNotificationChannels.class);
     private final AccountEventsConsumer consumer =
-            new AccountEventsConsumer(adminNotifications, JsonMapper.builder().build());
+            new AccountEventsConsumer(adminNotifications, channels, JsonMapper.builder().build());
 
     @Test
     @DisplayName("a new account becomes an administrator notification")
@@ -49,11 +51,21 @@ class AccountEventsConsumerTest {
     }
 
     @Test
+    @DisplayName("a deleted account is no longer reached by mail or push")
+    void forgetsDeletedAccount() {
+        consumer.on(message("account.deleted",
+                "{\"userId\":\"use0000009\",\"deletedAt\":\"2026-10-20T15:00:00Z\"}"));
+
+        verify(channels).forget("use0000009");
+        verifyNoInteractions(adminNotifications);
+    }
+
+    @Test
     @DisplayName("an unknown type is rejected without retrying")
     void rejectsUnknownType() {
         assertThatThrownBy(() -> consumer.on(message("account.renamed", "{}")))
                 .isInstanceOf(AmqpRejectAndDontRequeueException.class);
-        verifyNoInteractions(adminNotifications);
+        verifyNoInteractions(adminNotifications, channels);
     }
 
     static Message message(String type, String body) {

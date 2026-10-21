@@ -16,7 +16,8 @@ import org.springframework.context.annotation.Configuration;
  *
  * <ul>
  *   <li>{@value #ACCOUNT_EVENTS_QUEUE}: new accounts and administrators' changes, which become
- *       in-app notifications for the administrators.</li>
+ *       in-app notifications for the administrators, and deleted accounts, whose mail and push
+ *       preferences and devices are dropped.</li>
  *   <li>{@value #MAIL_QUEUE}: verification and recovery codes to mail.</li>
  * </ul>
  *
@@ -45,6 +46,7 @@ public class NotificationMessagingConfiguration {
         return new Declarables(security, deadLetters, accountEvents, mail, accountEventsDead, mailDead,
                 bind(accountEvents, security, "account.registered"),
                 bind(accountEvents, security, "account.administered"),
+                bind(accountEvents, security, "account.deleted"),
                 bind(mail, security, "mail.email-verification"),
                 bind(mail, security, "mail.password-reset"),
                 BindingBuilder.bind(accountEventsDead).to(deadLetters).with(ACCOUNT_EVENTS_QUEUE),

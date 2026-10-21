@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
  * tells the truth about what went out.
  *
  * <p><strong>It does not resend anything, and the reason is not caution.</strong> Reconstructing the
- * message would mean this module generating a recovery code, which is the security module's job and
+ * message would mean this module generating a recovery code, which is the security service's job and
  * its secret: the code is hashed there, stored there and bound to an account there. A retry here
  * could only send a code this module invented, which no stored hash would match, or resend a code
  * nobody still holds. Both would be worse than an honest failure, because the first would look
