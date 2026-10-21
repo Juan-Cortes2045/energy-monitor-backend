@@ -1,6 +1,6 @@
 package com.energymonitor.security.infrastructure;
 
-import com.energymonitor.security.domain.model.PermissionCodes;
+import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -10,26 +10,25 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.ExceptionTranslationFilter;
+import tools.jackson.databind.ObjectMapper;
 
 /**
- * The HTTP security rules for the Security API.
+ * The HTTP security rules of this backend's API.
  *
- * <p>The shape is a stateless bearer-token API:
+ * <p>The security service issues the access tokens and owns sign-in, sessions and accounts; this
+ * backend only validates the tokens and reads the caller from their subject. The shape is a
+ * stateless bearer-token API:
  *
  * <ul>
  *   <li>No HTTP session is ever created, so nothing about a caller is kept server side and
  *       the API scales horizontally without sticky sessions.</li>
  *   <li>CSRF protection is off, which is correct precisely because there is no session and no
- *       cookie for a cross-site request to ride on. The refresh token is currently returned in
- *       the login response body and is meant to be sent back in a header, not attached
- *       automatically by the browser, so no ambient credential exists for a cross-site request
- *       to exploit. This reasoning is contingent: it stops being true if the refresh token
- *       moves into an ambient cookie, which is one of the reasons that decision is deferred to
- *       the refresh flow. At that point CSRF protection must be re-enabled for the refresh
- *       endpoint.</li>
+ *       cookie for a cross-site request to ride on: the access token travels in a header the
+ *       client sets, never attached automatically by the browser.</li>
  *   <li>Form login and HTTP Basic are off, so the only way in is a bearer token.</li>
- *   <li>JWT signature, issuer and expiry are validated by the resource server filter before a
- *       request reaches any controller.</li>
+ *   <li>JWT signature (the security service's public key), issuer and expiry are validated by
+ *       the resource server filter before a request reaches any controller.</li>
  * </ul>
  *
  * <p>Everything else is denied by default: a new endpoint is protected unless it is added to
@@ -37,12 +36,12 @@ import org.springframework.security.web.SecurityFilterChain;
  *
  * <h2>Administration</h2>
  *
- * <p>{@code /api/v1/admin/**} additionally requires a global permission code, resolved through
- * the RBAC chain by {@link PermissionAuthorization}: {@code USER.READ} to read the directory,
- * {@code USER.MANAGE} to change an account's state and {@code ROLE.MANAGE} to change its roles;
- * the caller's own administrator notifications also require {@code USER.READ}.
- * Any other admin route is denied outright, so a new one stays closed until it is given a code
- * here. Home-scoped roles (owner, member) play no part in these rules.
+ * <p>The administrator notifications under {@code /api/v1/admin/notifications} additionally
+ * require {@code USER.READ}, asked to the security service by {@link PermissionAuthorization};
+ * when it does not answer, {@link SecurityServiceUnavailableFilter} answers 503. The directory of
+ * users and roles is served by the security service itself. Any other admin route is denied
+ * outright, so a new one stays closed until it is given a code here. Home-scoped roles (owner,
+ * member) play no part in these rules.
  *
  * <h2>CORS</h2>
  *
@@ -65,36 +64,6 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityFilterChainConfiguration {
 
     /**
-     * Paths reachable without a token. Registration and login have no caller to authenticate,
-     * completing a password reset is done with a reset token rather than a session, and refresh
-     * is what a client calls precisely when its access token is no longer usable.
-     *
-     * <p><strong>What "reachable without a token" means.</strong> These paths are exempt from
-     * requiring authentication; they are not exempt from authentication being validated. The
-     * resource server filter still inspects an {@code Authorization: Bearer} header on any
-     * request, including these, and refuses the request with 401 when that token is malformed,
-     * expired or signed with another key. A client calling {@code /api/v1/auth/refresh} must
-     * therefore send the refresh token on its own and omit the stale access token, which is the
-     * shape the endpoint is designed for anyway.
-     *
-     * <p>The alternative, resolving the bearer token to empty for these paths so a stale header
-     * would be ignored, is deliberately not implemented. It would mean treating an invalid
-     * credential as acceptable on every public route, which is a much wider relaxation than
-     * one endpoint needs, and there is no architectural requirement behind it: the refresh
-     * secret is the authority for that call, and the client is told to present only it.
-     */
-    private static final String[] PUBLIC_ENDPOINTS = {
-        "/api/v1/auth/register",
-        "/api/v1/auth/login",
-        "/api/v1/auth/google",
-        "/api/v1/auth/refresh",
-        "/api/v1/auth/password/forgot",
-        "/api/v1/auth/password/reset",
-        "/api/v1/auth/email/verify",
-        "/api/v1/auth/email/verification/resend"
-    };
-
-    /**
      * Unauthenticated access to the API description and the health probe, so a container
      * platform can still check liveness.
      */
@@ -107,12 +76,15 @@ public class SecurityFilterChainConfiguration {
     };
 
     /**
-     * Builds the single filter chain protecting the API.
+     * Builds the filter chain protecting the API. {@code /internal/accounts/**} has a chain of
+     * its own, ahead of this one ({@code InternalApiSecurityConfiguration}).
      *
      * @param http            the builder Spring Security hands over
      * @param entryPoint      renders 401 in the shared error shape
      * @param accessDenied    renders 403 in the shared error shape
      * @param permissions     enforces global permission codes on the admin routes
+     * @param objectMapper    writes the 503 body when a permission cannot be checked
+     * @param clock           timestamps that body
      * @return the installed filter chain
      * @throws Exception if the chain cannot be built
      */
@@ -120,7 +92,8 @@ public class SecurityFilterChainConfiguration {
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                     JwtAuthenticationEntryPoint entryPoint,
                                                     JwtAccessDeniedHandler accessDenied,
-                                                    PermissionAuthorization permissions)
+                                                    PermissionAuthorization permissions,
+                                                    ObjectMapper objectMapper, Clock clock)
             throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -137,23 +110,17 @@ public class SecurityFilterChainConfiguration {
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(entryPoint)
                         .accessDeniedHandler(accessDenied))
+                .addFilterBefore(new SecurityServiceUnavailableFilter(objectMapper, clock),
+                        ExceptionTranslationFilter.class)
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .requestMatchers(INFRASTRUCTURE_ENDPOINTS).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/users", "/api/v1/admin/roles",
-                                "/api/v1/admin/notifications")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/notifications")
                         .access(permissions.require(PermissionCodes.USER_READ))
                         .requestMatchers(HttpMethod.PUT, "/api/v1/admin/notifications/*/read")
                         .access(permissions.require(PermissionCodes.USER_READ))
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/notifications/*")
                         .access(permissions.require(PermissionCodes.USER_READ))
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/users/*/status")
-                        .access(permissions.require(PermissionCodes.USER_MANAGE))
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/users/*/roles/*")
-                        .access(permissions.require(PermissionCodes.ROLE_MANAGE))
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/users/*/roles/*")
-                        .access(permissions.require(PermissionCodes.ROLE_MANAGE))
                         .requestMatchers("/api/v1/admin/**").denyAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(resourceServer -> resourceServer

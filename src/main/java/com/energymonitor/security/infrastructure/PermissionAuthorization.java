@@ -1,8 +1,7 @@
 package com.energymonitor.security.infrastructure;
 
-import com.energymonitor.security.application.command.CheckPermissionQuery;
-import com.energymonitor.security.application.exception.UserNotFoundException;
-import com.energymonitor.security.application.port.in.CheckPermission;
+import com.energymonitor.security.adapter.out.remote.RemotePermissionCheck;
+import com.energymonitor.security.api.SecurityServiceUnavailableException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
@@ -11,24 +10,26 @@ import org.springframework.security.web.access.intercept.RequestAuthorizationCon
 import org.springframework.stereotype.Component;
 
 /**
- * Enforces a global permission code on a route, through the same RBAC walk that
- * {@code GET /api/v1/auth/permissions} publishes.
+ * Enforces a global permission code on a route, asking the security service which codes the
+ * caller holds.
  *
- * <p>The permissions are resolved from the database on every request rather than carried in
- * the access token. A role granted or revoked, or an account blocked, therefore takes effect on
- * the next request instead of when the token expires, at the cost of a few indexed reads per
- * administration call.
+ * <p>The permissions are not carried in the access token. The answer is cached 30 seconds, so a
+ * role granted or revoked, or an account blocked, takes effect within that time instead of when
+ * the token expires.
  *
  * <p>An anonymous caller is denied, which the filter chain turns into 401; an authenticated
- * caller without the code, or whose account is gone, is denied with 403.
+ * caller without the code, or whose account is gone, is denied with 403. When the security
+ * service does not answer, {@link SecurityServiceUnavailableException} goes up to
+ * {@link SecurityServiceUnavailableFilter}, which answers 503: the caller is neither let in nor
+ * told it lacks a permission it may well hold.
  */
 @Component
 public class PermissionAuthorization {
 
-    private final CheckPermission checkPermission;
+    private final RemotePermissionCheck permissions;
 
-    public PermissionAuthorization(CheckPermission checkPermission) {
-        this.checkPermission = checkPermission;
+    public PermissionAuthorization(RemotePermissionCheck permissions) {
+        this.permissions = permissions;
     }
 
     /**
@@ -45,11 +46,6 @@ public class PermissionAuthorization {
                 || authentication instanceof AnonymousAuthenticationToken) {
             return false;
         }
-        try {
-            return checkPermission.check(
-                    new CheckPermissionQuery(authentication.getName(), permissionCode));
-        } catch (UserNotFoundException gone) {
-            return false;
-        }
+        return permissions.holds(authentication.getName(), permissionCode);
     }
 }

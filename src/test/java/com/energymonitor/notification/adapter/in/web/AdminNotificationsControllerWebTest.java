@@ -1,6 +1,6 @@
 package com.energymonitor.notification.adapter.in.web;
 
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
@@ -16,16 +16,11 @@ import com.energymonitor.notification.application.usecase.AdminNotifications;
 import com.energymonitor.notification.domain.model.Notification;
 import com.energymonitor.notification.domain.model.NotificationChannel;
 import com.energymonitor.notification.domain.model.NotificationSourceType;
+import com.energymonitor.security.adapter.out.remote.RemotePermissionCheck;
+import com.energymonitor.security.api.SecurityServiceUnavailableException;
 import com.energymonitor.security.api.UserProfile;
 import com.energymonitor.security.api.UserProfileQuery;
-import com.energymonitor.security.application.command.CheckPermissionQuery;
-import com.energymonitor.security.application.port.in.CheckPermission;
-import com.energymonitor.security.application.result.AuthenticatedUser;
-import com.energymonitor.security.domain.model.Email;
-import com.energymonitor.security.domain.model.UserStatus;
 import com.energymonitor.security.infrastructure.JwtKeyedTest;
-import com.energymonitor.security.infrastructure.JwtTokenIssuer;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +33,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * Route protection and shape of the administrator notification API: {@code USER.READ} is
- * required, and every call works on the token subject's own notifications.
+ * required, as the security service answers it, and every call works on the token subject's own
+ * notifications.
  */
 @SpringBootTest
 @org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -49,11 +45,8 @@ class AdminNotificationsControllerWebTest extends JwtKeyedTest {
     @Autowired
     private MockMvc mvc;
 
-    @Autowired
-    private JwtTokenIssuer tokenIssuer;
-
     @MockitoBean
-    private CheckPermission checkPermission;
+    private RemotePermissionCheck permissions;
 
     @MockitoBean
     private AdminNotifications adminNotifications;
@@ -61,16 +54,14 @@ class AdminNotificationsControllerWebTest extends JwtKeyedTest {
     @MockitoBean
     private UserProfileQuery profiles;
 
-    private String bearer() {
-        return "Bearer " + tokenIssuer.issue(new AuthenticatedUser(CALLER, "per0000001",
-                Email.of("admin@example.com"), UserStatus.ACTIVE, Instant.now(), null));
+    private static String bearer() {
+        return bearer(CALLER);
     }
 
     private void holdsUserRead(boolean holds) {
-        given(checkPermission.check(any())).willAnswer(invocation -> {
-            CheckPermissionQuery query = invocation.getArgument(0);
-            return holds && query.idUser().equals(CALLER) && query.permissionCode().equals("USER.READ");
-        });
+        given(permissions.holds(anyString(), anyString())).willAnswer(invocation ->
+                holds && invocation.getArgument(0).equals(CALLER)
+                        && invocation.getArgument(1).equals("USER.READ"));
     }
 
     @Test
@@ -102,6 +93,35 @@ class AdminNotificationsControllerWebTest extends JwtKeyedTest {
                 .andExpect(status().isForbidden());
         mvc.perform(delete("/api/v1/admin/notifications/not0000001").header("Authorization", bearer()))
                 .andExpect(status().isForbidden());
+
+        verifyNoInteractions(adminNotifications);
+    }
+
+    @Test
+    void listsWithoutNamesWhileTheSecurityServiceDoesNotAnswer() throws Exception {
+        holdsUserRead(true);
+        Notification n = Notification.pending("not0000001", CALLER, null, NotificationChannel.IN_APP,
+                NotificationSourceType.ADMINISTRATION, "use0000009", "admin.accountRegistered");
+        n.markAsSent(LocalDateTime.parse("2026-10-14T12:00:00"));
+        given(adminNotifications.list(CALLER)).willReturn(List.of(n));
+        given(profiles.findByIds(anyCollection()))
+                .willThrow(new SecurityServiceUnavailableException("down", null));
+
+        mvc.perform(get("/api/v1/admin/notifications").header("Authorization", bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("not0000001"))
+                .andExpect(jsonPath("$[0].subjectName").isEmpty());
+    }
+
+    @Test
+    void answersServiceUnavailableWhenThePermissionCannotBeChecked() throws Exception {
+        given(permissions.holds(anyString(), anyString()))
+                .willThrow(new SecurityServiceUnavailableException("down", null));
+
+        mvc.perform(get("/api/v1/admin/notifications").header("Authorization", bearer()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.path").value("/api/v1/admin/notifications"));
 
         verifyNoInteractions(adminNotifications);
     }

@@ -10,7 +10,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
 /**
- * The RSA key pair every Spring context in this test suite signs and validates with.
+ * The RSA key pair every Spring context in this test suite validates with, standing in for the
+ * signing key of the security service.
  *
  * <p>Generated per test JVM rather than checked in: a versioned private key is a leaked private
  * key, and a key copied between environments is a key nobody remembers to rotate. The files land
@@ -25,9 +26,6 @@ public final class JwtTestKeys {
 
     /** Matches the issuer in {@code application.yaml}, so the tests exercise the real value. */
     public static final String ISSUER = "https://energy-monitor-backend";
-
-    /** Matches the default lifetime in {@code application.yaml}. */
-    public static final String ACCESS_TOKEN_TTL = "15m";
 
     private static final int KEY_SIZE = 2048;
     private static final int PEM_LINE_LENGTH = 64;

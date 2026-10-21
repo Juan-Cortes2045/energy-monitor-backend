@@ -3,7 +3,8 @@ package com.energymonitor.security.api;
 import java.time.Instant;
 
 /**
- * Published when an administrator changes another account: its status or its global roles.
+ * Published by the security service when an administrator changes another account: its status
+ * or its global roles; received here as {@code account.administered}.
  * Only real changes are published; repeating a grant or revoking a role not held is not.
  *
  * @param actorId    the administrator who made the change

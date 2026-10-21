@@ -60,51 +60,23 @@ spring:
           multiplier: 2
 
 security:
-  google:
-    # OAuth client of type "Web application" (Google Cloud Console). Both empty = the
-    # "Sign in with Google" button answers 503. The secret never leaves the server.
-    client-id: ${GOOGLE_CLIENT_ID:}
-    client-secret: ${GOOGLE_CLIENT_SECRET:}
   jwt:
-    # The iss claim. A URI rather than a bare name, as RFC 7519 expects, and validated on
-    # every incoming token so a token minted for another service is rejected.
+    # The access tokens are issued by the security service; this backend only validates them,
+    # with the service's public key and its iss claim. The issuer keeps the value it had before
+    # the split, so the service issues it unchanged.
     issuer: https://energy-monitor-backend
-    access-token-ttl: 15m
-    private-key-path: ${SECURITY_JWT_PRIVATE_KEY_PATH:}
     public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:}
 
-  reset:
-    # Pepper for the password-recovery code, as HMAC-SHA256(code, pepper). The recovery code is
-    # six digits, so a plain digest of it is reversible from a database dump in seconds: one
-    # million candidates, all cheap to hash. The pepper is what stops that, because it lives in
-    # the configuration rather than in the table, so a leaked dump yields nothing usable.
-    #
-    # The application refuses to start without it, exactly as it does for the signing key: a
-    # recovery secret protected by a guessable pepper is not protected.
-    #
-    # Changing it invalidates every code already issued. Generate with:
-    #   openssl rand -hex 32
-    pepper: ${SECURITY_RESET_PEPPER:}
-    # Six digits: what a person can read off a screen and type back without an error. Fewer
-    # digits would be more comfortable to type and no safer, because the rate limit is what
-    # bounds guessing, not the size of the space.
-    code-digits: 6
-    # How long a freshly issued code stays redeemable.
-    code-validity: 15m
-    # How many redemption attempts one caller address may make per window. This is the control
-    # that makes a six-digit code defensible: a million combinations is few enough to exhaust by
-    # brute force over the network, and the answer to that is to make the network slow.
-    max-attempts-per-window: 10
-    attempt-window: 15m
-    # Queue that recovery requests are dispatched onto. The endpoint answers 202 before this work
-    # runs, which is what removes the timing difference between a registered address and an
-    # unregistered one, so the queue is part of the endpoint's behaviour and not of mail delivery.
-    # Bounded, so pressure becomes refused work rather than memory behind an endpoint that keeps
-    # answering. A refusal is still answered 202: a full queue must not tell a caller whether the
-    # account exists.
-    executor:
-      worker-threads: 2
-      queue-capacity: 100
+  # The internal API of the security service: permissions of the admin routes, profiles and
+  # administrators. Its answers are reused for a while, and a call that takes longer than the
+  # timeouts fails: the admin routes answer 503 and names are left out.
+  service:
+    url: ${SECURITY_SERVICE_URL:http://localhost:8082}
+    connect-timeout: 1s
+    read-timeout: 2s
+    permissions-ttl: 30s
+    administrators-ttl: 30s
+    profiles-ttl: 60s
 
   cors:
     # The origins allowed to call this API from a browser, comma separated. Empty by default,
@@ -132,7 +104,7 @@ app:
     # A record left PENDING claims a delivery that a previous run started and never finished. The
     # sweep closes those as failed once they are older than this. Generous compared with any real
     # SMTP conversation, so a slow send is not mistaken for a dead one; nothing is ever resent,
-    # because only the security module holds the code and its hash.
+    # because only the security service holds the code and its hash.
     pending-threshold: 30m
     sweep-delay: 5m
 
@@ -170,7 +142,8 @@ management:
 # Calls between this backend and the security service, both ways. Each side checks the other's
 # network and the shared token; the reverse proxy never forwards /internal/**.
 internal-api:
-  # Same value in both services. Empty refuses every call to /internal/accounts/**.
+  # Same value in both services. Empty refuses every call to /internal/accounts/**, and the
+  # security service refuses every call of this backend.
   # Generate with: openssl rand -hex 32
   token: ${INTERNAL_API_TOKEN:}
   allowed-networks: ${INTERNAL_API_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
