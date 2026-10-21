@@ -8,7 +8,10 @@ import com.energymonitor.notification.domain.model.NotificationSourceType;
 import com.energymonitor.security.api.AccountAdministered;
 import com.energymonitor.security.api.AccountRegistered;
 import com.energymonitor.security.api.AdministratorQuery;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.NoSuchElementException;
 import org.springframework.stereotype.Component;
@@ -43,7 +46,7 @@ public class AdminNotifications {
 
     /** A new account: every administrator is told. */
     public void record(AccountRegistered event) {
-        deliver(null, event.userId(), "admin.accountRegistered");
+        deliver(null, event.userId(), "admin.accountRegistered", event.occurredAt());
     }
 
     /** A change an administrator made: every other administrator is told. */
@@ -53,7 +56,7 @@ public class AdminNotifications {
             case ROLE_GRANTED -> "admin.roleGranted." + event.detail();
             case ROLE_REVOKED -> "admin.roleRevoked." + event.detail();
         };
-        deliver(event.actorId(), event.userId(), key);
+        deliver(event.actorId(), event.userId(), key, event.occurredAt());
     }
 
     /**
@@ -80,15 +83,23 @@ public class AdminNotifications {
         notifications.delete(idNotification, LocalDateTime.now());
     }
 
-    private void deliver(String actorId, String subjectId, String messageKey) {
-        LocalDateTime now = LocalDateTime.now();
+    /**
+     * Writes one notification per administrator, stamped with the instant of the event rather
+     * than the instant it arrived. The event may be delivered twice by the message broker, and
+     * that stamp is what lets the second delivery find the first one and stop. It is cut to the
+     * second because the column stores no fraction.
+     */
+    private void deliver(String actorId, String subjectId, String messageKey, Instant occurredAt) {
+        LocalDateTime sentAt = LocalDateTime.ofInstant(occurredAt, ZoneId.systemDefault())
+                .truncatedTo(ChronoUnit.SECONDS);
         administrators.activeAdministratorIds().stream()
                 .filter(adminId -> !adminId.equals(actorId))
+                .filter(adminId -> !notifications.exists(adminId, messageKey, subjectId, sentAt))
                 .forEach(adminId -> {
                     Notification notification = Notification.pending(identifiers.generate(),
                             adminId, null, NotificationChannel.IN_APP,
                             NotificationSourceType.ADMINISTRATION, subjectId, messageKey);
-                    notification.markAsSent(now);
+                    notification.markAsSent(sentAt);
                     notifications.save(notification);
                 });
     }
