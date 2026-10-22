@@ -25,9 +25,3 @@ security:
     # unaffected by this list.
     allowed-origins: "http://localhost:5173,http://127.0.0.1:5173"
     allow-credentials: false
-  device:
-    # provisioning:
-    # LAN IP of this PC on the current network (the moto g56 hotspot). Modules are told to
-    # reach the broker on it over TLS. Update it when the PC changes of network, together
-    # with the broker certificate (docker/mosquitto/generate-dev-certs.sh).
-    mqtt-host: 10.123.34.104
