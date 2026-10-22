@@ -8,7 +8,8 @@ and the MQTT broker run from the
 Accounts, sign-in, sessions, password recovery and global roles are served by the security
 service (`../en-monitor-security-service`). This backend validates the access tokens it issues,
 asks it for permissions, names and administrators, and hears its account events over RabbitMQ
-(section 12).
+(section 12). The web and mobile clients reach both through the API gateway
+(`../en-monitor-api-gateway`) on `:8080`; this backend listens on `:8083`.
 
 ## Requirements
 
@@ -17,13 +18,14 @@ asks it for permissions, names and administrators, and hears its account events 
   [energy-monitor-infra](https://github.com/Juan-Cortes2045/energy-monitor-infra) repository
   cloned at `../../infra`
 - The security service (`../en-monitor-security-service`) running, for anything that signs in
+- The API gateway (`../en-monitor-api-gateway`) running, for the web and mobile apps
 - OpenSSL, to generate the RSA key pair and the VAPID keys
 - No Maven install needed: use the bundled `./mvnw` (`mvnw.cmd` on Windows)
 
 ## Quick start on a new machine
 
 The whole system runs on one PC in development: MySQL, RabbitMQ and the MQTT broker (from
-`infra`), the security service, the backend (this repository), the web app (`frontend/energy-monitor-web`) and the ESP32 on the same
+`infra`), the security service, the API gateway, the backend (this repository), the web app (`frontend/energy-monitor-web`) and the ESP32 on the same
 Wi-Fi. `infra` can also run the backend and the web app in containers (`docker compose up -d
 --build`, see `infra/README.md`); the steps below are for working on the backend from this
 repository. In order:
@@ -35,7 +37,7 @@ repository. In order:
 | 3 | `cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml` | section 3 |
 | 4 | Point at the public key of the security service; same `INTERNAL_API_TOKEN` in both | section 4 |
 | 5 | Mail account (Gmail app password) | section 5 |
-| 6 | `./mvnw spring-boot:run` → `http://localhost:8080/actuator/health` says `UP` | section 6 |
+| 6 | `./mvnw spring-boot:run` → `http://localhost:8083/actuator/health` says `UP`; start the security service and the gateway too | section 6 |
 | 7 | MQTT broker: already started in step 2; firewall rule on Linux | section 9 |
 | 8 | Optional: VAPID keys for browser push | section 10 |
 | 9 | Web app: `npm install`, `npm run dev` | `frontend/energy-monitor-web/README.md` |
@@ -210,8 +212,14 @@ Messages appear at <http://localhost:8025>.
 .\mvnw.cmd spring-boot:run
 ```
 
-The API listens on `http://localhost:8080`. Swagger UI is served at
+The API listens on `http://localhost:8083` (`SERVER_PORT`). Swagger UI is served at
 `/swagger-ui.html` and the OpenAPI document at `/v3/api-docs`.
+
+The clients do not call it there: they call the API gateway on `http://localhost:8080`, which
+forwards `/api/v1/auth/**` and `/api/v1/admin/users|roles/**` to the security service and every
+other `/api/v1/**` here, after checking the access token and answering CORS. The gateway drops the
+`Origin` header, so this backend never answers CORS itself and `SECURITY_CORS_ALLOWED_ORIGINS` is
+set in the gateway's `.env` instead.
 
 ## 7. Running behind a reverse proxy
 
@@ -219,7 +227,9 @@ The application reads the caller's address from `request.getRemoteAddr()` and **
 `X-Forwarded-For`**: a header the client sets is not evidence of anything. The internal routes
 (`/internal/mqtt/auth/**` and `/internal/accounts/**`) trust a caller partly by that address, so
 behind a proxy every request would look like it came from the proxy. A public reverse proxy must
-therefore **never forward `/internal/**`**; the web image's nginx forwards `/api/` only.
+therefore **never forward `/internal/**`**; the web image's nginx forwards `/api/` only, and the
+API gateway refuses `/internal/**` outright. This backend keeps ignoring `X-Forwarded-For` behind
+the gateway too: it limits nothing by address, so it has no use for the caller's.
 
 ## 8. Running the tests
 
@@ -279,7 +289,7 @@ returned once, when the module is linked or gets new credentials, and cannot be 
    which ufw blocks. Allow the Docker networks, not the LAN:
 
    ```bash
-   sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp comment 'mosquitto -> backend'
+   sudo ufw allow from 172.16.0.0/12 to any port 8083 proto tcp comment 'mosquitto -> backend'
    ```
 
 3. The broker was started in section 2. Check that the backend connected:
@@ -456,7 +466,8 @@ inside the image, and any profile other than `local` works (`prod`).
 |---|---|
 | Tests fail with `Access denied for user 'energymonitor'` | `.env` sets `SPRING_DATASOURCE_USERNAME` to something other than `energy_app`: remove it |
 | `Too many connections` in a few persistence tests | the backend is running while the suite runs; both use the same MySQL. Run the failing class alone or stop the backend |
-| Broker logs `context deadline exceeded` calling `backend:8080` | backend stopped, or the ufw rule of section 9 is missing |
+| Broker logs `context deadline exceeded` calling `backend:8083` | backend stopped, or the ufw rule of section 9 is missing (the old one for 8080 no longer applies) |
+| Web app: every request fails or the browser reports CORS | the API gateway is not running on 8080, or `SECURITY_CORS_ALLOWED_ORIGINS` of its `.env` does not list the web's origin |
 | Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: update `DEVICE_MQTT_PUBLIC_HOST` in `infra/.env`, re-run `infra/prepare.sh` and restart the broker |
 | Device logs `rc=4` / `rc=5` | `device_code` / API key do not match the `device` table (link it again from the web) |
 | `403` on `/api/v1/admin/**`, or no **Administration** in the web menu | the account does not hold `ADMIN`: grant it as the security service's README explains, then reload the web |

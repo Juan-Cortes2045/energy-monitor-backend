@@ -59,6 +59,11 @@ spring:
           initial-interval: 1s
           multiplier: 2
 
+server:
+  # The clients reach this backend through the API gateway on 8080; the security service is on
+  # 8082 on the same machine.
+  port: ${SERVER_PORT:8083}
+
 security:
   jwt:
     # The access tokens are issued by the security service; this backend only validates them,
