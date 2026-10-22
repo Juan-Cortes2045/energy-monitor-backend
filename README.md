@@ -26,9 +26,8 @@ asks it for permissions, names and administrators, and hears its account events 
 
 The whole system runs on one PC in development: MySQL, RabbitMQ and the MQTT broker (from
 `infra`), the security service, the API gateway, the backend (this repository), the web app (`frontend/energy-monitor-web`) and the ESP32 on the same
-Wi-Fi. `infra` can also run the backend and the web app in containers (`docker compose up -d
---build`, see `infra/README.md`); the steps below are for working on the backend from this
-repository. In order:
+Wi-Fi. `infra` can also run the whole platform in containers (`docker compose up -d --build`,
+see `infra/README.md`); the steps below are for working on the backend from this repository. In order:
 
 | # | Step | Where |
 |---|---|---|
@@ -63,19 +62,20 @@ not by this repository. `.env` is gitignored and must never be committed.
 
 ## 2. Start the database and the broker
 
-MySQL and the MQTT broker run from the `infra` repository. With the backend on this machine
-(`./mvnw`), start only those two, in development mode:
+MySQL, RabbitMQ and the MQTT broker run from the `infra` repository. With the backend on this
+machine (`./mvnw`), start only those three, in development mode:
 
 ```bash
 cd ../../infra
 ./prepare.sh        # first time only: infra/.env, keys and the broker certificate
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d mysql mosquitto
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d mysql rabbitmq mosquitto
 docker compose ps
 ```
 
 Wait until `mysql` reports `healthy`. It creates the `energy_monitor` schema and the `energy_app`
-user from `infra/.env`. If the full stack was up, stop its backend first
-(`docker compose stop backend frontend`): two backends would store every reading twice.
+user from `infra/.env`. If the full stack was up, stop its services first
+(`docker compose stop gateway security backend frontend`): two backends would store every reading
+twice.
 
 ## 3. Application configuration
 
@@ -455,7 +455,8 @@ The mobile app has no administration screens; it only uses the regular endpoints
 ## 13. Docker image
 
 `Dockerfile` builds the image (Temurin 21, runs as a non-root user, uid 10001). The `infra`
-repository builds it and runs it next to MySQL, the broker and the web app:
+repository builds it and runs it next to MySQL, RabbitMQ, the broker, the security service, the
+API gateway and the web app (port 8083, reached only through the Docker network):
 `infra/docker-compose.yml` on this machine and `infra/docker-compose.prod.yml` on a server (see
 `infra/README.md`). Every setting comes from the environment: `application-local.yaml` is not
 inside the image, and any profile other than `local` works (`prod`).
@@ -473,7 +474,7 @@ inside the image, and any profile other than `local` works (`prod`).
 | `403` on `/api/v1/admin/**`, or no **Administration** in the web menu | the account does not hold `ADMIN`: grant it as the security service's README explains, then reload the web |
 | `503` on `/api/v1/admin/notifications`, members without names | the security service does not answer, or `INTERNAL_API_TOKEN` differs between the two `.env` files |
 | `401` on every request with a fresh token | `SECURITY_JWT_PUBLIC_KEY_PATH` is not the public key of the security service's pair |
-| Container: `Failed to read the RSA public key PEM` | the container user cannot read the key: `BACKEND_UID`/`BACKEND_GID` in `infra/.env` must own `infra/keys` (`infra/prepare.sh` sets them) |
+| Container: `Failed to read the RSA public key PEM` | the container cannot read `infra/keys/public.pem`: it must be readable by everyone (644, as `infra/prepare.sh` leaves it) |
 | `Access denied for user 'energy_app'` when starting or testing | `application-local.yaml` / `SPRING_DATASOURCE_PASSWORD` do not match `MYSQL_PASSWORD` of `infra/.env` |
 
 ## Useful commands
