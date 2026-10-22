@@ -1,5 +1,6 @@
 package com.energymonitor.home.application.usecase;
 
+import com.energymonitor.home.api.HomeOwnershipTransferred;
 import com.energymonitor.home.application.port.out.HomeEventPort;
 import com.energymonitor.home.application.port.out.HomeThresholdsPersistencePort;
 import java.time.Clock;
@@ -8,16 +9,19 @@ import com.energymonitor.home.application.port.out.HomePersistencePort;
 import com.energymonitor.home.application.port.out.UserHomePersistencePort;
 import com.energymonitor.home.domain.model.Role;
 import com.energymonitor.home.domain.model.UserHome;
-import com.energymonitor.security.api.AccountDeletionBlockedException;
 
 /**
- * Drops the memberships of a deleted account, and the homes it was the only owner of, as long as
- * nobody else is left in them. A sole owner of a home that still has other members cannot delete
- * the account until it hands the ownership over or the members leave.
+ * Drops the memberships of an account the security service deleted, and the homes nobody else
+ * is left in.
  *
- * <p>Runs inside the account deletion's transaction (see {@code AccountDeletedListener}), so a
- * failure here rolls the deletion back instead of leaving homes without an owner. Everything is a
- * soft delete, like the rest of this module.
+ * <p>The deletion is already committed when this runs, so nothing here can refuse it. The
+ * security service asks {@link CheckAccountDeletionService} first and does not delete the only
+ * owner of a home that still has other members; should one slip through anyway (a member joined
+ * between the check and the deletion), the oldest remaining member becomes the owner, so the
+ * home is never left without one.
+ *
+ * <p>Idempotent: the account deleted message may arrive twice, and the second time there is no
+ * membership left. Everything is a soft delete, like the rest of this module.
  */
 public class RemoveDeletedAccountService implements RemoveDeletedAccount {
 
@@ -40,23 +44,23 @@ public class RemoveDeletedAccountService implements RemoveDeletedAccount {
 
     @Override
     public void remove(String userId) {
-        var memberships = userHomePort.listActiveByUser(userId);
-        // Checked up front so nothing is dropped when the deletion is going to be refused.
-        for (var membership : memberships) {
-            if (isOnlyOwner(membership, membership.homeId())
-                    && userHomePort.listActiveByHomeId(membership.homeId()).size() > 1) {
-                throw new AccountDeletionBlockedException("You are the only owner of a home that "
-                        + "still has other members. Transfer the ownership or remove the members "
-                        + "before deleting your account.");
-            }
-        }
-        for (var membership : memberships) {
+        for (var membership : userHomePort.listActiveByUser(userId)) {
             String homeId = membership.homeId();
-            if (isOnlyOwner(membership, homeId)) {
+            if (!isOnlyOwner(membership, homeId)) {
+                userHomePort.remove(userId, homeId);
+                continue;
+            }
+            var heir = userHomePort.listActiveByHomeId(homeId).stream()
+                    .filter(other -> !other.userId().equals(userId))
+                    .findFirst();
+            if (heir.isPresent()) {
+                userHomePort.save(heir.get().withRole(Role.OWNER));
+                userHomePort.remove(userId, homeId);
+                events.publish(new HomeOwnershipTransferred(homeId, userId, heir.get().userId(),
+                        clock.instant()));
+            } else {
                 // Same end as an owner deleting it: thresholds go and its devices are unlinked.
                 HomeRemoval.remove(homeId, userId, homePort, userHomePort, thresholdsPort, events, clock);
-            } else {
-                userHomePort.remove(userId, homeId);
             }
         }
     }

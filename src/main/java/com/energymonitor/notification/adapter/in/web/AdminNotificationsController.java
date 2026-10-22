@@ -3,6 +3,7 @@ package com.energymonitor.notification.adapter.in.web;
 import com.energymonitor.notification.adapter.in.web.dto.AdminNotificationDto;
 import com.energymonitor.notification.application.usecase.AdminNotifications;
 import com.energymonitor.notification.domain.model.Notification;
+import com.energymonitor.security.api.SecurityServiceUnavailableException;
 import com.energymonitor.security.api.UserProfile;
 import com.energymonitor.security.api.UserProfileQuery;
 import java.util.List;
@@ -11,6 +12,8 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -31,6 +34,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/admin/notifications")
 public class AdminNotificationsController {
 
+    private static final Logger LOG = LoggerFactory.getLogger(AdminNotificationsController.class);
+
     private final AdminNotifications adminNotifications;
     private final UserProfileQuery profiles;
     private final CurrentUserResolver currentUser;
@@ -45,9 +50,19 @@ public class AdminNotificationsController {
     @GetMapping
     public List<AdminNotificationDto> list() {
         List<Notification> found = adminNotifications.list(currentUser.resolveCurrentUserId());
-        Map<String, UserProfile> subjects = profiles.findByIds(found.stream()
+        Map<String, UserProfile> subjects = subjects(found.stream()
                 .map(Notification::sourceId).filter(Objects::nonNull).distinct().toList());
         return found.stream().map(n -> toDto(n, subjects.get(n.sourceId()))).toList();
+    }
+
+    /** The notifications are listed without names while the security service does not answer. */
+    private Map<String, UserProfile> subjects(List<String> userIds) {
+        try {
+            return profiles.findByIds(userIds);
+        } catch (SecurityServiceUnavailableException unavailable) {
+            LOG.warn("Administrator notifications listed without names: {}", unavailable.getMessage());
+            return Map.of();
+        }
     }
 
     @PutMapping("/{id}/read")

@@ -13,17 +13,12 @@
  * <p>Internal layout: {@code domain}, {@code application}, {@code adapter},
  * {@code infrastructure}. Only the types exposed in {@code api} are visible to other modules.
  *
- * <p><strong>Why this module depends on {@code security::api}.</strong> The recovery secret is
- * generated, hashed and stored by the security module, and it exists in clear text only inside
- * that module. Delivering it is therefore an outbound adapter <em>of</em> security: this module
- * implements security's own {@code PasswordResetDeliveryPort} and calls nothing else of it.
- *
- * <p>The dependency is declared against {@code security::api} rather than {@code security}
- * because that named interface is the only part of security this module is allowed to see. The
- * direction matters: security knows nothing about mail, SMTP or message wording, so choosing a
- * different channel replaces one adapter in this module and leaves security untouched. Widening
- * the allowance to the whole module would let mail code reach into security's internals, which
- * is the coupling this arrangement exists to prevent.
+ * <p><strong>What this module takes from the security service.</strong> The verification and
+ * recovery codes are generated, hashed and stored by the security service; it hands them over
+ * the message broker, and this module mails them ({@code MailRequestsConsumer}) and keeps no
+ * copy. Its account events become administrator notifications, and the names and addresses of
+ * accounts are read through {@code security::api}, the only part of security this module may
+ * see.
  *
  * <p><strong>Alert delivery.</strong> Every {@code AlertRaised} of {@code alert::api} is sent to
  * the members of its home ({@code home::api}), by mail and Web Push according to each member's

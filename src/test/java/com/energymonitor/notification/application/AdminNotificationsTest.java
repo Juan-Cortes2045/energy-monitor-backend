@@ -76,6 +76,18 @@ class AdminNotificationsTest {
     }
 
     @Test
+    void anEventDeliveredTwiceIsWrittenOnce() {
+        var event = new AccountRegistered("use0000009", "new@example.com", NOW);
+
+        service.record(event);
+        service.record(event);
+
+        assertThat(store.rows).hasSize(2);
+        assertThat(store.rows.values()).extracting(Notification::sentAt)
+                .containsOnly(LocalDateTime.ofInstant(NOW, java.time.ZoneId.systemDefault()));
+    }
+
+    @Test
     void withoutAdministratorsNothingIsWritten() {
         admins.clear();
 
@@ -119,6 +131,14 @@ class AdminNotificationsTest {
         @Override
         public void save(Notification notification) {
             rows.put(notification.idNotification(), notification);
+        }
+
+        @Override
+        public boolean exists(String userId, String messageKey, String sourceId,
+                              LocalDateTime sentAt) {
+            return rows.values().stream().anyMatch(n -> n.userId().equals(userId)
+                    && n.messageKey().equals(messageKey) && sourceId.equals(n.sourceId())
+                    && sentAt.equals(n.sentAt()));
         }
 
         @Override

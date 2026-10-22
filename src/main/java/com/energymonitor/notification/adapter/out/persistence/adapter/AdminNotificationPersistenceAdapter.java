@@ -37,6 +37,14 @@ public class AdminNotificationPersistenceAdapter implements AdminNotificationPor
 
     @Override
     @Transactional(readOnly = true)
+    public boolean exists(String userId, String messageKey, String sourceId, LocalDateTime sentAt) {
+        return repository.existsByUserIdAndChannelAndSourceTypeAndSourceIdAndMessageKeyAndSentAt(
+                userId, NotificationChannel.IN_APP, NotificationSourceType.ADMINISTRATION,
+                sourceId, messageKey, sentAt);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<Notification> listForUser(String userId, int limit) {
         return repository.findByUserIdAndChannelAndSourceTypeAndDeletedAtIsNullOrderBySentAtDesc(
                         userId, NotificationChannel.IN_APP, NotificationSourceType.ADMINISTRATION,

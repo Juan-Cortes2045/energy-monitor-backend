@@ -64,4 +64,14 @@ public interface NotificationRepository extends JpaRepository<NotificationEntity
             String userId, com.energymonitor.notification.domain.model.NotificationChannel channel,
             com.energymonitor.notification.domain.model.NotificationSourceType sourceType,
             org.springframework.data.domain.Pageable page);
+
+    /**
+     * Whether a recipient already has a notification of one channel and source, about one row,
+     * with one message, sent at one instant. Deleted rows count, so a notification the recipient
+     * already dismissed is not written again when its event is delivered twice.
+     */
+    boolean existsByUserIdAndChannelAndSourceTypeAndSourceIdAndMessageKeyAndSentAt(
+            String userId, com.energymonitor.notification.domain.model.NotificationChannel channel,
+            com.energymonitor.notification.domain.model.NotificationSourceType sourceType,
+            String sourceId, String messageKey, java.time.LocalDateTime sentAt);
 }

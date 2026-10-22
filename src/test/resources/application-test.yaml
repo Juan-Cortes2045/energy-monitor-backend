@@ -11,20 +11,21 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:}
 
 security:
-  reset:
-    # Test-only pepper: committed on purpose, because it protects nothing outside the test profile
-    # and has to be the same value on every machine for the suite to behave identically. Local and
-    # production still require the real one through SECURITY_RESET_PEPPER.
-    pepper: test-only-pepper-0123456789abcdef0123
-
   jwt:
-    # This profile is not active by default, so application-local.yaml is not loaded and these
-    # paths would otherwise resolve to empty and the context would refuse to start. They are
-    # needed under the test profile, and the defaults point at the per-machine key pair.
-    # The JWT beans need an RSA pair on disk. Each machine generates its own once
-    # (see application-local.yaml.example); the environment variables win when set.
-    private-key-path: ${SECURITY_JWT_PRIVATE_KEY_PATH:${user.home}/.energy-monitor/keys/private.pem}
+    # This profile is not active by default, so application-local.yaml is not loaded and the path
+    # would otherwise resolve to empty and the context would refuse to start. A test extending
+    # JwtKeyedTest replaces it with a key pair of its own; any other one falls back to the
+    # per-machine public key (see application-local.yaml.example).
     public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:${user.home}/.energy-monitor/keys/public.pem}
+  service:
+    # Nothing listens here, so the suite never reaches a security service running on this machine:
+    # a test that needs its answers mocks them, and every other one sees it unavailable.
+    url: http://127.0.0.1:9
+
+internal-api:
+  # Test-only token: committed on purpose, because it protects nothing outside the test profile
+  # and has to be the same value on every machine. Local and production use INTERNAL_API_TOKEN.
+  token: test-only-internal-token
 
 mqtt:
   # Un client-id propio, y no decorativo: el broker expulsa a todo cliente que se
@@ -38,4 +39,12 @@ mqtt:
 
 recommendation:
   # The hourly evaluation is exercised by unit tests; it must not run against the shared database.
+  enabled: false
+
+spring.rabbitmq.listener.simple:
+  # No broker is needed to run the suite, and a test context must not take messages from a queue
+  # a running backend consumes. The consumers are exercised by calling them directly.
+  auto-startup: false
+
+management.health.rabbit:
   enabled: false

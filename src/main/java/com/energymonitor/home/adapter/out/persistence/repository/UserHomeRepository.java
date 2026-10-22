@@ -20,7 +20,7 @@ public interface UserHomeRepository extends JpaRepository<UserHomeEntity, UserHo
 
     List<UserHomeEntity> findByIdUserIdAndDeletedAtIsNull(String userId);
 
-    List<UserHomeEntity> findByIdHomeIdAndDeletedAtIsNull(String homeId);
+    List<UserHomeEntity> findByIdHomeIdAndDeletedAtIsNullOrderByCreatedAtAscIdUserIdAsc(String homeId);
 
     /**
      * The role is bound as {@link Role} because that is how the entity stores it. Declaring it as

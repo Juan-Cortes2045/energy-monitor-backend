@@ -10,16 +10,7 @@ import com.energymonitor.home.application.port.out.HomePersistencePort;
 import com.energymonitor.home.application.port.out.UserHomePersistencePort;
 import com.energymonitor.home.domain.model.Home;
 import com.energymonitor.home.domain.model.UserHome;
-import com.energymonitor.security.application.port.out.PasswordHasherPort;
-import com.energymonitor.security.application.port.out.PersonPersistencePort;
-import com.energymonitor.security.application.port.out.UserPersistencePort;
-import com.energymonitor.security.application.result.AuthenticatedUser;
-import com.energymonitor.security.domain.model.Email;
-import com.energymonitor.security.domain.model.Person;
-import com.energymonitor.security.domain.model.User;
-import com.energymonitor.security.domain.model.UserStatus;
 import com.energymonitor.security.infrastructure.JwtKeyedTest;
-import com.energymonitor.security.infrastructure.JwtTokenIssuer;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,8 +24,8 @@ import org.springframework.web.context.WebApplicationContext;
 /**
  * Who a home request is made as, through the production filter chain and a real RS256 token.
  *
- * <p>The security module issues the token and the home module reads its subject, so this crosses
- * both modules and lives at the root like {@link AccountDeletionIntegrationTest}.
+ * <p>The token is signed as the security service signs it and the home module reads its subject,
+ * so this crosses the security filter chain and the home module and lives at the root.
  *
  * <p><strong>Why MockMvc is built by hand.</strong> {@code @AutoConfigureMockMvc} or a
  * {@code @MockitoBean} would give this class its own application context, and every cached context
@@ -43,13 +34,13 @@ import org.springframework.web.context.WebApplicationContext;
  * persistence tests already started, and the filter chain is applied with {@code springSecurity()}.
  *
  * <p>{@code @Transactional}: MockMvc runs in the test's thread, so the requests see the seeded
- * accounts and homes, and everything is rolled back afterwards.
+ * homes, and everything is rolled back afterwards. The accounts live in the security service; a
+ * home only holds their identifiers.
  */
 @SpringBootTest
 @Transactional
 class HomeCallerIdentityIntegrationTest extends JwtKeyedTest {
 
-    private static final String PASSWORD = "StrongPass1!";
     private static final Instant NOW = Instant.parse("2026-03-01T12:00:00Z");
     private static final String ALICE = "hci0000001";
     private static final String BOB = "hci0000002";
@@ -58,18 +49,6 @@ class HomeCallerIdentityIntegrationTest extends JwtKeyedTest {
 
     @Autowired
     private WebApplicationContext context;
-
-    @Autowired
-    private JwtTokenIssuer tokenIssuer;
-
-    @Autowired
-    private UserPersistencePort users;
-
-    @Autowired
-    private PersonPersistencePort persons;
-
-    @Autowired
-    private PasswordHasherPort hasher;
 
     @Autowired
     private HomePersistencePort homes;
@@ -83,22 +62,13 @@ class HomeCallerIdentityIntegrationTest extends JwtKeyedTest {
     void seedTwoAccountsEachOwningOneHome() {
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
 
-        seedOwner(ALICE, "hcp0000001", "hci.alice@example.com", ALICE_HOME, "HCI00001");
-        seedOwner(BOB, "hcp0000002", "hci.bob@example.com", BOB_HOME, "HCI00002");
+        seedOwner(ALICE, ALICE_HOME, "HCI00001");
+        seedOwner(BOB, BOB_HOME, "HCI00002");
     }
 
-    private void seedOwner(String idUser, String idPerson, String email, String idHome,
-                           String accessCode) {
-        persons.save(new Person(idPerson, "Ada", "Lovelace"));
-        users.save(User.register(idUser, idPerson, hasher.hash(PASSWORD), Email.of(email), NOW,
-                null));
+    private void seedOwner(String idUser, String idHome, String accessCode) {
         homes.save(Home.create(idHome, "Casa", "hous000001", "Calle 1", accessCode, null, NOW));
         memberships.save(UserHome.owner(idUser, idHome));
-    }
-
-    private String bearer(String idUser) {
-        return "Bearer " + tokenIssuer.issue(new AuthenticatedUser(idUser, "hcp0000001",
-                Email.of(idUser + "@example.com"), UserStatus.ACTIVE, Instant.now(), null));
     }
 
     @Test

@@ -76,7 +76,7 @@ public class UserHomePersistenceAdapter implements UserHomePersistencePort {
 
     @Override
     public List<UserHome> listActiveByHomeId(String homeId) {
-        return repository.findByIdHomeIdAndDeletedAtIsNull(homeId).stream()
+        return repository.findByIdHomeIdAndDeletedAtIsNullOrderByCreatedAtAscIdUserIdAsc(homeId).stream()
                 .map(mapper::toDomain)
                 .toList();
     }

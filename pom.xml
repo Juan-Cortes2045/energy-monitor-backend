@@ -99,6 +99,18 @@
 			<artifactId>spring-modulith-starter-core</artifactId>
 		</dependency>
 
+		<!-- Messaging: account events and mail requests from the security service -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp</artifactId>
+		</dependency>
+
+		<!-- Short-lived cache of what the security service answers (permissions, profiles) -->
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+		</dependency>
+
 		<!-- Database -->
 		<dependency>
 			<groupId>com.mysql</groupId>
@@ -165,6 +177,12 @@
 		<dependency>
 			<groupId>org.springframework.modulith</groupId>
 			<artifactId>spring-modulith-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-amqp-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 
