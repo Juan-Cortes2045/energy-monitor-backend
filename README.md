@@ -225,7 +225,7 @@ set in the gateway's `.env` instead.
 
 The application reads the caller's address from `request.getRemoteAddr()` and **ignores
 `X-Forwarded-For`**: a header the client sets is not evidence of anything. The internal routes
-(`/internal/mqtt/auth/**` and `/internal/accounts/**`) trust a caller partly by that address, so
+(`/internal/mqtt/auth/**`, `/internal/accounts/**` and `/internal/homes/**`) trust a caller partly by that address, so
 behind a proxy every request would look like it came from the proxy. A public reverse proxy must
 therefore **never forward `/internal/**`**; the web image's nginx forwards `/api/` only, and the
 API gateway refuses `/internal/**` outright. This backend keeps ignoring `X-Forwarded-For` behind
@@ -391,7 +391,7 @@ What the security service announces arrives here through RabbitMQ, on the topic 
   consumers are active, so **without a reachable broker `/actuator/health` reports DOWN**. The
   test profile does not start them and needs no broker.
 
-### Internal calls with the security service
+### Internal calls with the security and device services
 
 The security service asks this backend `GET /internal/accounts/{id}/deletion-check` before it
 deletes an account: `204` lets it go, `409` with `{message}` refuses it (the account is the only
@@ -400,7 +400,11 @@ owner of a home with other members). The path has its own filter chain: the call
 token configured in the security service. Without a token every call is refused. The reverse
 proxy must not forward `/internal/**`.
 
-In the other direction this backend asks the service, with the same token
+The device service asks `GET /internal/homes/{homeId}/access?userId=` before it lists or changes
+the devices of a home. It always answers `200` with `{exists, member, owner}` (a deleted home
+grants nothing), behind the same filter chain and token as the deletion check.
+
+In the other direction this backend asks the security service, with the same token
 (`security/adapter/out/remote`):
 
 | Route of the security service | Used for | Cached | When it does not answer |

@@ -19,9 +19,10 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.IpAddressMatcher;
 
 /**
- * Security of the endpoints the security service calls, such as the deletion check.
+ * Security of the endpoints the other services call: the deletion check of the security service
+ * and the home access check of the device service.
  *
- * <p>The security service presents no JWT, so these paths get their own filter chain, evaluated
+ * <p>Those services present no JWT, so these paths get their own filter chain, evaluated
  * before the API chain. The caller must come from {@code internal-api.allowed-networks}
  * <em>and</em> send {@code internal-api.token} in {@code X-Internal-Token}: any container on the
  * Docker network passes the first check, so it is not enough alone. With no token configured
@@ -45,7 +46,8 @@ public class InternalApiSecurityConfiguration {
             @Value("${internal-api.allowed-networks:127.0.0.1/32,::1/128,172.16.0.0/12}") String allowedNetworks)
             throws Exception {
         if (token.isBlank()) {
-            LOG.warn("internal-api.token is empty: every call to /internal/accounts/** will be refused");
+            LOG.warn("internal-api.token is empty: every call to /internal/accounts/** and"
+                    + " /internal/homes/** will be refused");
         }
         byte[] expected = token.getBytes(StandardCharsets.UTF_8);
         List<IpAddressMatcher> allowed = Arrays.stream(allowedNetworks.split(","))
@@ -54,7 +56,7 @@ public class InternalApiSecurityConfiguration {
                 .map(IpAddressMatcher::new)
                 .toList();
         return http
-                .securityMatcher("/internal/accounts/**")
+                .securityMatcher("/internal/accounts/**", "/internal/homes/**")
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
