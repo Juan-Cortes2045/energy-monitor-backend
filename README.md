@@ -8,8 +8,13 @@ and the MQTT broker run from the
 Accounts, sign-in, sessions, password recovery and global roles are served by the security
 service (`../en-monitor-security-service`). This backend validates the access tokens it issues,
 asks it for permissions, names and administrators, and hears its account events over RabbitMQ
-(section 12). The web and mobile clients reach both through the API gateway
-(`../en-monitor-api-gateway`) on `:8080`; this backend listens on `:8083`.
+(section 12). The devices, their credentials, the broker's authentication and their connectivity
+are served by the device service (`../en-monitor-device-service`, `:8084`); this backend reads
+devices from it and hears its events. The web and mobile clients reach the three through the API
+gateway (`../en-monitor-api-gateway`) on `:8080`; this backend listens on `:8083`.
+
+The modules, the two proxies and the migration status are in
+[`docs/Architecture.md`](docs/Architecture.md).
 
 ## Requirements
 
