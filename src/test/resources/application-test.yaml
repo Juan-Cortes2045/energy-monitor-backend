@@ -27,6 +27,10 @@ internal-api:
   # and has to be the same value on every machine. Local and production use INTERNAL_API_TOKEN.
   token: test-only-internal-token
 
+device.service:
+  # Nothing listens here, so the suite never reaches a device service running on this machine.
+  url: http://127.0.0.1:9
+
 mqtt:
   # Un client-id propio, y no decorativo: el broker expulsa a todo cliente que se
   # conecte con un id que ya está en uso. Cada prueba que levanta el contexto

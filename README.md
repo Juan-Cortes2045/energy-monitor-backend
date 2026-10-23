@@ -391,6 +391,22 @@ What the security service announces arrives here through RabbitMQ, on the topic 
   consumers are active, so **without a reachable broker `/actuator/health` reports DOWN**. The
   test profile does not start them and needs no broker.
 
+### The device service
+
+The devices are moving to the device service (`en-monitor-device-service`, port 8084). Its client
+is already here, in `device/adapter/out/remote`, and takes over `DeviceApi` when this backend's
+device module is removed:
+
+| Call | Used by | Reused for | Without an answer |
+|---|---|---|---|
+| `GET /internal/devices/{id}` | readings, alerts, notifications, recommendations (existence, name, installation date, home) | 30 s, unknown devices included | the last answer, kept 1 h; with none, the call fails |
+| `GET /internal/homes/{id}/devices` | readings and recommendations of a home | 30 s | the same |
+
+Settings: `DEVICE_SERVICE_URL` (`device.service.url`, default `http://localhost:8084`),
+`device.service.ttl`, `device.service.stale-ttl` and the timeouts (1 s connect, 2 s read). The
+calls carry `INTERNAL_API_TOKEN`. The test profile points the client at a port where nothing
+listens.
+
 ### Home events this backend publishes
 
 A deleted home, by its owner or because the account of its only owner was deleted, is announced
