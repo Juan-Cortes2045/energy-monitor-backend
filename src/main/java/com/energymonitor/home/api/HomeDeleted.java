@@ -7,6 +7,8 @@ import java.time.Instant;
  *
  * <p>Published inside the transaction that deletes the home, so a synchronous listener in another
  * module (the device module unlinks the home's modules) commits or rolls back together with it.
+ * It is also written to the home outbox in that transaction and relayed to the broker as
+ * {@code home.deleted}, which is how the device service hears it.
  * The home module cannot call those modules directly: it depends on nothing but
  * {@code security::api}, and the others depend on {@code home::api}.
  *
