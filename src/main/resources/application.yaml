@@ -138,6 +138,9 @@ messaging:
   # this application consumes.
   security-exchange: energy-monitor.security
   dead-letter-exchange: energy-monitor-backend.dlx
+  # Topic exchange the device service publishes to (device.linked, device.unlinked,
+  # device.connectivity-lost, device.connectivity-restored).
+  device-exchange: energy-monitor.device
   # Topic exchange of the home events this backend announces (home.deleted), written to the
   # home_outbox table with the change and relayed every second, up to 50 messages, each confirmed
   # by the broker within 5 s.
@@ -200,6 +203,9 @@ device:
     read-timeout: 2s
     ttl: 30s
     stale-ttl: 1h
+    # Hear the device service's events (connectivity for the alerts, links for the cache). Off
+    # while this backend's device module still raises the connectivity events itself.
+    events-enabled: false
   connectivity:
     # A device not heard from for this long is marked OFFLINE. Telemetry comes every 60 s at
     # QoS 0, so one lost sample plus network jitter is tolerated before declaring it gone.

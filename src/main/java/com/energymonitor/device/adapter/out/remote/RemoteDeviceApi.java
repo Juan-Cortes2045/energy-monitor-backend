@@ -30,7 +30,7 @@ import java.util.function.Function;
  * <p>Connectivity and credentials belong to the device service, which reads them from the broker
  * itself: those methods are not served from here.
  */
-public class RemoteDeviceApi implements DeviceApi {
+public class RemoteDeviceApi implements DeviceApi, DeviceChanges {
 
     private final DeviceServiceClient client;
     private final Cache<String, Optional<RemoteDevice>> devices;
@@ -101,6 +101,7 @@ public class RemoteDeviceApi implements DeviceApi {
      * @param deviceId the device that changed
      * @param homeId   the home it joined or left, may be null
      */
+    @Override
     public void forget(String deviceId, String homeId) {
         if (deviceId != null) {
             devices.invalidate(deviceId);
