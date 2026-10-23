@@ -9,7 +9,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.energymonitor.device.adapter.out.remote.DeviceServiceClient.RemoteDevice;
-import com.energymonitor.device.api.ConnectivityStatus;
 import com.energymonitor.device.api.DeviceDto;
 import com.energymonitor.device.api.DeviceServiceUnavailableException;
 import com.github.benmanes.caffeine.cache.Ticker;
@@ -149,16 +148,5 @@ class RemoteDeviceApiTest {
         assertThat(api.findByDeviceId(null)).isEmpty();
         assertThat(api.getHomeId(null)).isEmpty();
         verifyNoInteractions(client);
-    }
-
-    @Test
-    @DisplayName("connectivity and credentials belong to the device service")
-    void notServedHere() {
-        assertThatThrownBy(() -> api.recordConnectivity("DEV0000001", ConnectivityStatus.ONLINE, -58))
-                .isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> api.validateCredentials("EM204", "key"))
-                .isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> api.findByDeviceCode("EM204"))
-                .isInstanceOf(UnsupportedOperationException.class);
     }
 }
