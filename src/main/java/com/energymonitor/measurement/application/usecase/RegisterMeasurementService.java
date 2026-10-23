@@ -18,8 +18,8 @@ import java.time.Instant;
  * transaction would add nothing but an extra connection and is deliberately omitted.
  *
  * <p><strong>Device existence:</strong> the MER requires {@code deviceId} to be validated at
- * application level. The device module does not expose its public API yet, so the check is
- * deferred and documented; the schema already enforces the value as {@code VARCHAR(10)}.
+ * application level. The telemetry consumer asks the device service before calling this use case,
+ * so the check is not repeated here; the schema enforces the value as {@code VARCHAR(10)}.
  *
  * <p>This service contains no Spring annotations.
  */
