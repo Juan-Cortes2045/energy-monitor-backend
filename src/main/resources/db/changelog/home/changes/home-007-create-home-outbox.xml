@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Transactional outbox of the home module.
+
+        Every home event another service must receive (today home.deleted, for the device
+        service) is written here in the same transaction as the change it announces, and a relay
+        publishes it to the message broker afterwards. A home is therefore never deleted without
+        its message, and a message is never sent for a deletion that rolled back.
+    -->
+    <changeSet id="home-007-create-home-outbox" author="JuanCortes2045">
+        <comment>Creates the home_outbox table of the transactional outbox.</comment>
+
+        <createTable tableName="home_outbox">
+            <!-- Also the message id on the broker: consumers use it to drop duplicates. -->
+            <column name="id_message" type="VARCHAR(10)">
+                <constraints primaryKey="true" primaryKeyName="pk_home_outbox" nullable="false"/>
+            </column>
+            <!-- Routing key on the broker, for example home.deleted. -->
+            <column name="message_type" type="VARCHAR(60)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payload" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="occurred_at" type="DATETIME(6)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="published_at" type="DATETIME(6)"/>
+            <column name="discarded_at" type="DATETIME(6)"/>
+            <column name="attempts" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_error" type="VARCHAR(255)"/>
+        </createTable>
+
+        <!-- The relay reads the pending messages in order. -->
+        <createIndex tableName="home_outbox" indexName="idx_home_outbox_pending">
+            <column name="published_at"/>
+            <column name="discarded_at"/>
+            <column name="occurred_at"/>
+        </createIndex>
+
+        <rollback>
+            <dropTable tableName="home_outbox"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

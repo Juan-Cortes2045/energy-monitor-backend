@@ -42,12 +42,17 @@ spring:
           writetimeout: 5000
 
   # Message broker (RabbitMQ, from infra): account events and mail requests published by the
-  # security service. Each consumer declares and binds its own queue.
+  # security service, and the home events this backend publishes. Each consumer declares and
+  # binds its own queue.
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:energy-monitor}
     password: ${RABBITMQ_PASSWORD:}
+    # A home message is marked as published only after the broker confirms it and a queue took it
+    # (correlated: the return of an unrouted message is known before the confirmation completes).
+    publisher-confirm-type: correlated
+    publisher-returns: true
     listener:
       simple:
         # A message that keeps failing is retried three times, one, two and four seconds apart,
@@ -133,6 +138,15 @@ messaging:
   # this application consumes.
   security-exchange: energy-monitor.security
   dead-letter-exchange: energy-monitor-backend.dlx
+  # Topic exchange of the home events this backend announces (home.deleted), written to the
+  # home_outbox table with the change and relayed every second, up to 50 messages, each confirmed
+  # by the broker within 5 s.
+  home:
+    exchange: energy-monitor.home
+    relay-enabled: true
+    poll-interval: PT1S
+    batch-size: 50
+    confirm-timeout: PT5S
 
 management:
   endpoints:

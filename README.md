@@ -391,6 +391,26 @@ What the security service announces arrives here through RabbitMQ, on the topic 
   consumers are active, so **without a reachable broker `/actuator/health` reports DOWN**. The
   test profile does not start them and needs no broker.
 
+### Home events this backend publishes
+
+A deleted home, by its owner or because the account of its only owner was deleted, is announced
+as `home.deleted` on the topic exchange `energy-monitor.home`, with
+`{homeId, deletedBy, deletedAt}`. The device service consumes it and unlinks the home's modules.
+
+- **Transactional outbox:** the message is written to `home_outbox` (changelog `home-007`) in the
+  transaction that deletes the home, and a relay publishes it every second (up to 50 at a time).
+  A home is never deleted without its message, and no message is sent for a deletion that rolled
+  back.
+- **At least once, in order:** a message is marked published only when the broker confirms it
+  (correlated publisher confirms) **and** a queue took it. Until the device service has declared
+  its queue the message comes back and stays pending; the first failure stops the run, so a later
+  message never overtakes it. `attempts` and `last_error` show why one is stuck.
+- **Settings:** `messaging.home.*` (exchange, `relay-enabled`, `poll-interval`, `batch-size`,
+  `confirm-timeout`). The test profile turns the relay off and stores the rows already discarded,
+  so the suite never publishes to a broker a running device service consumes.
+- `RabbitHomeOutboxPublisherBrokerTest` runs against the RabbitMQ of infra when it is reachable
+  (export `RABBITMQ_USERNAME` and `RABBITMQ_PASSWORD`) and is skipped otherwise.
+
 ### Internal calls with the security and device services
 
 The security service asks this backend `GET /internal/accounts/{id}/deletion-check` before it
