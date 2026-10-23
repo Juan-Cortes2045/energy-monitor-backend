@@ -402,6 +402,18 @@ device module is removed:
 | `GET /internal/devices/{id}` | readings, alerts, notifications, recommendations (existence, name, installation date, home) | 30 s, unknown devices included | the last answer, kept 1 h; with none, the call fails |
 | `GET /internal/homes/{id}/devices` | readings and recommendations of a home | 30 s | the same |
 
+Its events arrive on the queue `energy-monitor-backend.device.events`, bound to
+`energy-monitor.device` (with a `.dlq`):
+
+| Routing key | What this backend does |
+|---|---|
+| `device.connectivity-lost` | Publishes `DeviceConnectivityLost` in memory: the alert module raises the CONNECTIVITY alert (one while it is pending, however many times the message arrives) |
+| `device.connectivity-restored` | Publishes `DeviceConnectivityRestored`: the alert is resolved |
+| `device.linked`, `device.unlinked` | Drops the cached device and home, so a module just linked is not refused for half a minute |
+
+The queue and its consumer are off (`device.service.events-enabled=false`) while this backend's
+device module still raises the connectivity events itself; they are turned on when it is removed.
+
 Settings: `DEVICE_SERVICE_URL` (`device.service.url`, default `http://localhost:8084`),
 `device.service.ttl`, `device.service.stale-ttl` and the timeouts (1 s connect, 2 s read). The
 calls carry `INTERNAL_API_TOKEN`. The test profile points the client at a port where nothing
