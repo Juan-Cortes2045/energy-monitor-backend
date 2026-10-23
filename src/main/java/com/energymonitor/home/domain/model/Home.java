@@ -18,7 +18,7 @@ import java.util.Objects;
  * <p><strong>Devices:</strong> The diagram shows {@code addDevice}, {@code removeDevice} and
  * {@code getAllDevices} on {@code Home}. These are <em>not</em> implemented here: {@code Device}
  * and {@code DeviceHome} belong to the {@code device} bounded context, and {@code home} declares
- * {@code @ApplicationModule(allowedDependencies = {})}. The device module resolves the
+ * {@code @ApplicationModule(allowedDependencies = {})}. The device service resolves the
  * {@code DeviceHome} relationship with {@code home_id} directly.
  *
  * <p><strong>Users:</strong> The diagram shows {@code addUser(User, Role)} and {@code removeUser(User)}.

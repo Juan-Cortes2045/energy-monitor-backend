@@ -6,14 +6,13 @@ import com.energymonitor.alert.api.AlertStatus;
 import com.energymonitor.alert.api.AlertType;
 import com.energymonitor.alert.application.port.out.AlertPersistencePort;
 import com.energymonitor.alert.domain.model.Alert;
-import com.energymonitor.device.application.port.out.DeviceHomePersistencePort;
-import com.energymonitor.device.application.port.out.DevicePersistencePort;
-import com.energymonitor.device.domain.model.Device;
-import com.energymonitor.device.domain.model.DeviceHome;
+import com.energymonitor.device.adapter.out.remote.DeviceServiceClient;
+import com.energymonitor.device.adapter.out.remote.DeviceServiceClient.RemoteDevice;
 import com.energymonitor.security.infrastructure.JwtKeyedTest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,14 +20,16 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The connectivity events of the device service reach the real alert module: a lost connection
  * raises one CONNECTIVITY alert, however many times it is delivered, and a restored one resolves
- * it. {@code @Transactional}: everything joins the test's transaction, which is rolled back.
+ * it. The home of the device is answered by a mocked device service client.
+ * {@code @Transactional}: everything joins the test's transaction, which is rolled back.
  */
-@SpringBootTest(properties = "device.service.events-enabled=true")
+@SpringBootTest
 @Transactional
 @DisplayName("Device events, end to end in the backend")
 class DeviceEventsConsumerIntegrationTest extends JwtKeyedTest {
@@ -39,18 +40,15 @@ class DeviceEventsConsumerIntegrationTest extends JwtKeyedTest {
 
     @Autowired
     private DeviceEventsConsumer consumer;
-    @Autowired
-    private DevicePersistencePort devices;
-    @Autowired
-    private DeviceHomePersistencePort deviceHomes;
+    @MockitoBean
+    private DeviceServiceClient deviceService;
     @Autowired
     private AlertPersistencePort alerts;
 
     @BeforeEach
     void linkDevice() {
-        // Linked in this backend's tables, which still answer DeviceApi until the module goes.
-        devices.save(Device.create(DEVICE, "Nevera", "appl000001", null, null, NOW, "DE0001", "de-api-key"));
-        deviceHomes.save(new DeviceHome(DEVICE, HOME));
+        org.mockito.BDDMockito.given(deviceService.device(DEVICE)).willReturn(Optional.of(
+                new RemoteDevice(DEVICE, "Nevera", "appl000001", null, null, NOW, "DE0001", HOME)));
     }
 
     @Test

@@ -9,7 +9,7 @@ import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 /**
- * Reads homes and device links through the public APIs of the home and device modules.
+ * Reads homes and device links through the public APIs of the home module and the device service.
  */
 @Component
 public class HomeAccessAdapter implements HomeAccessPort {

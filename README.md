@@ -225,7 +225,7 @@ set in the gateway's `.env` instead.
 
 The application reads the caller's address from `request.getRemoteAddr()` and **ignores
 `X-Forwarded-For`**: a header the client sets is not evidence of anything. The internal routes
-(`/internal/mqtt/auth/**`, `/internal/accounts/**` and `/internal/homes/**`) trust a caller partly by that address, so
+(`/internal/accounts/**` and `/internal/homes/**`) trust a caller partly by that address, so
 behind a proxy every request would look like it came from the proxy. A public reverse proxy must
 therefore **never forward `/internal/**`**; the web image's nginx forwards `/api/` only, and the
 API gateway refuses `/internal/**` outright. This backend keeps ignoring `X-Forwarded-For` behind
@@ -272,49 +272,35 @@ security service nor RabbitMQ is needed.
 
 ## 9. MQTT broker and devices
 
-Devices (ESP32 + PZEM-004T) publish telemetry over **MQTT with TLS** to Eclipse Mosquitto. The
-broker runs from the `infra` repository (`infra/mosquitto/mosquitto.conf`) and delegates
-authentication and topic ACL to this backend
-(`POST /internal/mqtt/auth/user` and `/acl`, mosquitto-go-auth), so a device registered in the
-`device` table can connect with its `device_code` / API key and nothing else is configured in
-the broker. Only the SHA-256 of each key is stored (`device.api_key_hash`); the key in clear is
-returned once, when the module is linked or gets new credentials, and cannot be read back. Full contract and firmware steps: `firmware/README.md`.
+Devices (ESP32 + PZEM-004T) publish telemetry over **MQTT with TLS** to Eclipse Mosquitto, which
+runs from the `infra` repository. **The devices belong to the device service**
+(`en-monitor-device-service`, port 8084): it links modules to homes, issues their API keys,
+answers the broker's authentication and ACL (`/internal/mqtt/auth/**`), sends the unlink commands
+and keeps the connectivity. The device endpoints (`/api/v1/homes/{homeId}/devices/**`,
+`/api/v1/appliance-types`) are routed to it by the API gateway.
 
-1. `.env`: `MQTT_BACKEND_USER`, `MQTT_BACKEND_PASS` (any random value) and
-   `DEVICE_MQTT_PUBLIC_HOST` = the LAN IP of this PC (`hostname -I`, never `localhost`). That IP
-   is what the web app hands to a module when it is linked. Put the same IP in
-   `DEVICE_MQTT_PUBLIC_HOST` of `infra/.env`: `infra/prepare.sh` adds it to the broker's TLS
-   certificate (re-run it, and restart the broker, if the IP changes).
-2. Linux with `ufw` only: in development mode the broker container calls the backend on the host,
-   which ufw blocks. Allow the Docker networks, not the LAN:
+This backend only **stores the readings**: it subscribes to `energy-monitor/devices/+/telemetry`
+with its own MQTT user, which the broker lets read telemetry and status and nothing else. Each
+reading is stored once the device service confirms its device exists (section 12).
 
-   ```bash
-   sudo ufw allow from 172.16.0.0/12 to any port 8083 proto tcp comment 'mosquitto -> backend'
-   ```
-
-3. The broker was started in section 2. Check that the backend connected:
+1. `.env`: `MQTT_BACKEND_USER` and `MQTT_BACKEND_PASS` (any random value). Give the device service
+   the same two values, since it is the one the broker asks.
+2. The broker was started in section 2, and the device service must be running for it to accept
+   any client. Check that the backend connected:
 
    ```bash
    cd ../../infra
-   docker compose logs -f mosquitto   # the backend shows up as energy-monitor-backend-telemetry / -status
+   docker compose logs -f mosquitto   # the backend shows up as energy-monitor-backend-telemetry
    ```
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `MQTT_BROKER_URL` | `tcp://localhost:1883` | internal listener (plain, loopback only) |
 | `MQTT_BACKEND_USER` / `MQTT_BACKEND_PASS` | `em-backend` / `change-me` | backend credentials in the broker |
-| `MQTT_CLIENT_ID` | `energy-monitor-backend` | must differ per backend instance |
-| `MQTT_AUTH_ALLOWED_NETWORKS` | `127.0.0.1/32,::1/128,172.16.0.0/12` | who may call `/internal/mqtt/auth/**` |
-| `DEVICE_MQTT_PUBLIC_HOST` / `_PORT` | — / `8883` | broker address given to devices when linked |
-| `DEVICE_OFFLINE_AFTER` | `PT150S` | a device silent this long is marked OFFLINE |
+| `MQTT_CLIENT_ID` | `energy-monitor-backend` | must differ per backend instance and from the device service's |
+| `DEVICE_OFFLINE_AFTER` | `PT150S` | a reading older than this is not the current power of a home |
 
-Device endpoints of a home (`/api/v1/homes/{homeId}/devices`): `GET` lists them (members);
-`POST` links a module, `PUT /{deviceId}` edits appliance, name and room,
-`POST /{deviceId}/credentials` issues a new api key plus the broker address to give a linked
-module a new Wi-Fi network (not a new link), and `DELETE /{deviceId}` unlinks it (owner only).
-
-A public reverse proxy must **not** forward `/internal/**` (section 7: behind it every request
-looks local).
+Firmware, contract and pairing: `firmware/README.md` and the device service's README.
 
 ## 10. Alert notifications (mail and browser push)
 
@@ -364,7 +350,7 @@ stores a recommendation when a rule matches:
 - The rules need history: the evening-peak and standby rules work after a few days of readings,
   the week-over-week comparison after two weeks and the per-device comparison after four.
 
-## 12. The security service
+## 12. The security and device services
 
 ### Messages (RabbitMQ)
 
@@ -393,9 +379,8 @@ What the security service announces arrives here through RabbitMQ, on the topic 
 
 ### The device service
 
-The devices are moving to the device service (`en-monitor-device-service`, port 8084). Its client
-is already here, in `device/adapter/out/remote`, and takes over `DeviceApi` when this backend's
-device module is removed:
+The devices live in the device service (`en-monitor-device-service`, port 8084). This backend reads
+them through `DeviceApi`, answered by its internal API (`device/adapter/out/remote`):
 
 | Call | Used by | Reused for | Without an answer |
 |---|---|---|---|
@@ -410,9 +395,6 @@ Its events arrive on the queue `energy-monitor-backend.device.events`, bound to
 | `device.connectivity-lost` | Publishes `DeviceConnectivityLost` in memory: the alert module raises the CONNECTIVITY alert (one while it is pending, however many times the message arrives) |
 | `device.connectivity-restored` | Publishes `DeviceConnectivityRestored`: the alert is resolved |
 | `device.linked`, `device.unlinked` | Drops the cached device and home, so a module just linked is not refused for half a minute |
-
-The queue and its consumer are off (`device.service.events-enabled=false`) while this backend's
-device module still raises the connectivity events itself; they are turned on when it is removed.
 
 Settings: `DEVICE_SERVICE_URL` (`device.service.url`, default `http://localhost:8084`),
 `device.service.ttl`, `device.service.stale-ttl` and the timeouts (1 s connect, 2 s read). The
@@ -519,10 +501,11 @@ inside the image, and any profile other than `local` works (`prod`).
 |---|---|
 | Tests fail with `Access denied for user 'energymonitor'` | `.env` sets `SPRING_DATASOURCE_USERNAME` to something other than `energy_app`: remove it |
 | `Too many connections` in a few persistence tests | the backend is running while the suite runs; both use the same MySQL. Run the failing class alone or stop the backend |
-| Broker logs `context deadline exceeded` calling `backend:8083` | backend stopped, or the ufw rule of section 9 is missing (the old one for 8080 no longer applies) |
+| Broker logs `context deadline exceeded` calling `device:8084` | the device service is not running, so the broker cannot authenticate anybody (see its README for the ufw rule in development mode) |
+| Readings stop being stored, log `Ignoring telemetry of unknown device` or `device service did not answer` | the device service is down and this backend has nothing cached for that device, or `INTERNAL_API_TOKEN` differs between the two `.env` files |
 | Web app: every request fails or the browser reports CORS | the API gateway is not running on 8080, or `SECURITY_CORS_ALLOWED_ORIGINS` of its `.env` does not list the web's origin |
 | Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: update `DEVICE_MQTT_PUBLIC_HOST` in `infra/.env`, re-run `infra/prepare.sh` and restart the broker |
-| Device logs `rc=4` / `rc=5` | `device_code` / API key do not match the `device` table (link it again from the web) |
+| Device logs `rc=4` / `rc=5` | `device_code` / API key refused by the device service (link it again from the web) |
 | `403` on `/api/v1/admin/**`, or no **Administration** in the web menu | the account does not hold `ADMIN`: grant it as the security service's README explains, then reload the web |
 | `503` on `/api/v1/admin/notifications`, members without names | the security service does not answer, or `INTERNAL_API_TOKEN` differs between the two `.env` files |
 | `401` on every request with a fresh token | `SECURITY_JWT_PUBLIC_KEY_PATH` is not the public key of the security service's pair |

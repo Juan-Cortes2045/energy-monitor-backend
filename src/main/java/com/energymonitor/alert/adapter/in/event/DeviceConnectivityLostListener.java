@@ -9,7 +9,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Turns the device module's {@code DeviceConnectivityLost} into a CONNECTIVITY alert, and its
+ * Turns the device service's {@code DeviceConnectivityLost} into a CONNECTIVITY alert, and its
  * {@code DeviceConnectivityRestored} into the resolution of that alert.
  */
 @Component

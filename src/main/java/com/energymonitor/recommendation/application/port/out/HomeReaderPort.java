@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Homes, members, devices and limits, read from the home and device modules.
+ * Homes, members, devices and limits, read from the home module and the device service.
  */
 public interface HomeReaderPort {
 

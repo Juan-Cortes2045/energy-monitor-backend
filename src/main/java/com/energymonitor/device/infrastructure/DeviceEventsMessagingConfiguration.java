@@ -8,9 +8,7 @@ import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,13 +21,10 @@ import tools.jackson.databind.ObjectMapper;
  *
  * <p>Durable, bound to {@code energy-monitor.device} with the four device routing keys, and
  * dead-lettered to {@value #DEVICE_EVENTS_QUEUE}{@code .dlq} once a message has failed every retry.
- *
- * <p>Off until the device module of this backend is removed ({@code device.service.events-enabled}):
- * while it still raises the connectivity events itself, hearing the service too would announce
- * each one twice.
+ * Declaring it is also what lets the device service publish them: until a queue is bound, its
+ * messages wait in its outbox.
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(name = "device.service.events-enabled", havingValue = "true")
 public class DeviceEventsMessagingConfiguration {
 
     public static final String DEVICE_EVENTS_QUEUE = "energy-monitor-backend.device.events";
@@ -53,16 +48,11 @@ public class DeviceEventsMessagingConfiguration {
                 BindingBuilder.bind(dead).to(deadLetters).with(DEVICE_EVENTS_QUEUE));
     }
 
-    /**
-     * Forgetting goes to the cache of devices once {@code RemoteDeviceApi} answers
-     * {@code DeviceApi}; until then there is nothing to forget.
-     */
+    /** Forgetting goes to the cache of devices, {@code RemoteDeviceApi}. */
     @Bean
-    public DeviceEventsConsumer deviceEventsConsumer(ApplicationEventPublisher events,
-                                                     ObjectProvider<DeviceChanges> changes,
+    public DeviceEventsConsumer deviceEventsConsumer(ApplicationEventPublisher events, DeviceChanges changes,
                                                      PlatformTransactionManager transactions,
                                                      ObjectMapper json) {
-        return new DeviceEventsConsumer(events, changes.getIfAvailable(() -> (deviceId, homeId) -> { }),
-                transactions, json);
+        return new DeviceEventsConsumer(events, changes, transactions, json);
     }
 }

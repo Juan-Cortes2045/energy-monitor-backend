@@ -11,10 +11,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * Runs {@link DeleteHomeService} in one transaction.
  *
- * <p>Deleting a home writes memberships, thresholds and the home, and the device module unlinks
- * the home's devices in the same call (synchronous listener of {@code HomeDeleted}). Half of that
- * must never stay committed: a home without memberships but with linked devices would keep
- * accepting readings nobody can see. The service stays framework-free; this decorator is the one
+ * <p>Deleting a home writes memberships, thresholds, the home and the {@code home.deleted} message
+ * the device service unlinks its devices from. Half of that must never stay committed: a home
+ * deleted without its message would keep its devices linked, accepting readings nobody can see. The service stays framework-free; this decorator is the one
  * the web layer receives ({@link Primary}).
  */
 @Component

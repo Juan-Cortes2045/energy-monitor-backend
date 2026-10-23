@@ -12,7 +12,8 @@ import java.util.Objects;
  * <p><strong>Device reference:</strong> {@code deviceId} references the {@code Device} of the
  * Devices bounded context. Per the MER it is validated at application level and generates
  * no SQL foreign key. It stays a plain {@code String} because {@code Device} cannot be
- * imported here; the existence check arrives when the device module exposes its public API.
+ * imported here; the existence is checked by the telemetry consumer, which asks the device
+ * service before a reading is registered.
  *
  * <p><strong>Observer pattern:</strong> the class diagram models {@code MeasurementObserver}
  * with {@code AlertObserver} and {@code RecommendationObserver} as subscribers. Those

@@ -3,11 +3,6 @@ package com.energymonitor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.energymonitor.device.api.DeviceApi;
-import com.energymonitor.device.application.port.out.DeviceHomePersistencePort;
-import com.energymonitor.device.application.port.out.DevicePersistencePort;
-import com.energymonitor.device.domain.model.Device;
-import com.energymonitor.device.domain.model.DeviceHome;
 import com.energymonitor.home.api.HomeOwnershipTransferred;
 import com.energymonitor.home.application.command.DeleteHomeCommand;
 import com.energymonitor.home.application.command.TransferHomeOwnershipCommand;
@@ -63,12 +58,6 @@ class HomeOwnershipTransferIntegrationTest extends JwtKeyedTest {
     @Autowired
     private HomeThresholdsPersistencePort thresholds;
     @Autowired
-    private DevicePersistencePort devices;
-    @Autowired
-    private DeviceHomePersistencePort deviceHomes;
-    @Autowired
-    private DeviceApi deviceApi;
-    @Autowired
     private ApplicationEvents events;
 
     @BeforeEach
@@ -77,9 +66,6 @@ class HomeOwnershipTransferIntegrationTest extends JwtKeyedTest {
         thresholds.save(HomeThresholds.create("ott0000001", HOME, 6.0, 180.0, true));
         memberships.save(UserHome.owner(OWNER, HOME));
         memberships.save(UserHome.member(MEMBER, HOME));
-        devices.save(Device.create("otd0000001", "Nevera", "appl000001", "kitchen", null, NOW, "OT0001",
-                "ot-device-api-key"));
-        deviceHomes.save(new DeviceHome("otd0000001", HOME));
     }
 
     @Test
@@ -95,9 +81,8 @@ class HomeOwnershipTransferIntegrationTest extends JwtKeyedTest {
                 .returns(OWNER, HomeOwnershipTransferred::previousOwnerId)
                 .returns(MEMBER, HomeOwnershipTransferred::newOwnerId);
 
+        // The devices stay linked to the home in the device service: the transfer does not tell it.
         assertThat(thresholds.findActiveByHomeId(HOME)).isPresent();
-        assertThat(deviceApi.getHomeId("otd0000001")).contains(HOME);
-        assertThat(deviceApi.validateCredentials("OT0001", "ot-device-api-key")).isTrue();
     }
 
     @Test

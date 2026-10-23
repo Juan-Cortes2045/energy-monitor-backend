@@ -12,9 +12,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.energymonitor.device.api.ConnectivityStatus;
 import com.energymonitor.device.api.DeviceApi;
 import com.energymonitor.device.api.DeviceDto;
+import com.energymonitor.device.api.DeviceServiceUnavailableException;
 import com.energymonitor.measurement.application.command.RegisterMeasurementCommand;
 import com.energymonitor.measurement.application.port.in.RegisterMeasurement;
 import java.time.Instant;
@@ -70,7 +70,7 @@ class TelemetryMqttConsumerTest {
     }
 
     @Test
-    @DisplayName("a valid reading is registered with the device timestamp and marks the device online")
+    @DisplayName("a valid reading is registered with the device timestamp")
     void registersValidReading() {
         // Arrange
         when(deviceApi.findByDeviceId(DEVICE_ID)).thenReturn(Optional.of(mock(DeviceDto.class)));
@@ -86,7 +86,6 @@ class TelemetryMqttConsumerTest {
         assertThat(command.dateTime()).isEqualTo(Instant.parse("2026-10-13T20:17:03Z"));
         assertThat(command.activePower()).isEqualTo(285.5);
         assertThat(command.storedEnergy()).isEqualTo(12.847);
-        verify(deviceApi, times(1)).recordConnectivity(DEVICE_ID, ConnectivityStatus.ONLINE, -58);
     }
 
     @Test
@@ -110,7 +109,7 @@ class TelemetryMqttConsumerTest {
 
         // Assert
         verify(registerMeasurement, never()).register(any());
-        verify(deviceApi, never()).recordConnectivity(any(), any(), anyInt());
+        verifyNoInteractions(deviceApi);
     }
 
     @Test
@@ -157,7 +156,7 @@ class TelemetryMqttConsumerTest {
     }
 
     @Test
-    @DisplayName("a failure while registering does not escape and the device is not marked online")
+    @DisplayName("a failure while registering does not escape")
     void survivesRegistrationFailure() {
         // Arrange
         when(deviceApi.findByDeviceId(DEVICE_ID)).thenReturn(Optional.of(mock(DeviceDto.class)));
@@ -165,6 +164,17 @@ class TelemetryMqttConsumerTest {
 
         // Act + Assert
         assertThatCode(() -> consumer.handleTelemetry(message(TOPIC, payload(DEVICE_ID)))).doesNotThrowAnyException();
-        verify(deviceApi, never()).recordConnectivity(eq(DEVICE_ID), any(), any());
+    }
+
+    @Test
+    @DisplayName("a reading whose device cannot be confirmed, the device service being down, is dropped")
+    void dropsWhenDeviceServiceIsDown() {
+        // Arrange
+        when(deviceApi.findByDeviceId(DEVICE_ID))
+                .thenThrow(new DeviceServiceUnavailableException("device service did not answer", null));
+
+        // Act + Assert
+        assertThatCode(() -> consumer.handleTelemetry(message(TOPIC, payload(DEVICE_ID)))).doesNotThrowAnyException();
+        verify(registerMeasurement, never()).register(any());
     }
 }

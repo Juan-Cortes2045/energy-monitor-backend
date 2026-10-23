@@ -1,7 +1,6 @@
 package com.energymonitor.device.adapter.out.remote;
 
 import com.energymonitor.device.adapter.out.remote.DeviceServiceClient.RemoteDevice;
-import com.energymonitor.device.api.ConnectivityStatus;
 import com.energymonitor.device.api.DeviceApi;
 import com.energymonitor.device.api.DeviceDto;
 import com.energymonitor.device.api.DeviceServiceUnavailableException;
@@ -27,8 +26,8 @@ import java.util.function.Function;
  * what is served, so a short outage of the device service does not stop the readings of devices
  * already known. Only with nothing kept does a call throw {@link DeviceServiceUnavailableException}.
  *
- * <p>Connectivity and credentials belong to the device service, which reads them from the broker
- * itself: those methods are not served from here.
+ * <p>Connectivity and credentials are not read here: the device service keeps them from the broker
+ * itself.
  */
 public class RemoteDeviceApi implements DeviceApi, DeviceChanges {
 
@@ -74,24 +73,6 @@ public class RemoteDeviceApi implements DeviceApi, DeviceChanges {
         return fresh(homes, lastKnownHomes, homeId, client::devicesOfHome).stream()
                 .map(RemoteDeviceApi::toDto)
                 .toList();
-    }
-
-    /** Not served here: the broker authenticates the modules against the device service. */
-    @Override
-    public Optional<DeviceDto> findByDeviceCode(String deviceCode) {
-        throw new UnsupportedOperationException("device codes are resolved by the device service");
-    }
-
-    /** Not served here: the broker authenticates the modules against the device service. */
-    @Override
-    public boolean validateCredentials(String deviceCode, String apiKey) {
-        throw new UnsupportedOperationException("device credentials are checked by the device service");
-    }
-
-    /** Not served here: the device service records connectivity from the broker itself. */
-    @Override
-    public void recordConnectivity(String deviceId, ConnectivityStatus status, Integer rssi) {
-        throw new UnsupportedOperationException("connectivity is recorded by the device service");
     }
 
     /**
