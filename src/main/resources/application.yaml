@@ -191,6 +191,15 @@ mqtt:
     allowed-networks: ${MQTT_AUTH_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
 
 device:
+  # The device service, which owns the devices once this backend's device module is gone: its
+  # internal API answers which device a reading comes from, its home and its name. Answers are
+  # reused for a while, and the last one is served while the service does not answer.
+  service:
+    url: ${DEVICE_SERVICE_URL:http://localhost:8084}
+    connect-timeout: 1s
+    read-timeout: 2s
+    ttl: 30s
+    stale-ttl: 1h
   connectivity:
     # A device not heard from for this long is marked OFFLINE. Telemetry comes every 60 s at
     # QoS 0, so one lost sample plus network jitter is tolerated before declaring it gone.
