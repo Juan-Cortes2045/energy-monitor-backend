@@ -14,7 +14,7 @@ import com.energymonitor.alert.domain.model.Alert;
 import java.util.Optional;
 
 /**
- * Raises {@code alert.connectivity.offline} when the device module reports a device lost.
+ * Raises {@code alert.connectivity.offline} when the device service reports a device lost.
  *
  * <p>A device that keeps dropping does not flood the inbox: while a CONNECTIVITY alert of the
  * same device is still PENDING, no new one is raised. A device without a home is skipped.

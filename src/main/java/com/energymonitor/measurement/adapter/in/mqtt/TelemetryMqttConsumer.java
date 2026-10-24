@@ -1,6 +1,5 @@
 package com.energymonitor.measurement.adapter.in.mqtt;
 
-import com.energymonitor.device.api.ConnectivityStatus;
 import com.energymonitor.device.api.DeviceApi;
 import com.energymonitor.measurement.adapter.in.mqtt.dto.TelemetryMessage;
 import com.energymonitor.measurement.application.command.RegisterMeasurementCommand;
@@ -18,7 +17,11 @@ import tools.jackson.databind.ObjectMapper;
  * Turns every message on {@code energy-monitor/devices/+/telemetry} into a measurement.
  *
  * <p>The measurement keeps the device timestamp, so samples replayed from the offline queue land
- * at the time they were taken. Connectivity is refreshed with the server clock instead.
+ * at the time they were taken. The device service subscribes to the same topic and keeps the
+ * connectivity itself.
+ *
+ * <p>Whether the device exists is asked to the device service, cached; while it does not answer
+ * and nothing was kept, the reading is dropped and logged.
  */
 @Component
 public class TelemetryMqttConsumer {
@@ -60,7 +63,6 @@ public class TelemetryMqttConsumer {
                     telemetry.current(),
                     telemetry.activePower(),
                     telemetry.storedEnergy()));
-            deviceApi.recordConnectivity(deviceId, ConnectivityStatus.ONLINE, telemetry.rssi());
         } catch (JacksonException e) {
             log.warn("Failed to parse telemetry of device {}: {}", deviceId, e.getOriginalMessage());
         } catch (RuntimeException e) {

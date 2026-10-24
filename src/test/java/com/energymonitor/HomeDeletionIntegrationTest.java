@@ -3,11 +3,8 @@ package com.energymonitor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.energymonitor.device.api.DeviceApi;
-import com.energymonitor.device.application.port.out.DeviceHomePersistencePort;
-import com.energymonitor.device.application.port.out.DevicePersistencePort;
-import com.energymonitor.device.domain.model.Device;
-import com.energymonitor.device.domain.model.DeviceHome;
+import com.energymonitor.home.adapter.out.messaging.HomeMessageTypes;
+import com.energymonitor.home.adapter.out.persistence.repository.HomeOutboxRepository;
 import com.energymonitor.home.application.command.DeleteHomeCommand;
 import com.energymonitor.home.application.exception.HomeAccessDeniedException;
 import com.energymonitor.home.application.port.in.DeleteHome;
@@ -27,12 +24,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Home deletion across modules, against the real schema: the home module deletes the home and
- * the device module, listening to {@code HomeDeleted}, unlinks its modules in the same
- * transaction.
+ * Home deletion against the real schema: memberships, thresholds and the home go in one
+ * transaction, together with the {@code home.deleted} message the device service unlinks the
+ * home's modules from. A refused deletion leaves everything, the outbox included.
  *
- * <p>{@code @Transactional}: everything joins the test's transaction, which is rolled back. That
- * also means the after-commit MQTT command is never sent, so no broker is needed.
+ * <p>{@code @Transactional}: everything joins the test's transaction, which is rolled back.
  */
 @SpringBootTest
 @Transactional
@@ -49,11 +45,7 @@ class HomeDeletionIntegrationTest extends JwtKeyedTest {
     @Autowired
     private HomeThresholdsPersistencePort thresholds;
     @Autowired
-    private DevicePersistencePort devices;
-    @Autowired
-    private DeviceHomePersistencePort deviceHomes;
-    @Autowired
-    private DeviceApi deviceApi;
+    private HomeOutboxRepository outbox;
 
     @BeforeEach
     void seed() {
@@ -61,32 +53,34 @@ class HomeDeletionIntegrationTest extends JwtKeyedTest {
         thresholds.save(HomeThresholds.create("hdt0000001", "hdh0000001", 6.0, 180.0, true));
         memberships.save(UserHome.owner("hdu0000001", "hdh0000001"));
         memberships.save(UserHome.member("hdu0000002", "hdh0000001"));
-        devices.save(Device.create("hdd0000001", "Nevera", "appl000001", "kitchen", null, NOW, "HD0001",
-                "hd-device-api-key"));
-        deviceHomes.save(new DeviceHome("hdd0000001", "hdh0000001"));
     }
 
     @Test
-    @DisplayName("deleting a home drops memberships and thresholds and unlinks its devices")
-    void deletesTheHomeAndUnlinksItsDevices() {
+    @DisplayName("deleting a home drops memberships and thresholds and announces it to the device service")
+    void deletesTheHomeAndAnnouncesIt() {
         deleteHome.delete(new DeleteHomeCommand("hdu0000001", "hdh0000001"));
 
         assertThat(homes.findActive("hdh0000001")).isEmpty();
         assertThat(memberships.listActiveByHomeId("hdh0000001")).isEmpty();
         assertThat(thresholds.findActiveByHomeId("hdh0000001")).isEmpty();
-        assertThat(deviceApi.getHomeId("hdd0000001")).isEmpty();
-        // The module survives the home, with a new key, ready to be linked elsewhere.
-        assertThat(deviceApi.validateCredentials("HD0001", "hd-device-api-key")).isFalse();
-        assertThat(devices.findById("hdd0000001")).isPresent();
+        assertThat(homeDeletedMessages()).isEqualTo(1);
     }
 
     @Test
-    @DisplayName("a member's attempt changes nothing in any module")
+    @DisplayName("a member's attempt changes nothing and announces nothing")
     void memberCannotDelete() {
         assertThatThrownBy(() -> deleteHome.delete(new DeleteHomeCommand("hdu0000002", "hdh0000001")))
                 .isInstanceOf(HomeAccessDeniedException.class);
 
         assertThat(homes.findActive("hdh0000001")).isPresent();
-        assertThat(deviceApi.getHomeId("hdd0000001")).contains("hdh0000001");
+        assertThat(memberships.listActiveByHomeId("hdh0000001")).hasSize(2);
+        assertThat(homeDeletedMessages()).isZero();
+    }
+
+    private long homeDeletedMessages() {
+        return outbox.findAll().stream()
+                .filter(m -> m.getMessageType().equals(HomeMessageTypes.HOME_DELETED))
+                .filter(m -> m.getPayload().contains("\"hdh0000001\""))
+                .count();
     }
 }

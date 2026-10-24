@@ -25,9 +25,10 @@ import java.time.Clock;
  *   <li>Every membership, and with it every favourite mark (favourite is a flag of the
  *       membership): the home disappears from every member's list.</li>
  *   <li>Its thresholds: they only make sense for the home, and are never reused.</li>
- *   <li>Its devices are not deleted but unlinked, by the device module reacting to
- *       {@link HomeDeleted}: a physical module outlives the home and can be linked to another
- *       one. Unlinking revokes its key and tells the module to offer Bluetooth again.</li>
+ *   <li>Its devices are not deleted but unlinked, by the device service reacting to
+ *       {@code home.deleted}, which {@link HomeDeleted} is relayed as: a physical module outlives
+ *       the home and can be linked to another one. Unlinking revokes its key and tells the module
+ *       to offer Bluetooth again.</li>
  *   <li>Measurements, alerts and recommendations are kept: they belong to the device's history,
  *       and nobody can reach them through the deleted home any more because every membership is
  *       gone.</li>

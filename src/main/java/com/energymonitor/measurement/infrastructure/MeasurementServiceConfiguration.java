@@ -28,7 +28,8 @@ import org.springframework.context.annotation.FilterType;
 public class MeasurementServiceConfiguration {
 
     /**
-     * A reading older than the device offline threshold no longer counts as current power.
+     * A reading older than {@code measurement.current-power-freshness} no longer counts as current
+     * power: the same threshold after which the device service marks a device offline.
      */
     @Bean
     public HomeConsumptionUseCase homeConsumptionUseCase(
@@ -36,7 +37,7 @@ public class MeasurementServiceConfiguration {
             ConsumptionLevelPersistencePort levels,
             HomeAccessPort homes,
             Clock clock,
-            @Value("${device.connectivity.offline-after:PT150S}") Duration freshness) {
+            @Value("${measurement.current-power-freshness:PT150S}") Duration freshness) {
         return new HomeConsumptionUseCase(measurements, levels, homes, clock, freshness);
     }
 }

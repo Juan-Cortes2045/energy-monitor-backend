@@ -14,15 +14,14 @@ import org.springframework.integration.mqtt.support.DefaultPahoMessageConverter;
 import org.springframework.messaging.MessageChannel;
 
 /**
- * MQTT inbound wiring: one subscription and one channel per topic.
+ * MQTT inbound wiring: the telemetry subscription and its channel.
  *
- * <p>Each consumer listens on its own channel. A {@link DirectChannel} shared by two
- * subscribers would round-robin the messages between them, so every other telemetry message
- * would reach the status consumer.
+ * <p>The status topic is the device service's: it subscribes to it, and to telemetry too, to keep
+ * the connectivity. This backend only stores the readings.
  *
- * <p>The client ids get a {@code -telemetry} / {@code -status} suffix. The broker disconnects a
- * client when another one connects with the same id, so two backend instances need different
- * {@code mqtt.client-id} values.
+ * <p>The client id gets a {@code -telemetry} suffix. The broker disconnects a client when another
+ * one connects with the same id, so two backend instances need different {@code mqtt.client-id}
+ * values, and they must differ from the device service's.
  *
  * <p>{@link EnableIntegration} is explicit because the project depends on
  * {@code spring-integration-mqtt} without Spring Boot's integration starter; without it the
@@ -46,9 +45,6 @@ public class MqttConfig {
 
     @Value("${mqtt.topics.telemetry:energy-monitor/devices/+/telemetry}")
     private String telemetryTopic;
-
-    @Value("${mqtt.topics.status:energy-monitor/devices/+/status}")
-    private String statusTopic;
 
     @Value("${mqtt.qos:0}")
     private int qos;
@@ -87,18 +83,8 @@ public class MqttConfig {
     }
 
     @Bean
-    public MessageChannel mqttStatusChannel() {
-        return new DirectChannel();
-    }
-
-    @Bean
     public MessageProducer inboundTelemetry(MqttPahoClientFactory factory) {
         return inbound(factory, "-telemetry", telemetryTopic, mqttTelemetryChannel());
-    }
-
-    @Bean
-    public MessageProducer inboundStatus(MqttPahoClientFactory factory) {
-        return inbound(factory, "-status", statusTopic, mqttStatusChannel());
     }
 
     private MessageProducer inbound(MqttPahoClientFactory factory, String suffix, String topic,

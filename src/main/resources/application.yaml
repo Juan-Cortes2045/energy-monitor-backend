@@ -42,12 +42,17 @@ spring:
           writetimeout: 5000
 
   # Message broker (RabbitMQ, from infra): account events and mail requests published by the
-  # security service. Each consumer declares and binds its own queue.
+  # security service, and the home events this backend publishes. Each consumer declares and
+  # binds its own queue.
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:energy-monitor}
     password: ${RABBITMQ_PASSWORD:}
+    # A home message is marked as published only after the broker confirms it and a queue took it
+    # (correlated: the return of an unrouted message is known before the confirmation completes).
+    publisher-confirm-type: correlated
+    publisher-returns: true
     listener:
       simple:
         # A message that keeps failing is retried three times, one, two and four seconds apart,
@@ -133,6 +138,18 @@ messaging:
   # this application consumes.
   security-exchange: energy-monitor.security
   dead-letter-exchange: energy-monitor-backend.dlx
+  # Topic exchange the device service publishes to (device.linked, device.unlinked,
+  # device.connectivity-lost, device.connectivity-restored).
+  device-exchange: energy-monitor.device
+  # Topic exchange of the home events this backend announces (home.deleted), written to the
+  # home_outbox table with the change and relayed every second, up to 50 messages, each confirmed
+  # by the broker within 5 s.
+  home:
+    exchange: energy-monitor.home
+    relay-enabled: true
+    poll-interval: PT1S
+    batch-size: 50
+    confirm-timeout: PT5S
 
 management:
   endpoints:
@@ -144,49 +161,50 @@ management:
       # A mail server that is down is not the application's health: it must not fail the probe.
       enabled: false
 
-# Calls between this backend and the security service, both ways. Each side checks the other's
+# Calls between this backend and the other services, both ways: the security service (deletion
+# check, permissions, profiles) and the device service (home access). Each side checks the other's
 # network and the shared token; the reverse proxy never forwards /internal/**.
 internal-api:
-  # Same value in both services. Empty refuses every call to /internal/accounts/**, and the
-  # security service refuses every call of this backend.
+  # Same value in every service. Empty refuses every call to /internal/accounts/** and
+  # /internal/homes/**, and the security service refuses every call of this backend.
   # Generate with: openssl rand -hex 32
   token: ${INTERNAL_API_TOKEN:}
   allowed-networks: ${INTERNAL_API_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
 
 mqtt:
-  # The backend subscribes over the plain listener. Locally and in a compose deployment the
-  # broker runs next to the backend, so this connection never leaves the host; devices use TLS.
+  # The backend subscribes to the telemetry over the plain listener, to store the readings.
+  # Locally and in a compose deployment the broker runs next to it, so this connection never
+  # leaves the host; devices use TLS.
   broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}
-  # Suffixed with -telemetry and -status. Must differ per backend instance.
+  # Suffixed with -telemetry. Must differ per backend instance and from the device service's.
   client-id: ${MQTT_CLIENT_ID:energy-monitor-backend}
-  # Also the credentials the broker accepts for the backend: the broker asks
-  # /internal/mqtt/auth/user, and these are compared there, so they live in one place.
+  # The broker asks the device service whether these credentials are valid; it is given the same
+  # MQTT_BACKEND_USER and MQTT_BACKEND_PASS, and lets this user only read telemetry and status.
   username: ${MQTT_BACKEND_USER:em-backend}
   password: ${MQTT_BACKEND_PASS:change-me}
   topics:
     telemetry: energy-monitor/devices/+/telemetry
-    status: energy-monitor/devices/+/status
   qos: 0
   keep-alive-interval: 60
   clean-session: true
   connection-timeout: 30
-  broker-auth:
-    # Addresses allowed to call /internal/mqtt/auth/**: loopback and the private range Docker
-    # uses, where the broker container lives. Narrow it in production if the network allows it.
-    allowed-networks: ${MQTT_AUTH_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
 
 device:
-  connectivity:
-    # A device not heard from for this long is marked OFFLINE. Telemetry comes every 60 s at
-    # QoS 0, so one lost sample plus network jitter is tolerated before declaring it gone.
-    offline-after: ${DEVICE_OFFLINE_AFTER:PT150S}
-    check-interval: PT30S
-  provisioning:
-    # Broker address the web app writes to a module over Bluetooth when linking it. It must be
-    # reachable from the home network: the LAN IP of this PC in development, the public domain
-    # of the broker in production. Never localhost.
-    mqtt-host: ${DEVICE_MQTT_PUBLIC_HOST:}
-    mqtt-port: ${DEVICE_MQTT_PUBLIC_PORT:8883}
+  # The device service owns the devices: its internal API answers which device a reading comes
+  # from, its home and its name, and its events (energy-monitor.device) raise and close the
+  # connectivity alerts. Answers are reused for a while, and the last one is served while the
+  # service does not answer.
+  service:
+    url: ${DEVICE_SERVICE_URL:http://localhost:8084}
+    connect-timeout: 1s
+    read-timeout: 2s
+    ttl: 30s
+    stale-ttl: 1h
+
+measurement:
+  # A reading older than this no longer counts as the current power of a home: the threshold after
+  # which the device service marks a silent device offline (its DEVICE_OFFLINE_AFTER).
+  current-power-freshness: ${DEVICE_OFFLINE_AFTER:PT150S}
 
 alert:
   limit:

@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Devices of a home and when each was linked, read from the device module.
+ * Devices of a home and when each was linked, read from the device service ({@code device::api}).
  */
 public interface DeviceLookupPort {
 

@@ -27,6 +27,10 @@ internal-api:
   # and has to be the same value on every machine. Local and production use INTERNAL_API_TOKEN.
   token: test-only-internal-token
 
+device.service:
+  # Nothing listens here, so the suite never reaches a device service running on this machine.
+  url: http://127.0.0.1:9
+
 mqtt:
   # Un client-id propio, y no decorativo: el broker expulsa a todo cliente que se
   # conecte con un id que ya está en uso. Cada prueba que levanta el contexto
@@ -45,6 +49,14 @@ spring.rabbitmq.listener.simple:
   # No broker is needed to run the suite, and a test context must not take messages from a queue
   # a running backend consumes. The consumers are exercised by calling them directly.
   auto-startup: false
+
+messaging.home:
+  # The suite deletes homes in the shared database, and their home.deleted rows must not reach a
+  # broker that a running device service consumes. Stored already discarded, a backend started
+  # later on the same database never publishes them either. The relay is covered by
+  # HomeOutboxRelayTest.
+  relay-enabled: false
+  discard-written: true
 
 management.health.rabbit:
   enabled: false

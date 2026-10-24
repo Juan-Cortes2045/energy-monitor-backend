@@ -4,33 +4,30 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Public API of the Devices bounded context.
+ * Devices as the other modules of this backend read them. They live in the device service, which
+ * answers through its internal API; see {@code RemoteDeviceApi}.
  */
 public interface DeviceApi {
 
+    /**
+     * @param deviceId the device
+     * @return the device, empty when it does not exist
+     * @throws DeviceServiceUnavailableException when the service does not answer and nothing was
+     *                                           kept from an earlier answer
+     */
     Optional<DeviceDto> findByDeviceId(String deviceId);
 
-    Optional<DeviceDto> findByDeviceCode(String deviceCode);
-
-    boolean validateCredentials(String deviceCode, String apiKey);
-
+    /**
+     * @param deviceId the device
+     * @return the home it is linked to, empty when it does not exist or is linked to none
+     * @throws DeviceServiceUnavailableException as {@link #findByDeviceId}
+     */
     Optional<String> getHomeId(String deviceId);
 
     /**
      * The devices currently linked to a home.
+     *
+     * @throws DeviceServiceUnavailableException as {@link #findByDeviceId}
      */
     List<DeviceDto> findByHome(String homeId);
-
-    /**
-     * Records that the device was heard from or announced a state change.
-     *
-     * <p>Only transitions create a row in {@code device_status_log}: repeated {@code ONLINE}
-     * reports refresh the {@code last_seen} of the current row. The time of the report is the
-     * server clock, never the device timestamp, so replayed offline samples do not move it.
-     *
-     * @param deviceId the device
-     * @param status   the reported state
-     * @param rssi     signal strength in dBm, may be null
-     */
-    void recordConnectivity(String deviceId, ConnectivityStatus status, Integer rssi);
 }
