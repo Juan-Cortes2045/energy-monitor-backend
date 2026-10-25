@@ -3,13 +3,8 @@ package com.energymonitor.measurement.api;
 import java.time.Instant;
 
 /**
- * Application event published after a measurement is persisted.
- *
- * <p>This is the integration seam the class diagram models as the Observer pattern:
- * {@code AlertObserver} and {@code RecommendationObserver} belong to the alert and
- * recommendation bounded contexts, so they are expected to subscribe to this event
- * (e.g. through a Spring Modulith event listener) instead of registering in-process
- * observers here.
+ * A reading the measurement service stored, heard from its {@code measurement.recorded} message
+ * and published again in memory, so the alert module evaluates it as it always did.
  *
  * @param idMeasurement identifier of the recorded measurement
  * @param deviceId      identifier of the measuring device

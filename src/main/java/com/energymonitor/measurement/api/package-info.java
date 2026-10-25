@@ -1,13 +1,11 @@
 /**
- * Public API of the Monitoring and Measurements bounded context.
+ * Public API of the Monitoring and Measurements bounded context, as this backend sees it.
  *
  * <p>Types in this package are exposed to other modules via Spring Modulith's
- * {@code @NamedInterface}. Other modules should depend on {@code measurement::api}
- * instead of {@code measurement} directly.
- *
- * <p>The package also carries the integration surface planned for the {@code alert}
- * and {@code recommendation} modules: the {@code RiskConsumption} enum they need to
- * classify readings and the {@code MeasurementRecorded} event they will subscribe to.
+ * {@code @NamedInterface}: {@link com.energymonitor.measurement.api.MeasurementApi} to classify a
+ * reading and read the energy of devices, the {@code RiskConsumption} classification, and the
+ * {@code MeasurementRecorded} event the alert module listens to, which arrives from the
+ * measurement service.
  */
 @NamedInterface
 package com.energymonitor.measurement.api;

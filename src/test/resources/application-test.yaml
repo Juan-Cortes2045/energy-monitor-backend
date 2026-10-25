@@ -31,15 +31,9 @@ device.service:
   # Nothing listens here, so the suite never reaches a device service running on this machine.
   url: http://127.0.0.1:9
 
-mqtt:
-  # Un client-id propio, y no decorativo: el broker expulsa a todo cliente que se
-  # conecte con un id que ya está en uso. Cada prueba que levanta el contexto
-  # completo abría sus adaptadores con el id de producción, así que expulsaba al
-  # backend que estuviera corriendo, este reconectaba, expulsaba al de la prueba,
-  # y el broker queda echando "already connected, closing old connection" en bucle
-  # mientras los dos adaptadores pierden y recuperan la conexión cada pocos
-  # segundos. La prueba no necesita ese cliente, solo un id que nadie más use.
-  client-id: energy-monitor-backend-test
+measurement.service:
+  # Nothing listens here, so the suite never reaches a measurement service running on this machine.
+  url: http://127.0.0.1:9
 
 recommendation:
   # The hourly evaluation is exercised by unit tests; it must not run against the shared database.
