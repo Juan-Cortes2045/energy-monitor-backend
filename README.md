@@ -10,8 +10,11 @@ service (`../en-monitor-security-service`). This backend validates the access to
 asks it for permissions, names and administrators, and hears its account events over RabbitMQ
 (section 12). The devices, their credentials, the broker's authentication and their connectivity
 are served by the device service (`../en-monitor-device-service`, `:8084`); this backend reads
-devices from it and hears its events. The web and mobile clients reach the three through the API
-gateway (`../en-monitor-api-gateway`) on `:8080`; this backend listens on `:8083`.
+devices from it and hears its events. The readings, their MQTT ingestion and the consumption of a
+home are served by the measurement service (`../en-monitor-measurement-service`, `:8085`); this
+backend reads consumption levels and energy from it and hears every stored reading, for the alerts
+and the recommendations. The web and mobile clients reach the four through the API gateway
+(`../en-monitor-api-gateway`) on `:8080`; this backend listens on `:8083`.
 
 The modules, the two proxies and the migration status are in
 [`docs/Architecture.md`](docs/Architecture.md).
@@ -19,7 +22,7 @@ The modules, the two proxies and the migration status are in
 ## Requirements
 
 - Java 21 or later
-- Docker and Docker Compose, for MySQL 8 and the MQTT broker, which run from the
+- Docker and Docker Compose, for MySQL 8 and RabbitMQ, which run from the
   [energy-monitor-infra](https://github.com/Juan-Cortes2045/energy-monitor-infra) repository
   cloned at `../../infra`
 - The security service (`../en-monitor-security-service`) running, for anything that signs in
@@ -42,13 +45,13 @@ see `infra/README.md`); the steps below are for working on the backend from this
 | 4 | Point at the public key of the security service; same `INTERNAL_API_TOKEN` in both | section 4 |
 | 5 | Mail account (Gmail app password) | section 5 |
 | 6 | `./mvnw spring-boot:run` → `http://localhost:8083/actuator/health` says `UP`; start the security service and the gateway too | section 6 |
-| 7 | MQTT broker: already started in step 2; firewall rule on Linux | section 9 |
+| 7 | Readings: run the device and measurement services; this backend does not use the broker | section 9 |
 | 8 | Optional: VAPID keys for browser push | section 10 |
 | 9 | Web app: `npm install`, `npm run dev` | `frontend/energy-monitor-web/README.md` |
 | 10 | Firmware: flash the ESP32 and link it from the web | `firmware/README.md` |
 
-The backend has to be up before the broker accepts any connection: Mosquitto asks it to
-authenticate every client, including the backend itself (it retries every 10 s on its own).
+The broker asks the device service to authenticate every client, so it has to be up before any
+module connects (Mosquitto retries every 10 s on its own).
 
 ## 1. Database credentials
 
@@ -275,35 +278,22 @@ carries a test-only `INTERNAL_API_TOKEN` and points the security service at an a
 nothing listens, so the suite never reaches a service running on this machine. Neither the
 security service nor RabbitMQ is needed.
 
-## 9. MQTT broker and devices
+## 9. Devices and readings
 
 Devices (ESP32 + PZEM-004T) publish telemetry over **MQTT with TLS** to Eclipse Mosquitto, which
-runs from the `infra` repository. **The devices belong to the device service**
-(`en-monitor-device-service`, port 8084): it links modules to homes, issues their API keys,
-answers the broker's authentication and ACL (`/internal/mqtt/auth/**`), sends the unlink commands
-and keeps the connectivity. The device endpoints (`/api/v1/homes/{homeId}/devices/**`,
-`/api/v1/appliance-types`) are routed to it by the API gateway.
+runs from the `infra` repository. This backend does not connect to the broker:
 
-This backend only **stores the readings**: it subscribes to `energy-monitor/devices/+/telemetry`
-with its own MQTT user, which the broker lets read telemetry and status and nothing else. Each
-reading is stored once the device service confirms its device exists (section 12).
+- **The devices belong to the device service** (`en-monitor-device-service`, port 8084): it links
+  modules to homes, issues their API keys, answers the broker's authentication and ACL, sends the
+  unlink commands and keeps the connectivity.
+- **The readings belong to the measurement service** (`en-monitor-measurement-service`, port
+  8085): it subscribes to `energy-monitor/devices/+/telemetry`, stores every reading and serves the
+  measurement and consumption endpoints (`/api/v1/measurements/**`, `/api/v1/consumption-levels`,
+  `/api/v1/homes/{homeId}/consumption/**`).
 
-1. `.env`: `MQTT_BACKEND_USER` and `MQTT_BACKEND_PASS` (any random value). Give the device service
-   the same two values, since it is the one the broker asks.
-2. The broker was started in section 2, and the device service must be running for it to accept
-   any client. Check that the backend connected:
-
-   ```bash
-   cd ../../infra
-   docker compose logs -f mosquitto   # the backend shows up as energy-monitor-backend-telemetry
-   ```
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `MQTT_BROKER_URL` | `tcp://localhost:1883` | internal listener (plain, loopback only) |
-| `MQTT_BACKEND_USER` / `MQTT_BACKEND_PASS` | `em-backend` / `change-me` | backend credentials in the broker |
-| `MQTT_CLIENT_ID` | `energy-monitor-backend` | must differ per backend instance and from the device service's |
-| `DEVICE_OFFLINE_AFTER` | `PT150S` | a reading older than this is not the current power of a home |
+The API gateway routes those endpoints to each service. This backend reads devices and readings
+from them and hears their events (section 12): every stored reading reaches the alerts as
+`MeasurementRecorded`, as it did when the readings were stored here.
 
 Firmware, contract and pairing: `firmware/README.md` and the device service's README.
 
@@ -355,7 +345,7 @@ stores a recommendation when a rule matches:
 - The rules need history: the evening-peak and standby rules work after a few days of readings,
   the week-over-week comparison after two weeks and the per-device comparison after four.
 
-## 12. The security and device services
+## 12. The security, device and measurement services
 
 ### Messages (RabbitMQ)
 
@@ -389,8 +379,8 @@ them through `DeviceApi`, answered by its internal API (`device/adapter/out/remo
 
 | Call | Used by | Reused for | Without an answer |
 |---|---|---|---|
-| `GET /internal/devices/{id}` | readings, alerts, notifications, recommendations (existence, name, installation date, home) | 30 s, unknown devices included | the last answer, kept 1 h; with none, the call fails |
-| `GET /internal/homes/{id}/devices` | readings and recommendations of a home | 30 s | the same |
+| `GET /internal/devices/{id}` | alerts, notifications, recommendations (existence, name, installation date, home) | 30 s, unknown devices included | the last answer, kept 1 h; with none, the call fails |
+| `GET /internal/homes/{id}/devices` | limit alerts and recommendations of a home | 30 s | the same |
 
 Its events arrive on the queue `energy-monitor-backend.device.events`, bound to
 `energy-monitor.device` (with a `.dlq`):
@@ -405,6 +395,30 @@ Settings: `DEVICE_SERVICE_URL` (`device.service.url`, default `http://localhost:
 `device.service.ttl`, `device.service.stale-ttl` and the timeouts (1 s connect, 2 s read). The
 calls carry `INTERNAL_API_TOKEN`. The test profile points the client at a port where nothing
 listens.
+
+### The measurement service
+
+The readings live in the measurement service (`en-monitor-measurement-service`, port 8085). The
+alerts and the recommendations read them through `MeasurementApi`, answered by its internal API
+(`measurement/adapter/out/remote`):
+
+| Call | Used by | Reused for | Without an answer |
+|---|---|---|---|
+| `GET /internal/consumption-levels` | the threshold alert classifies every reading (`[minLimit, maxLimit)`) | 10 min | the last levels, kept 24 h; with none, the reading goes back to the broker |
+| `GET /internal/measurements/hourly-energy` | consumption limit alerts, recommendations | never | the limit is checked on the next reading, the recommendations on the next run |
+| `GET /internal/measurements/reporting-devices` | recommendations | never | the same |
+
+Every stored reading arrives on the queue `energy-monitor-backend.measurement.recorded`, bound to
+`energy-monitor.measurement` with `measurement.recorded` (with a `.dlq`). It is published again in
+memory as `MeasurementRecorded`, in a transaction of its own, so the alert module evaluates it as
+before: threshold (one alert while it is pending, however many times the message arrives), daily
+or monthly limit and linked device. Declaring the queue is what lets the measurement service
+publish: until then its messages wait in its outbox.
+
+Settings: `MEASUREMENT_SERVICE_URL` (`measurement.service.url`, default `http://localhost:8085`),
+`measurement.service.levels-ttl`, `levels-stale-ttl` and the timeouts (1 s connect, 5 s read: the
+energy of weeks for the recommendations is the slowest call). The calls carry
+`INTERNAL_API_TOKEN`. The test profile points the client at a port where nothing listens.
 
 ### Home events this backend publishes
 
@@ -426,7 +440,7 @@ as `home.deleted` on the topic exchange `energy-monitor.home`, with
 - `RabbitHomeOutboxPublisherBrokerTest` runs against the RabbitMQ of infra when it is reachable
   (export `RABBITMQ_USERNAME` and `RABBITMQ_PASSWORD`) and is skipped otherwise.
 
-### Internal calls with the security and device services
+### Internal calls with the security, device and measurement services
 
 The security service asks this backend `GET /internal/accounts/{id}/deletion-check` before it
 deletes an account: `204` lets it go, `409` with `{message}` refuses it (the account is the only
@@ -436,8 +450,11 @@ token configured in the security service. Without a token every call is refused.
 proxy must not forward `/internal/**`.
 
 The device service asks `GET /internal/homes/{homeId}/access?userId=` before it lists or changes
-the devices of a home. It always answers `200` with `{exists, member, owner}` (a deleted home
-grants nothing), behind the same filter chain and token as the deletion check.
+the devices of a home, and the measurement service before it shows the consumption of a home or a
+device. It always answers `200` with `{exists, member, owner}` (a deleted home grants nothing),
+behind the same filter chain and token as the deletion check. The measurement service also asks
+`GET /internal/homes/{homeId}/thresholds` for the limits of the summary: `200` with
+`{dailyLimit, monthlyLimit, limitPeriod}`, or `404` when the home has none.
 
 In the other direction this backend asks the security service, with the same token
 (`security/adapter/out/remote`):
@@ -507,7 +524,7 @@ inside the image, and any profile other than `local` works (`prod`).
 | Tests fail with `Access denied for user 'energymonitor'` | `.env` sets `SPRING_DATASOURCE_USERNAME` to something other than `energy_app`: remove it |
 | `Too many connections` in a few persistence tests | the backend is running while the suite runs; both use the same MySQL. Run the failing class alone or stop the backend |
 | Broker logs `context deadline exceeded` calling `device:8084` | the device service is not running, so the broker cannot authenticate anybody (see its README for the ufw rule in development mode) |
-| Readings stop being stored, log `Ignoring telemetry of unknown device` or `device service did not answer` | the device service is down and this backend has nothing cached for that device, or `INTERNAL_API_TOKEN` differs between the two `.env` files |
+| Readings arrive but no threshold alert is raised, log `measurement service did not answer` | the measurement service is down and no consumption levels were kept, or `INTERNAL_API_TOKEN` differs between the `.env` files; the readings wait in `energy-monitor-backend.measurement.recorded` (or its `.dlq`) |
 | Web app: every request fails or the browser reports CORS | the API gateway is not running on 8080, or `SECURITY_CORS_ALLOWED_ORIGINS` of its `.env` does not list the web's origin |
 | Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: update `DEVICE_MQTT_PUBLIC_HOST` in `infra/.env`, re-run `infra/prepare.sh` and restart the broker |
 | Device logs `rc=4` / `rc=5` | `device_code` / API key refused by the device service (link it again from the web) |
