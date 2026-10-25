@@ -109,8 +109,11 @@ boundary: other contexts are referenced by identifier.
 | Device service: deployment | Gateway routes, infra container, Mosquitto pointing at the device service | Done |
 | Measurement service: limits | `GET /internal/homes/{homeId}/thresholds` for the consumption summary | Done |
 | Measurement service: removal | Measurement module removed; levels and energy read from the service, `measurement.recorded` consumed here; no MQTT client left | Done |
-| Measurement service: deployment | Gateway routes, infra container, ingestion turned on there | In progress |
-| End-to-end check | Whole stack in Docker | In progress |
+| Measurement service: deployment | Gateway routes, infra container, ingestion turned on there | Done |
+| End-to-end check | Whole stack in Docker (`infra/e2e/device-flow.sh`, `infra/e2e/measurement-flow.sh`) | Done |
+| Home, alert, recommendation, notification | Migration of the four remaining modules to microservices | In progress (teammate) |
+
+Everything above marked Done is in production since 24-Oct-2026.
 
 ## Working principles
 
