@@ -8,8 +8,7 @@ package com.energymonitor.measurement.api;
  * it in the alert module, and recommendations reason about it too. Keeping it in
  * {@code measurement::api} lets those modules consume it without touching module internals.
  *
- * <p>Maps to the {@code ENUM('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')} column of
- * {@code consumption_level}.
+ * <p>The names of the {@code consumption_level} catalogue of the measurement service.
  */
 public enum RiskConsumption {
     LOW,
