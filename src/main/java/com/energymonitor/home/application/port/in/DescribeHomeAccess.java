@@ -1,8 +1,8 @@
 package com.energymonitor.home.application.port.in;
 
 /**
- * Input port for the device service asking what a caller may do in a home: list its devices as a
- * member, or change them as an owner.
+ * Input port for the device and measurement services asking what a caller may do in a home: list
+ * its devices or read its consumption as a member, or change its devices as an owner.
  */
 public interface DescribeHomeAccess {
 

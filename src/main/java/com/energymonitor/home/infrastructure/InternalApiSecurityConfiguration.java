@@ -19,8 +19,9 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.IpAddressMatcher;
 
 /**
- * Security of the endpoints the other services call: the deletion check of the security service
- * and the home access check of the device service.
+ * Security of the endpoints the other services call: the deletion check of the security service,
+ * the home access check of the device and measurement services, and the home limits the
+ * measurement service shows.
  *
  * <p>Those services present no JWT, so these paths get their own filter chain, evaluated
  * before the API chain. The caller must come from {@code internal-api.allowed-networks}
