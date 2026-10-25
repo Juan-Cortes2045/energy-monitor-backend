@@ -141,6 +141,9 @@ messaging:
   # Topic exchange the device service publishes to (device.linked, device.unlinked,
   # device.connectivity-lost, device.connectivity-restored).
   device-exchange: energy-monitor.device
+  # Topic exchange the measurement service publishes every stored reading to
+  # (measurement.recorded), which the alerts evaluate.
+  measurement-exchange: energy-monitor.measurement
   # Topic exchange of the home events this backend announces (home.deleted), written to the
   # home_outbox table with the change and relayed every second, up to 50 messages, each confirmed
   # by the broker within 5 s.
@@ -162,32 +165,15 @@ management:
       enabled: false
 
 # Calls between this backend and the other services, both ways: the security service (deletion
-# check, permissions, profiles) and the device service (home access). Each side checks the other's
-# network and the shared token; the reverse proxy never forwards /internal/**.
+# check, permissions, profiles), the device service (home access; devices) and the measurement
+# service (home access and limits; levels and energy). Each side checks the other's network and
+# the shared token; the reverse proxy never forwards /internal/**.
 internal-api:
   # Same value in every service. Empty refuses every call to /internal/accounts/** and
-  # /internal/homes/**, and the security service refuses every call of this backend.
+  # /internal/homes/**, and the other services refuse every call of this backend.
   # Generate with: openssl rand -hex 32
   token: ${INTERNAL_API_TOKEN:}
   allowed-networks: ${INTERNAL_API_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
-
-mqtt:
-  # The backend subscribes to the telemetry over the plain listener, to store the readings.
-  # Locally and in a compose deployment the broker runs next to it, so this connection never
-  # leaves the host; devices use TLS.
-  broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}
-  # Suffixed with -telemetry. Must differ per backend instance and from the device service's.
-  client-id: ${MQTT_CLIENT_ID:energy-monitor-backend}
-  # The broker asks the device service whether these credentials are valid; it is given the same
-  # MQTT_BACKEND_USER and MQTT_BACKEND_PASS, and lets this user only read telemetry and status.
-  username: ${MQTT_BACKEND_USER:em-backend}
-  password: ${MQTT_BACKEND_PASS:change-me}
-  topics:
-    telemetry: energy-monitor/devices/+/telemetry
-  qos: 0
-  keep-alive-interval: 60
-  clean-session: true
-  connection-timeout: 30
 
 device:
   # The device service owns the devices: its internal API answers which device a reading comes
@@ -202,9 +188,16 @@ device:
     stale-ttl: 1h
 
 measurement:
-  # A reading older than this no longer counts as the current power of a home: the threshold after
-  # which the device service marks a silent device offline (its DEVICE_OFFLINE_AFTER).
-  current-power-freshness: ${DEVICE_OFFLINE_AFTER:PT150S}
+  # The measurement service owns the readings: its internal API answers the consumption levels,
+  # the energy of devices hour by hour and the devices that report, and its events
+  # (energy-monitor.measurement) bring every stored reading to the alerts. The levels are reused
+  # for a while, and the last ones are served while the service does not answer.
+  service:
+    url: ${MEASUREMENT_SERVICE_URL:http://localhost:8085}
+    connect-timeout: 1s
+    read-timeout: 5s
+    levels-ttl: 10m
+    levels-stale-ttl: 24h
 
 alert:
   limit:
