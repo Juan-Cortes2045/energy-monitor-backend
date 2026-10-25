@@ -178,8 +178,9 @@ current shell, in which case export `MAIL_USERNAME` and `MAIL_PASSWORD` yourself
 
 The application starts with no mail configured. A send attempt is then recorded
 as `FAILED` in the `notification` table with the reason, rather than breaking
-the context. That is deliberate: the security service answers the recovery request with `202`
-whether or not the account exists, so a mail failure must never change what the caller sees.
+the context. That is deliberate: the security service has already answered the recovery request
+(`202` for a registered address, `404` when no account uses it) before the mail is sent, so a mail
+failure must never change what the caller sees.
 
 Every attempt is written to `notification` before the message leaves and closed
 afterwards, so `SENT` and `FAILED` are both auditable and a retry is possible.
