@@ -370,6 +370,35 @@ What the security service announces arrives here through RabbitMQ, on the topic 
   consumers are active, so **without a reachable broker `/actuator/health` reports DOWN**. The
   test profile does not start them and needs no broker.
 
+### Alert and recommendation events this backend publishes
+
+Every alert raised and every recommendation created is also announced over RabbitMQ, for the
+notification service (`en-monitor-notification-service`), which delivers it to the members of
+the home:
+
+| Exchange (topic) | Routing key = message type | Body |
+|---|---|---|
+| `energy-monitor.alert` | `alert.raised` | `{idAlert, homeId, deviceId, type, messageKey, dateTime}` |
+| `energy-monitor.recommendation` | `recommendation.created` | `{idRecommendation, homeId, deviceId, type, messageKey, dateTime}` |
+
+- **Outbox** (module `outbox`, changelog `outbox-001`): the event is written to `backend_outbox`
+  when its alert or recommendation is stored, and a relay publishes it every second (up to 50 at a
+  time). A broker or a notification service that is down delays an event but does not lose it.
+- **At least once, in order:** a message is marked published only when the broker confirms it
+  (correlated publisher confirms) **and** a queue took it. Until the notification service has
+  declared its queues the message comes back and stays pending; the first failure stops the run,
+  so a later message never overtakes it. `attempts` and `last_error` show why one is stuck. The
+  notification service drops a copy it already delivered.
+- **Off until the notification module is removed:** `ALERT_OUTBOX_RELAY_ENABLED`
+  (`messaging.outbox.relay-enabled`) defaults to `false`, because this backend's notification
+  module still delivers the alerts in process. The events are kept in `backend_outbox`
+  meanwhile; the relay is switched on in the deployment that removes the module, together with
+  the consumers of the notification service.
+- **Settings:** `messaging.alert-exchange`, `messaging.recommendation-exchange` and
+  `messaging.outbox.*` (`relay-enabled`, `poll-interval`, `batch-size`, `confirm-timeout`). The
+  test profile keeps the relay off and stores the rows already discarded, so the suite never
+  publishes to a broker a running notification service consumes.
+
 ### The device service
 
 The devices live in the device service (`en-monitor-device-service`, port 8084). This backend reads
