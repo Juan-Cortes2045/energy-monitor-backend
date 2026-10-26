@@ -187,6 +187,18 @@ device:
     ttl: 30s
     stale-ttl: 1h
 
+home:
+  # The home service, which owns the homes once this backend's home module is gone: its internal
+  # API answers a home and its members, what a user is in it and its consumption limits. Answers
+  # are reused for a while; the last home and limits are served while the service does not
+  # answer (what a user may do in a home never is).
+  service:
+    url: ${HOME_SERVICE_URL:http://localhost:8086}
+    connect-timeout: 1s
+    read-timeout: 2s
+    ttl: 30s
+    stale-ttl: 1h
+
 measurement:
   # The measurement service owns the readings: its internal API answers the consumption levels,
   # the energy of devices hour by hour and the devices that report, and its events

@@ -31,6 +31,10 @@ device.service:
   # Nothing listens here, so the suite never reaches a device service running on this machine.
   url: http://127.0.0.1:9
 
+home.service:
+  # Nothing listens here, so the suite never reaches a home service running on this machine.
+  url: http://127.0.0.1:9
+
 measurement.service:
   # Nothing listens here, so the suite never reaches a measurement service running on this machine.
   url: http://127.0.0.1:9
