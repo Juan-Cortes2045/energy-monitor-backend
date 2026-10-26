@@ -144,15 +144,6 @@ messaging:
   # Topic exchange the measurement service publishes every stored reading to
   # (measurement.recorded), which the alerts evaluate.
   measurement-exchange: energy-monitor.measurement
-  # Topic exchange of the home events this backend announces (home.deleted), written to the
-  # home_outbox table with the change and relayed every second, up to 50 messages, each confirmed
-  # by the broker within 5 s.
-  home:
-    exchange: energy-monitor.home
-    relay-enabled: true
-    poll-interval: PT1S
-    batch-size: 50
-    confirm-timeout: PT5S
 
 management:
   endpoints:
@@ -164,16 +155,14 @@ management:
       # A mail server that is down is not the application's health: it must not fail the probe.
       enabled: false
 
-# Calls between this backend and the other services, both ways: the security service (deletion
-# check, permissions, profiles), the device service (home access; devices) and the measurement
-# service (home access and limits; levels and energy). Each side checks the other's network and
-# the shared token; the reverse proxy never forwards /internal/**.
+# Calls from this backend to the other services: the security service (permissions, profiles),
+# the device service (devices), the measurement service (levels and energy) and the home service
+# (homes, members, limits). This backend serves no /internal/** of its own. The other services
+# check its network and the shared token; the reverse proxy never forwards /internal/**.
 internal-api:
-  # Same value in every service. Empty refuses every call to /internal/accounts/** and
-  # /internal/homes/**, and the other services refuse every call of this backend.
+  # Same value in every service. Empty makes the other services refuse every call of this backend.
   # Generate with: openssl rand -hex 32
   token: ${INTERNAL_API_TOKEN:}
-  allowed-networks: ${INTERNAL_API_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
 
 device:
   # The device service owns the devices: its internal API answers which device a reading comes
@@ -188,8 +177,8 @@ device:
     stale-ttl: 1h
 
 home:
-  # The home service, which owns the homes once this backend's home module is gone: its internal
-  # API answers a home and its members, what a user is in it and its consumption limits. Answers
+  # The home service owns the homes: its internal API answers a home and its members, what a user
+  # is in it and its consumption limits. Answers
   # are reused for a while; the last home and limits are served while the service does not
   # answer (what a user may do in a home never is).
   service:
