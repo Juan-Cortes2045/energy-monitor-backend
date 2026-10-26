@@ -177,8 +177,8 @@ device:
     stale-ttl: 1h
 
 home:
-  # The home service owns the homes: its internal API answers a home and its members, what a user
-  # is in it and its consumption limits. Answers
+  # The home service, which owns the homes once this backend's home module is gone: its internal
+  # API answers a home and its members, what a user is in it and its consumption limits. Answers
   # are reused for a while; the last home and limits are served while the service does not
   # answer (what a user may do in a home never is).
   service:
