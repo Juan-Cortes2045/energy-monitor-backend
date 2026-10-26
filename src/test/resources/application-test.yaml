@@ -48,13 +48,5 @@ spring.rabbitmq.listener.simple:
   # a running backend consumes. The consumers are exercised by calling them directly.
   auto-startup: false
 
-messaging.home:
-  # The suite deletes homes in the shared database, and their home.deleted rows must not reach a
-  # broker that a running device service consumes. Stored already discarded, a backend started
-  # later on the same database never publishes them either. The relay is covered by
-  # HomeOutboxRelayTest.
-  relay-enabled: false
-  discard-written: true
-
 management.health.rabbit:
   enabled: false

@@ -233,12 +233,12 @@ set in the gateway's `.env` instead.
 ## 7. Running behind a reverse proxy
 
 The application reads the caller's address from `request.getRemoteAddr()` and **ignores
-`X-Forwarded-For`**: a header the client sets is not evidence of anything. The internal routes
-(`/internal/accounts/**` and `/internal/homes/**`) trust a caller partly by that address, so
-behind a proxy every request would look like it came from the proxy. A public reverse proxy must
-therefore **never forward `/internal/**`**; the web image's nginx forwards `/api/` only, and the
-API gateway refuses `/internal/**` outright. This backend keeps ignoring `X-Forwarded-For` behind
-the gateway too: it limits nothing by address, so it has no use for the caller's.
+`X-Forwarded-For`**: a header the client sets is not evidence of anything. It serves no
+`/internal/**` route of its own (those of the other services trust a caller partly by its
+address), and a public reverse proxy must **never forward `/internal/**`** to any of them; the web
+image's nginx forwards `/api/` only, and the API gateway refuses `/internal/**` outright. This
+backend keeps ignoring `X-Forwarded-For` behind the gateway too: it limits nothing by address, so
+it has no use for the caller's.
 
 ## 8. Running the tests
 
@@ -346,7 +346,7 @@ stores a recommendation when a rule matches:
 - The rules need history: the evening-peak and standby rules work after a few days of readings,
   the week-over-week comparison after two weeks and the per-device comparison after four.
 
-## 12. The security, device and measurement services
+## 12. The security, device, measurement and home services
 
 ### Messages (RabbitMQ)
 
@@ -357,7 +357,6 @@ What the security service announces arrives here through RabbitMQ, on the topic 
 |---|---|---|
 | `energy-monitor-backend.notification.account-events` | `account.registered`, `account.administered`, `account.deleted` | In-app notices to the administrators; a deleted account's mail and push preferences and devices are dropped |
 | `energy-monitor-backend.notification.mail` | `mail.email-verification`, `mail.password-reset` | Mails the code |
-| `energy-monitor-backend.home.account-deleted` | `account.deleted` | Drops the memberships and the homes nobody else is left in |
 
 - The queues are declared here at startup, durable, each with a `.dlq` dead-letter queue: a
   message that fails three attempts (1, 2 and 4 s apart) is moved there instead of blocking the
@@ -365,10 +364,8 @@ What the security service announces arrives here through RabbitMQ, on the topic 
 - A message may arrive twice. The administrator notices are written once (same account, message
   and instant), a mail request reuses its message id as the id of the delivery record, and the
   account cleanup finds nothing left to remove the second time.
-- The security service asks first whether an account may go (below) and does not delete the only
-  owner of a home that still has other members. If one slips through anyway (a member joined in
-  between), the oldest remaining member becomes the owner and `HomeOwnershipTransferred` is
-  published, so a home is never left without one.
+- The memberships and the homes of a deleted account are the home service's: it consumes
+  `account.deleted` on a queue of its own.
 - Connection: `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USERNAME` and `RABBITMQ_PASSWORD`. The
   consumers are active, so **without a reachable broker `/actuator/health` reports DOWN**. The
   test profile does not start them and needs no broker.
@@ -423,9 +420,10 @@ energy of weeks for the recommendations is the slowest call). The calls carry
 
 ### The home service
 
-The homes are moving to the home service (`en-monitor-home-service`, port 8086). Its client is
-already here, in `home/adapter/out/remote`, and takes over `HomeApi` when this backend's home module
-is removed:
+The homes live in the home service (`en-monitor-home-service`, port 8086): their members, roles,
+ownership, thresholds and types, the `home.deleted` events and the cleanup of deleted accounts.
+The alerts, the notifications and the recommendations read them through `HomeApi`, answered by its
+internal API (`home/adapter/out/remote`):
 
 | Call | Answers | Used by | Reused for | Without an answer |
 |---|---|---|---|---|
@@ -441,44 +439,12 @@ Settings: `HOME_SERVICE_URL` (`home.service.url`, default `http://localhost:8086
 `home.service.ttl`, `home.service.stale-ttl` and the timeouts (1 s connect, 2 s read). The calls
 carry `INTERNAL_API_TOKEN`. The test profile points the client at a port where nothing listens.
 
-### Home events this backend publishes
+### Internal calls with the other services
 
-A deleted home, by its owner or because the account of its only owner was deleted, is announced
-as `home.deleted` on the topic exchange `energy-monitor.home`, with
-`{homeId, deletedBy, deletedAt}`. The device service consumes it and unlinks the home's modules.
-
-- **Transactional outbox:** the message is written to `home_outbox` (changelog `home-007`) in the
-  transaction that deletes the home, and a relay publishes it every second (up to 50 at a time).
-  A home is never deleted without its message, and no message is sent for a deletion that rolled
-  back.
-- **At least once, in order:** a message is marked published only when the broker confirms it
-  (correlated publisher confirms) **and** a queue took it. Until the device service has declared
-  its queue the message comes back and stays pending; the first failure stops the run, so a later
-  message never overtakes it. `attempts` and `last_error` show why one is stuck.
-- **Settings:** `messaging.home.*` (exchange, `relay-enabled`, `poll-interval`, `batch-size`,
-  `confirm-timeout`). The test profile turns the relay off and stores the rows already discarded,
-  so the suite never publishes to a broker a running device service consumes.
-- `RabbitHomeOutboxPublisherBrokerTest` runs against the RabbitMQ of infra when it is reachable
-  (export `RABBITMQ_USERNAME` and `RABBITMQ_PASSWORD`) and is skipped otherwise.
-
-### Internal calls with the security, device and measurement services
-
-The security service asks this backend `GET /internal/accounts/{id}/deletion-check` before it
-deletes an account: `204` lets it go, `409` with `{message}` refuses it (the account is the only
-owner of a home with other members). The path has its own filter chain: the caller must come from
-`INTERNAL_API_ALLOWED_NETWORKS` **and** send `INTERNAL_API_TOKEN` in `X-Internal-Token`, the same
-token configured in the security service. Without a token every call is refused. The reverse
-proxy must not forward `/internal/**`.
-
-The device service asks `GET /internal/homes/{homeId}/access?userId=` before it lists or changes
-the devices of a home, and the measurement service before it shows the consumption of a home or a
-device. It always answers `200` with `{exists, member, owner}` (a deleted home grants nothing),
-behind the same filter chain and token as the deletion check. The measurement service also asks
-`GET /internal/homes/{homeId}/thresholds` for the limits of the summary: `200` with
-`{dailyLimit, monthlyLimit, limitPeriod}`, or `404` when the home has none.
-
-In the other direction this backend asks the security service, with the same token
-(`security/adapter/out/remote`):
+This backend serves no `/internal/**` route: the deletion check, the home access and the limits of
+a home that the security, device and measurement services ask are the home service's. It only
+calls the other services, with `INTERNAL_API_TOKEN` in `X-Internal-Token`. The security service,
+with the same token (`security/adapter/out/remote`):
 
 | Route of the security service | Used for | Cached | When it does not answer |
 |---|---|---|---|
