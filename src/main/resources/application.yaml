@@ -42,14 +42,14 @@ spring:
           writetimeout: 5000
 
   # Message broker (RabbitMQ, from infra): account events and mail requests published by the
-  # security service, and the home events this backend publishes. Each consumer declares and
-  # binds its own queue.
+  # security service, and the alert and recommendation events this backend publishes. Each
+  # consumer declares and binds its own queue.
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:energy-monitor}
     password: ${RABBITMQ_PASSWORD:}
-    # A home message is marked as published only after the broker confirms it and a queue took it
+    # An outbox message is marked as published only after the broker confirms it and a queue took it
     # (correlated: the return of an unrouted message is known before the confirmation completes).
     publisher-confirm-type: correlated
     publisher-returns: true
@@ -144,6 +144,18 @@ messaging:
   # Topic exchange the measurement service publishes every stored reading to
   # (measurement.recorded), which the alerts evaluate.
   measurement-exchange: energy-monitor.measurement
+  # Topic exchanges this backend announces its alerts (alert.raised) and recommendations
+  # (recommendation.created) to, through the outbox; the notification service delivers them.
+  alert-exchange: energy-monitor.alert
+  recommendation-exchange: energy-monitor.recommendation
+  outbox:
+    # Off while this backend still has its notification module, which delivers the alerts itself:
+    # the events are kept in backend_outbox meanwhile. Switched on in the deployment that removes
+    # the module, together with the consumers of the notification service.
+    relay-enabled: ${ALERT_OUTBOX_RELAY_ENABLED:false}
+    poll-interval: PT1S
+    batch-size: 50
+    confirm-timeout: PT5S
 
 management:
   endpoints:

@@ -50,3 +50,11 @@ spring.rabbitmq.listener.simple:
 
 management.health.rabbit:
   enabled: false
+
+messaging.outbox:
+  # The suite raises alerts and recommendations in the shared database, and their rows must not
+  # reach a broker that a running notification service consumes. Stored already discarded, a
+  # backend started later on the same database never publishes them either. The relay is covered
+  # by OutboxRelayTest.
+  relay-enabled: false
+  discard-written: true
