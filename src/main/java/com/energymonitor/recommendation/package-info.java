@@ -9,7 +9,8 @@
  * <p>Each new recommendation is published as {@code RecommendationCreated}
  * ({@code recommendation::api}); the notification module delivers it by mail and push.
  */
-@ApplicationModule(allowedDependencies = { "device :: api", "measurement :: api", "home :: api" })
+@ApplicationModule(allowedDependencies = { "device :: api", "measurement :: api", "home :: api",
+        "outbox :: api" })
 package com.energymonitor.recommendation;
 
 import org.springframework.modulith.ApplicationModule;
