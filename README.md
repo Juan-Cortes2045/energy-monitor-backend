@@ -420,9 +420,10 @@ energy of weeks for the recommendations is the slowest call). The calls carry
 
 ### The home service
 
-The homes are moving to the home service (`en-monitor-home-service`, port 8086). Its client is
-already here, in `home/adapter/out/remote`, and takes over `HomeApi` when this backend's home module
-is removed:
+The homes live in the home service (`en-monitor-home-service`, port 8086): their members, roles,
+ownership, thresholds and types, the `home.deleted` events and the cleanup of deleted accounts.
+The alerts, the notifications and the recommendations read them through `HomeApi`, answered by its
+internal API (`home/adapter/out/remote`):
 
 | Call | Answers | Used by | Reused for | Without an answer |
 |---|---|---|---|---|
@@ -438,44 +439,12 @@ Settings: `HOME_SERVICE_URL` (`home.service.url`, default `http://localhost:8086
 `home.service.ttl`, `home.service.stale-ttl` and the timeouts (1 s connect, 2 s read). The calls
 carry `INTERNAL_API_TOKEN`. The test profile points the client at a port where nothing listens.
 
-### Home events this backend publishes
+### Internal calls with the other services
 
-A deleted home, by its owner or because the account of its only owner was deleted, is announced
-as `home.deleted` on the topic exchange `energy-monitor.home`, with
-`{homeId, deletedBy, deletedAt}`. The device service consumes it and unlinks the home's modules.
-
-- **Transactional outbox:** the message is written to `home_outbox` (changelog `home-007`) in the
-  transaction that deletes the home, and a relay publishes it every second (up to 50 at a time).
-  A home is never deleted without its message, and no message is sent for a deletion that rolled
-  back.
-- **At least once, in order:** a message is marked published only when the broker confirms it
-  (correlated publisher confirms) **and** a queue took it. Until the device service has declared
-  its queue the message comes back and stays pending; the first failure stops the run, so a later
-  message never overtakes it. `attempts` and `last_error` show why one is stuck.
-- **Settings:** `messaging.home.*` (exchange, `relay-enabled`, `poll-interval`, `batch-size`,
-  `confirm-timeout`). The test profile turns the relay off and stores the rows already discarded,
-  so the suite never publishes to a broker a running device service consumes.
-- `RabbitHomeOutboxPublisherBrokerTest` runs against the RabbitMQ of infra when it is reachable
-  (export `RABBITMQ_USERNAME` and `RABBITMQ_PASSWORD`) and is skipped otherwise.
-
-### Internal calls with the security, device and measurement services
-
-The security service asks this backend `GET /internal/accounts/{id}/deletion-check` before it
-deletes an account: `204` lets it go, `409` with `{message}` refuses it (the account is the only
-owner of a home with other members). The path has its own filter chain: the caller must come from
-`INTERNAL_API_ALLOWED_NETWORKS` **and** send `INTERNAL_API_TOKEN` in `X-Internal-Token`, the same
-token configured in the security service. Without a token every call is refused. The reverse
-proxy must not forward `/internal/**`.
-
-The device service asks `GET /internal/homes/{homeId}/access?userId=` before it lists or changes
-the devices of a home, and the measurement service before it shows the consumption of a home or a
-device. It always answers `200` with `{exists, member, owner}` (a deleted home grants nothing),
-behind the same filter chain and token as the deletion check. The measurement service also asks
-`GET /internal/homes/{homeId}/thresholds` for the limits of the summary: `200` with
-`{dailyLimit, monthlyLimit, limitPeriod}`, or `404` when the home has none.
-
-In the other direction this backend asks the security service, with the same token
-(`security/adapter/out/remote`):
+This backend serves no `/internal/**` route: the deletion check, the home access and the limits of
+a home that the security, device and measurement services ask are the home service's. It only
+calls the other services, with `INTERNAL_API_TOKEN` in `X-Internal-Token`. The security service,
+with the same token (`security/adapter/out/remote`):
 
 | Route of the security service | Used for | Cached | When it does not answer |
 |---|---|---|---|
