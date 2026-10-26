@@ -14,8 +14,8 @@ import java.util.function.Function;
 
 /**
  * {@link DeviceApi} answered by the device service, for the modules that read devices: the
- * ingestion of readings (every telemetry message asks whether its device exists), the alerts, the
- * notifications and the recommendations.
+ * ingestion of readings (every telemetry message asks whether its device exists), the alerts and
+ * the recommendations.
  *
  * <p>Answers are reused for a short while, a device that does not exist included, so a module
  * publishing every minute costs one request per {@code ttl}, not one per reading. A device

@@ -5,8 +5,8 @@ import java.time.Instant;
 /**
  * Application event published after an alert is persisted.
  *
- * <p>The {@code notification} module is expected to subscribe to this event to deliver
- * the alert to the home's members; the payload already carries everything it needs to
+ * <p>Announced to the notification service as {@code alert.raised}, through the outbox, to
+ * deliver the alert to the home's members; the payload already carries everything it needs to
  * build the message without querying this module back.
  *
  * @param idAlert            identifier of the raised alert

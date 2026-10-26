@@ -21,7 +21,7 @@ import org.springframework.context.annotation.Configuration;
 @OpenAPIDefinition(info = @Info(
         title = "Energy Monitor API",
         version = "v1",
-        description = "Homes, devices, measurements, alerts, recommendations and notifications of "
+        description = "Alerts and recommendations of "
                 + "Energy Monitor. Sign-in, sessions and accounts are served by the security "
                 + "service, which issues the bearer token this API validates."))
 @SecurityScheme(

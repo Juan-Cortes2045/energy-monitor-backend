@@ -5,14 +5,12 @@ import com.energymonitor.recommendation.api.RecommendationCreated;
 import com.energymonitor.recommendation.application.port.out.RecommendationEventPort;
 import java.time.Instant;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 /**
- * Announces a new recommendation twice: to the Spring application context, for this backend's
- * notification module while it still exists, and as {@code recommendation.created} on the topic
- * exchange {@code messaging.recommendation-exchange}, through the outbox, for the notification
- * service.
+ * Announces a new recommendation as {@code recommendation.created} on the topic exchange
+ * {@code messaging.recommendation-exchange}, through the outbox, for the notification service,
+ * which delivers it to the members of the home.
  *
  * <p>The body of {@code recommendation.created} is the contract with the notification service:
  * {@code {idRecommendation, homeId, deviceId, type, messageKey, dateTime}}.
@@ -22,20 +20,17 @@ public class RecommendationEventAdapter implements RecommendationEventPort {
 
     static final String RECOMMENDATION_CREATED = "recommendation.created";
 
-    private final ApplicationEventPublisher publisher;
     private final OutboxWriter outbox;
     private final String exchange;
 
-    public RecommendationEventAdapter(ApplicationEventPublisher publisher, OutboxWriter outbox,
+    public RecommendationEventAdapter(OutboxWriter outbox,
                                       @Value("${messaging.recommendation-exchange}") String exchange) {
-        this.publisher = publisher;
         this.outbox = outbox;
         this.exchange = exchange;
     }
 
     @Override
     public void publish(RecommendationCreated event) {
-        publisher.publishEvent(event);
         outbox.write(exchange, RECOMMENDATION_CREATED, new RecommendationCreatedMessage(
                 event.idRecommendation(), event.homeId(), event.deviceId(), event.type().name(),
                 event.messageKey(), event.dateTime()));

@@ -1,6 +1,5 @@
 package com.energymonitor.security.infrastructure;
 
-import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -10,8 +9,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.access.ExceptionTranslationFilter;
-import tools.jackson.databind.ObjectMapper;
 
 /**
  * The HTTP security rules of this backend's API.
@@ -36,12 +33,9 @@ import tools.jackson.databind.ObjectMapper;
  *
  * <h2>Administration</h2>
  *
- * <p>The administrator notifications under {@code /api/v1/admin/notifications} additionally
- * require {@code USER.READ}, asked to the security service by {@link PermissionAuthorization};
- * when it does not answer, {@link SecurityServiceUnavailableFilter} answers 503. The directory of
- * users and roles is served by the security service itself. Any other admin route is denied
- * outright, so a new one stays closed until it is given a code here. Home-scoped roles (owner,
- * member) play no part in these rules.
+ * <p>This backend serves no admin route: the directory of users and roles is the security
+ * service's, and the administrator notifications are the notification service's. Every
+ * {@code /api/v1/admin/**} reaching it is denied outright.
  *
  * <h2>CORS</h2>
  *
@@ -76,24 +70,18 @@ public class SecurityFilterChainConfiguration {
     };
 
     /**
-     * Builds the filter chain protecting the API. {@code /internal/accounts/**} has a chain of
-     * its own, ahead of this one ({@code InternalApiSecurityConfiguration}).
+     * Builds the filter chain protecting the API.
      *
      * @param http            the builder Spring Security hands over
      * @param entryPoint      renders 401 in the shared error shape
      * @param accessDenied    renders 403 in the shared error shape
-     * @param permissions     enforces global permission codes on the admin routes
-     * @param objectMapper    writes the 503 body when a permission cannot be checked
-     * @param clock           timestamps that body
      * @return the installed filter chain
      * @throws Exception if the chain cannot be built
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                     JwtAuthenticationEntryPoint entryPoint,
-                                                    JwtAccessDeniedHandler accessDenied,
-                                                    PermissionAuthorization permissions,
-                                                    ObjectMapper objectMapper, Clock clock)
+                                                    JwtAccessDeniedHandler accessDenied)
             throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -110,17 +98,9 @@ public class SecurityFilterChainConfiguration {
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(entryPoint)
                         .accessDeniedHandler(accessDenied))
-                .addFilterBefore(new SecurityServiceUnavailableFilter(objectMapper, clock),
-                        ExceptionTranslationFilter.class)
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(INFRASTRUCTURE_ENDPOINTS).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/notifications")
-                        .access(permissions.require(PermissionCodes.USER_READ))
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/notifications/*/read")
-                        .access(permissions.require(PermissionCodes.USER_READ))
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/notifications/*")
-                        .access(permissions.require(PermissionCodes.USER_READ))
                         .requestMatchers("/api/v1/admin/**").denyAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(resourceServer -> resourceServer

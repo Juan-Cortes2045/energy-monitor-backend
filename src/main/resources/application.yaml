@@ -19,31 +19,9 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
 
-  # Email delivery. Every value comes from the environment: no credential is ever written here.
-  # The username and password default to empty on purpose, so the application still starts with
-  # no mail configured and a send attempt is recorded as failed in the notification log rather
-  # than breaking the whole context. The host is required for Spring to build a JavaMailSender
-  # at all, so it keeps a default.
-  mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    default-encoding: UTF-8
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-          # A silent SMTP server must not hold the request thread: bounded waits, then give up.
-          connectiontimeout: 5000
-          timeout: 5000
-          writetimeout: 5000
-
-  # Message broker (RabbitMQ, from infra): account events and mail requests published by the
-  # security service, and the alert and recommendation events this backend publishes. Each
-  # consumer declares and binds its own queue.
+  # Message broker (RabbitMQ, from infra): the device and measurement events this backend
+  # consumes, and the alert and recommendation events it publishes. Each consumer declares and
+  # binds its own queue.
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -77,17 +55,6 @@ security:
     issuer: https://energy-monitor-backend
     public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:}
 
-  # The internal API of the security service: permissions of the admin routes, profiles and
-  # administrators. Its answers are reused for a while, and a call that takes longer than the
-  # timeouts fails: the admin routes answer 503 and names are left out.
-  service:
-    url: ${SECURITY_SERVICE_URL:http://localhost:8082}
-    connect-timeout: 1s
-    read-timeout: 2s
-    permissions-ttl: 30s
-    administrators-ttl: 30s
-    profiles-ttl: 60s
-
   cors:
     # The origins allowed to call this API from a browser, comma separated. Empty by default,
     # which means no cross-origin caller is answered at all: fail closed until a deployment
@@ -107,36 +74,8 @@ security:
     allow-credentials: false
     max-age: 30m
 
-app:
-  mail:
-    # The address outgoing mail is sent from, which is the same account that owns the app password.
-    from: ${MAIL_FROM:}
-    # A record left PENDING claims a delivery that a previous run started and never finished. The
-    # sweep closes those as failed once they are older than this. Generous compared with any real
-    # SMTP conversation, so a slow send is not mistaken for a dead one; nothing is ever resent,
-    # because only the security service holds the code and its hash.
-    pending-threshold: 30m
-    sweep-delay: 5m
-
-notification:
-  # Base URL of the web app, for the links in alert mail.
-  web-url: ${NOTIFICATION_WEB_URL:http://localhost:5173}
-  push:
-    # VAPID key pair for Web Push (base64url: public = 65-byte point, private = 32-byte scalar).
-    # Generate once per environment (docs: devices/README.md) and never rotate it casually:
-    # browsers bind their subscription to the public key. Empty = push disabled.
-    vapid-public-key: ${NOTIFICATION_VAPID_PUBLIC_KEY:}
-    vapid-private-key: ${NOTIFICATION_VAPID_PRIVATE_KEY:}
-    subject: ${NOTIFICATION_VAPID_SUBJECT:mailto:support.energymonitor@gmail.com}
-    # Credential of the push relay the mobile apps publish through (Expo: "expo push token" in the
-    # project dashboard). Unlike the VAPID pair this is safe to rotate: it authorises us with the
-    # relay, it is not baked into any installation. Empty = app push disabled.
-    expo-access-token: ${EXPO_ACCESS_TOKEN:}
-
 messaging:
-  # Topic exchange the security service publishes to, and the dead-letter exchange of the queues
-  # this application consumes.
-  security-exchange: energy-monitor.security
+  # Dead-letter exchange of the queues this application consumes.
   dead-letter-exchange: energy-monitor-backend.dlx
   # Topic exchange the device service publishes to (device.linked, device.unlinked,
   # device.connectivity-lost, device.connectivity-restored).
@@ -149,10 +88,10 @@ messaging:
   alert-exchange: energy-monitor.alert
   recommendation-exchange: energy-monitor.recommendation
   outbox:
-    # Off while this backend still has its notification module, which delivers the alerts itself:
-    # the events are kept in backend_outbox meanwhile. Switched on in the deployment that removes
-    # the module, together with the consumers of the notification service.
-    relay-enabled: ${ALERT_OUTBOX_RELAY_ENABLED:false}
+    # The notification service is the only one that delivers the alerts and recommendations. Off
+    # only to go back to a notification service whose consumers are off: the events are kept in
+    # backend_outbox meanwhile.
+    relay-enabled: ${ALERT_OUTBOX_RELAY_ENABLED:true}
     poll-interval: PT1S
     batch-size: 50
     confirm-timeout: PT5S
@@ -162,14 +101,9 @@ management:
     web:
       exposure:
         include: health,info
-  health:
-    mail:
-      # A mail server that is down is not the application's health: it must not fail the probe.
-      enabled: false
 
-# Calls from this backend to the other services: the security service (permissions, profiles),
-# the device service (devices), the measurement service (levels and energy) and the home service
-# (homes, members, limits). This backend serves no /internal/** of its own. The other services
+# Calls from this backend to the other services: the device service (devices), the measurement
+# service (levels and energy) and the home service (homes, members, limits). This backend serves no /internal/** of its own. The other services
 # check its network and the shared token; the reverse proxy never forwards /internal/**.
 internal-api:
   # Same value in every service. Empty makes the other services refuse every call of this backend.

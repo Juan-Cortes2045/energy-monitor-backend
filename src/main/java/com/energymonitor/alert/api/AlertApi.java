@@ -6,8 +6,8 @@ import java.util.Optional;
 /**
  * Public API of the Alerts bounded context.
  *
- * <p>Other modules (e.g. {@code notification}) use this interface to read alert data
- * without depending on the module's internals.
+ * <p>Other modules use this interface to read alert data without depending on the module's
+ * internals.
  */
 public interface AlertApi {
 
