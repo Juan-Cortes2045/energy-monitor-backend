@@ -3,7 +3,6 @@ package com.energymonitor.notification.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
-import com.energymonitor.home.infrastructure.HomeMessagingConfiguration;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,17 +37,6 @@ class MessagingTopologyTest {
                         tuple(NotificationMessagingConfiguration.MAIL_QUEUE, "mail.password-reset"));
         assertDeadLettered(declarables, NotificationMessagingConfiguration.ACCOUNT_EVENTS_QUEUE);
         assertDeadLettered(declarables, NotificationMessagingConfiguration.MAIL_QUEUE);
-    }
-
-    @Test
-    @DisplayName("home hears account deletions")
-    void homeQueue() {
-        Declarables declarables = new HomeMessagingConfiguration().homeQueues(EXCHANGE, DLX);
-
-        assertThat(bindingsFrom(declarables, EXCHANGE))
-                .extracting(Binding::getDestination, Binding::getRoutingKey)
-                .containsExactly(tuple(HomeMessagingConfiguration.ACCOUNT_DELETED_QUEUE, "account.deleted"));
-        assertDeadLettered(declarables, HomeMessagingConfiguration.ACCOUNT_DELETED_QUEUE);
     }
 
     private static void assertDeadLettered(Declarables declarables, String queueName) {

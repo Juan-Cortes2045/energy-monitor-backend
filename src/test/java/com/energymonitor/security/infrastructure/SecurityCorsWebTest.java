@@ -190,7 +190,8 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Test
     void stampsTheAllowOriginHeaderOnARealCrossOriginResponse() throws Exception {
-        mvc.perform(get("/api/v1/homes")
+        // Any route this backend still serves; the homes are the home service's.
+        mvc.perform(get("/api/v1/notifications/preferences")
                         .header("Origin", ALLOWED)
                         .header("Authorization", bearer("USR0000001")))
                 .andExpect(status().isOk())
