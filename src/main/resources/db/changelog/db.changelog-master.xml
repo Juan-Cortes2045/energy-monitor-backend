@@ -6,11 +6,13 @@
         https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
         <!--
-            The measurement changesets (measurement-001 onwards) moved to the measurement service
-            with the same path, like the security and device ones: it applies them, and the rows of
-            the shared DATABASECHANGELOG keep recording them as applied.
+            The measurement changesets (measurement-001 onwards) and the home ones (home-001
+            onwards) moved to the measurement and home services with the same path, like the
+            security and device ones: each service applies its own, and the rows of the shared
+            DATABASECHANGELOG keep recording them as applied. alert, recommendation and notification
+            refer to a home by its identifier only, with no foreign key, so they do not need the
+            home tables.
         -->
-        <include file="home/home-changelog.xml" relativeToChangelogFile="true"/>
         <include file="alert/alert-changelog.xml" relativeToChangelogFile="true"/>
         <include file="recommendation/recommendation-changelog.xml" relativeToChangelogFile="true"/>
         <include file="notification/notification-changelog.xml" relativeToChangelogFile="true"/>
