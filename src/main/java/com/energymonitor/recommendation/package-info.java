@@ -7,7 +7,8 @@
  * devices, members and limits come from {@code device::api} and {@code home::api}.
  *
  * <p>Each new recommendation is published as {@code RecommendationCreated}
- * ({@code recommendation::api}); the notification module delivers it by mail and push.
+ * ({@code recommendation::api}) and written to the outbox as {@code recommendation.created}; the
+ * notification service delivers it by mail and push.
  */
 @ApplicationModule(allowedDependencies = { "device :: api", "measurement :: api", "home :: api",
         "outbox :: api" })

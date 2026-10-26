@@ -4,18 +4,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.containsStringIgnoringCase;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.energymonitor.recommendation.application.port.in.RecommendationInbox;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -43,6 +48,10 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Autowired
     private CorsConfigurationSource corsConfigurationSource;
+
+    /** Answers the recommendations of a home without asking the home service. */
+    @MockitoBean
+    private RecommendationInbox recommendations;
 
     private CorsConfiguration policyFor(String path) {
         return corsConfigurationSource
@@ -190,8 +199,11 @@ class SecurityCorsWebTest extends JwtKeyedTest {
 
     @Test
     void stampsTheAllowOriginHeaderOnARealCrossOriginResponse() throws Exception {
-        // Any route this backend still serves; the homes are the home service's.
-        mvc.perform(get("/api/v1/notifications/preferences")
+        // Any route this backend still serves; the homes are the home service's and the
+        // notification channels the notification service's.
+        given(recommendations.list(anyString(), anyString())).willReturn(List.of());
+
+        mvc.perform(get("/api/v1/recommendations").param("homeId", "HOM0000001")
                         .header("Origin", ALLOWED)
                         .header("Authorization", bearer("USR0000001")))
                 .andExpect(status().isOk())

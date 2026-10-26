@@ -7,9 +7,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /**
  * Settings of the outbox ({@code messaging.outbox.*}).
  *
- * @param relayEnabled   whether the relay runs. Off by default while this backend still has its
- *                       notification module, which delivers the alerts itself; on in the
- *                       deployment that removes it. Off in the test profile too, so a test never
+ * @param relayEnabled   whether the relay runs. On by default: the notification service is the
+ *                       only one that delivers the alerts. Off only to go back to a notification
+ *                       service whose consumers are off, and in the test profile, so a test never
  *                       publishes to a broker another process is consuming
  * @param pollInterval   how often the relay looks for pending messages
  * @param batchSize      the most messages one run publishes
@@ -20,7 +20,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  */
 @ConfigurationProperties("messaging.outbox")
 public record OutboxProperties(
-        @DefaultValue("false") boolean relayEnabled,
+        @DefaultValue("true") boolean relayEnabled,
         @DefaultValue("PT1S") Duration pollInterval,
         @DefaultValue("50") int batchSize,
         @DefaultValue("PT5S") Duration confirmTimeout,

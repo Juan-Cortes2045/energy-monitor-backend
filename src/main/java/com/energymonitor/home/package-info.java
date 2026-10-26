@@ -5,7 +5,7 @@
  * home types live in the home service ({@code en-monitor-home-service}), which also announces
  * deleted homes and cleans up after deleted accounts. What stays here is what this backend needs
  * of it: reading a home, its members and its limits through its internal API
- * ({@code adapter.out.remote}, cached), for the alerts, the notifications and the recommendations.
+ * ({@code adapter.out.remote}, cached), for the alerts and the recommendations.
  *
  * <p>Internal layout: {@code adapter}, {@code infrastructure}. Only the types exposed in
  * {@code api} are visible to other modules.

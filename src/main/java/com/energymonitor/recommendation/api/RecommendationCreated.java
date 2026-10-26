@@ -5,8 +5,9 @@ import java.time.Instant;
 /**
  * Application event published after a recommendation is persisted.
  *
- * <p>The {@code notification} module delivers it to the members of the home; the payload carries
- * everything it needs to build the message.
+ * <p>Announced to the notification service as {@code recommendation.created}, through the
+ * outbox, which delivers it to the members of the home; the payload carries everything it needs
+ * to build the message.
  *
  * @param idRecommendation identifier of the new recommendation
  * @param homeId           home it belongs to

@@ -17,16 +17,15 @@ import java.util.function.Function;
 
 /**
  * {@link HomeApi} answered by the home service, for the modules that read homes: the alerts (the
- * limit of a home, whether a user may see the alerts of a device), the notifications (who the
- * members are, the name of the home) and the recommendations.
+ * limit of a home, whether a user may see the alerts of a device) and the recommendations.
  *
  * <p>Answers are reused for a short while, a missing home included, so an alert evaluated on every
  * reading costs one request per {@code ttl}, not one per reading. A change in the home service
  * shows here once its entry expires.
  *
  * <p>For a home and its limits, the last answer is also kept for {@code staleTtl}: when the
- * service does not answer, that is what is served, so a short outage does not stop the alerts and
- * notifications of homes already known. Who may act on a home is never served stale: a removed
+ * service does not answer, that is what is served, so a short outage does not stop the alerts of
+ * homes already known. Who may act on a home is never served stale: a removed
  * member must not keep access because the service is down, so with nothing fresh that call throws
  * {@link HomeServiceUnavailableException}, as does any call with nothing kept.
  */
