@@ -421,6 +421,26 @@ Settings: `MEASUREMENT_SERVICE_URL` (`measurement.service.url`, default `http://
 energy of weeks for the recommendations is the slowest call). The calls carry
 `INTERNAL_API_TOKEN`. The test profile points the client at a port where nothing listens.
 
+### The home service
+
+The homes are moving to the home service (`en-monitor-home-service`, port 8086). Its client is
+already here, in `home/adapter/out/remote`, and takes over `HomeApi` when this backend's home module
+is removed:
+
+| Call | Answers | Used by | Reused for | Without an answer |
+|---|---|---|---|---|
+| `GET /internal/homes/{id}` | `findHome`, `memberIds`, `homeExists` | notifications (members, name of the home) | 30 s, missing homes included | the last answer, kept 1 h; with none, the call fails |
+| `GET /internal/homes/{id}/thresholds` | `findThresholds` | limit alerts, recommendations | 30 s | the same |
+| `GET /internal/homes/{id}/access?userId=` | `isMember`, `isOwner` | alerts and recommendations of a home | 30 s per user and home | **never stale**: a removed member must not keep access while the service is down, so the call fails |
+
+`findThresholds` returns the limits and their period, which is all the alerts and recommendations
+read: the home service does not expose the identifier of the thresholds row nor whether they are
+the system defaults (`null` and `false`).
+
+Settings: `HOME_SERVICE_URL` (`home.service.url`, default `http://localhost:8086`),
+`home.service.ttl`, `home.service.stale-ttl` and the timeouts (1 s connect, 2 s read). The calls
+carry `INTERNAL_API_TOKEN`. The test profile points the client at a port where nothing listens.
+
 ### Home events this backend publishes
 
 A deleted home, by its owner or because the account of its only owner was deleted, is announced
