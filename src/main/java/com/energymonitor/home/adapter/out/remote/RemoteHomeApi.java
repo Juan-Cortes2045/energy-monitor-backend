@@ -16,15 +16,15 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * {@link HomeApi} answered by the home service, for the modules that read homes: the alerts (the
- * limit of a home, whether a user may see the alerts of a device) and the recommendations.
+ * {@link HomeApi} answered by the home service, for the recommendations, which read a home, its
+ * members and its limits.
  *
- * <p>Answers are reused for a short while, a missing home included, so an alert evaluated on every
- * reading costs one request per {@code ttl}, not one per reading. A change in the home service
+ * <p>Answers are reused for a short while, a missing home included, so a recommendation run
+ * costs one request per {@code ttl} and home. A change in the home service
  * shows here once its entry expires.
  *
  * <p>For a home and its limits, the last answer is also kept for {@code staleTtl}: when the
- * service does not answer, that is what is served, so a short outage does not stop the alerts of
+ * service does not answer, that is what is served, so a short outage does not stop the recommendations of
  * homes already known. Who may act on a home is never served stale: a removed
  * member must not keep access because the service is down, so with nothing fresh that call throws
  * {@link HomeServiceUnavailableException}, as does any call with nothing kept.
@@ -85,7 +85,7 @@ public class RemoteHomeApi implements HomeApi {
     }
 
     /**
-     * The limits and their period, which is all the alerts and recommendations read. The home
+     * The limits and their period, which is all the recommendations read. The home
      * service does not expose the identifier of the thresholds row nor whether they are the
      * system defaults, so those come back as {@code null} and {@code false}.
      */

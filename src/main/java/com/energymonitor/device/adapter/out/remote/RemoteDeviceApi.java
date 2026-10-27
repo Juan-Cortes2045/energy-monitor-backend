@@ -14,16 +14,15 @@ import java.util.function.Function;
 
 /**
  * {@link DeviceApi} answered by the device service, for the modules that read devices: the
- * ingestion of readings (every telemetry message asks whether its device exists), the alerts and
- * the recommendations.
+ * recommendations, which read the devices of a home and their names.
  *
  * <p>Answers are reused for a short while, a device that does not exist included, so a module
- * publishing every minute costs one request per {@code ttl}, not one per reading. A device
+ * running every hour costs one request per {@code ttl} and home. A device
  * unlinked or renamed in the service shows here once its entry expires, or at once when
  * {@link #forget} is called for it.
  *
  * <p>The last answer is also kept for {@code staleTtl}: when the service does not answer, that is
- * what is served, so a short outage of the device service does not stop the readings of devices
+ * what is served, so a short outage of the device service does not stop the recommendations of devices
  * already known. Only with nothing kept does a call throw {@link DeviceServiceUnavailableException}.
  *
  * <p>Connectivity and credentials are not read here: the device service keeps them from the broker

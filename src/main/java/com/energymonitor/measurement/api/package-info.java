@@ -3,9 +3,7 @@
  *
  * <p>Types in this package are exposed to other modules via Spring Modulith's
  * {@code @NamedInterface}: {@link com.energymonitor.measurement.api.MeasurementApi} to classify a
- * reading and read the energy of devices, the {@code RiskConsumption} classification, and the
- * {@code MeasurementRecorded} event the alert module listens to, which arrives from the
- * measurement service.
+ * reading and read the energy of devices, and the {@code RiskConsumption} classification.
  */
 @NamedInterface
 package com.energymonitor.measurement.api;

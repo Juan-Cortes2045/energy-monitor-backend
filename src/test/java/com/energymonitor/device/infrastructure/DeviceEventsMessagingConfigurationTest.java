@@ -15,14 +15,13 @@ class DeviceEventsMessagingConfigurationTest {
             .deviceEventQueues("energy-monitor.device", "energy-monitor-backend.dlx");
 
     @Test
-    @DisplayName("the durable queue takes the four device messages from the device exchange")
-    void bindsTheFourTypes() {
+    @DisplayName("the durable queue takes the links and unlinks from the device exchange")
+    void bindsTheLinks() {
         assertThat(declarables.getDeclarablesByType(Binding.class).stream()
                 .filter(b -> b.getDestination().equals(DeviceEventsMessagingConfiguration.DEVICE_EVENTS_QUEUE)))
                 .allMatch(b -> b.getExchange().equals("energy-monitor.device"))
                 .extracting(Binding::getRoutingKey)
-                .containsExactlyInAnyOrder("device.connectivity-lost", "device.connectivity-restored",
-                        "device.linked", "device.unlinked");
+                .containsExactlyInAnyOrder("device.linked", "device.unlinked");
     }
 
     @Test
