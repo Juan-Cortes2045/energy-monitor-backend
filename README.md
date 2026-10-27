@@ -9,14 +9,15 @@ Accounts, sign-in, sessions, password recovery and global roles are served by th
 service (`../en-monitor-security-service`). This backend validates the access tokens it issues
 and nothing else of it. The mail and push delivery of the alerts and recommendations, the
 verification and recovery mail and the administrator notifications are served by the notification
-service (`../en-monitor-notification-service`, `:8087`); this backend announces its alerts and
-recommendations to it over RabbitMQ (section 12). The devices, their credentials, the broker's authentication and their connectivity
+service (`../en-monitor-notification-service`, `:8087`); this backend announces its
+recommendations to it over RabbitMQ (section 12). The alerts are served by the alert service
+(`../en-monitor-alert-service`, `:8088`), which raises them from the readings and the device
+events. The devices, their credentials, the broker's authentication and their connectivity
 are served by the device service (`../en-monitor-device-service`, `:8084`); this backend reads
-devices from it and hears its events. The readings, their MQTT ingestion and the consumption of a
-home are served by the measurement service (`../en-monitor-measurement-service`, `:8085`); this
-backend reads consumption levels and energy from it and hears every stored reading, for the alerts
-and the recommendations. The homes are served by the home service (`../en-monitor-home-service`,
-`:8086`). The web and mobile clients reach all of them through the API gateway
+devices from it and hears its links and unlinks. The readings, their MQTT ingestion and the
+consumption of a home are served by the measurement service (`../en-monitor-measurement-service`,
+`:8085`); this backend reads consumption levels and energy from it, for the recommendations. The
+homes are served by the home service (`../en-monitor-home-service`, `:8086`). The web and mobile clients reach all of them through the API gateway
 (`../en-monitor-api-gateway`) on `:8080`; this backend listens on `:8083`.
 
 The modules, the two proxies and the migration status are in
@@ -137,7 +138,8 @@ This backend sends no mail and no push. The verification and recovery codes, the
 the alerts and recommendations, the channels of each user and the administrator notifications
 are the notification service's (`en-monitor-notification-service`): the Gmail app password
 (`MAIL_*`), the VAPID keys and `EXPO_ACCESS_TOKEN` go in its `.env`, and its README explains
-them. This backend only announces the alerts and recommendations to it (section 12).
+them. This backend only announces the recommendations to it (section 12); the alert service
+announces the alerts.
 
 ## 6. Build and run
 
@@ -155,7 +157,7 @@ The API listens on `http://localhost:8083` (`SERVER_PORT`). Swagger UI is served
 `/swagger-ui.html` and the OpenAPI document at `/v3/api-docs`.
 
 The clients do not call it there: they call the API gateway on `http://localhost:8080`, which
-sends each path to the service that owns it (the alerts and the recommendations here), after
+sends each path to the service that owns it (the recommendations here), after
 checking the access token and answering CORS. The gateway drops the
 `Origin` header, so this backend never answers CORS itself and `SECURITY_CORS_ALLOWED_ORIGINS` is
 set in the gateway's `.env` instead.
@@ -223,26 +225,18 @@ runs from the `infra` repository. This backend does not connect to the broker:
   `/api/v1/homes/{homeId}/consumption/**`).
 
 The API gateway routes those endpoints to each service. This backend reads devices and readings
-from them and hears their events (section 12): every stored reading reaches the alerts as
-`MeasurementRecorded`, as it did when the readings were stored here.
+from them for the recommendations (section 12). The stored readings and the connectivity events go
+to the alert service, which raises the alerts from them.
 
 Firmware, contract and pairing: `firmware/README.md` and the device service's README.
 
 ## 10. Alerts
 
-Every alert (device connected after being linked, device disconnected, high/critical consumption,
-daily or monthly limit reached) is stored here and announced as `alert.raised` (section 12). The
-notification service delivers it to all members of the home, by mail and push according to each
-user's **Settings > Notifications**.
-
-- **Device linked** is raised by the first reading the module sends after it was linked, once per
-  link: retrying the linking from the web while the module cannot join the network sends nothing.
-- **Limit reached** (`alert.limit.daily` / `alert.limit.monthly`) is raised when the energy of the
-  home since the start of the day or month (`ALERT_LIMIT_ZONE`, default `America/Bogota`)
-  reaches the limit set in the thresholds. It resolves itself when a new period starts or the
-  limit is raised above the consumption.
-
-New recommendations (section 11) are announced the same way, as `recommendation.created`.
+The alerts (device connected after being linked, device disconnected, high/critical consumption,
+daily or monthly limit reached) moved to the alert service (`en-monitor-alert-service`, `:8088`):
+it raises them, serves `/api/v1/alerts/**` through the gateway and announces them as
+`alert.raised`, with the same rules and the same message this backend had. The `alert` table and
+its changelogs are its own.
 
 ## 11. Consumption recommendations
 
@@ -271,8 +265,8 @@ stores a recommendation when a rule matches:
 
 ### Messages (RabbitMQ)
 
-This backend consumes the events of the device and measurement services (their sections below) and
-publishes its alerts and recommendations (next section). The account events and the mail requests
+This backend consumes the links and unlinks of the device service (its section below) and
+publishes its recommendations (next section). The account events and the mail requests
 of the security service are the notification service's and the home service's.
 
 - Each queue is declared here at startup, durable, with a `.dlq` dead-letter queue: a message that
@@ -281,29 +275,28 @@ of the security service are the notification service's and the home service's.
   consumers are active, so **without a reachable broker `/actuator/health` reports DOWN**. The
   test profile does not start them and needs no broker.
 
-### Alert and recommendation events this backend publishes
+### Recommendation events this backend publishes
 
-Every alert raised and every recommendation created is announced over RabbitMQ, for the
-notification service (`en-monitor-notification-service`), which delivers it to the members of
-the home:
+Every recommendation created is announced over RabbitMQ, for the notification service
+(`en-monitor-notification-service`), which delivers it to the members of the home:
 
 | Exchange (topic) | Routing key = message type | Body |
 |---|---|---|
-| `energy-monitor.alert` | `alert.raised` | `{idAlert, homeId, deviceId, type, messageKey, dateTime}` |
 | `energy-monitor.recommendation` | `recommendation.created` | `{idRecommendation, homeId, deviceId, type, messageKey, dateTime}` |
 
 - **Outbox** (module `outbox`, changelog `outbox-001`): the event is written to `backend_outbox`
-  when its alert or recommendation is stored, and a relay publishes it every second (up to 50 at a
+  when its recommendation is stored, and a relay publishes it every second (up to 50 at a
   time). A broker or a notification service that is down delays an event but does not lose it.
 - **At least once, in order:** a message is marked published only when the broker confirms it
   (correlated publisher confirms) **and** a queue took it. Until the notification service has
   declared its queues the message comes back and stays pending; the first failure stops the run,
   so a later message never overtakes it. `attempts` and `last_error` show why one is stuck. The
   notification service drops a copy it already delivered.
-- **On by default:** `ALERT_OUTBOX_RELAY_ENABLED` (`messaging.outbox.relay-enabled`). The
-  notification service is the only one that delivers the alerts; `false` only to go back to one
-  whose consumers are off, and the events are kept in `backend_outbox` meanwhile.
-- **Settings:** `messaging.alert-exchange`, `messaging.recommendation-exchange` and
+- **On by default:** `ALERT_OUTBOX_RELAY_ENABLED` (`messaging.outbox.relay-enabled`; the name is
+  kept from when it also carried the alerts). The notification service is the only one that
+  delivers the recommendations; `false` only to go back to one whose consumers are off, and the
+  events are kept in `backend_outbox` meanwhile.
+- **Settings:** `messaging.recommendation-exchange` and
   `messaging.outbox.*` (`relay-enabled`, `poll-interval`, `batch-size`, `confirm-timeout`). The
   test profile keeps the relay off and stores the rows already discarded, so the suite never
   publishes to a broker a running notification service consumes.
@@ -315,17 +308,14 @@ them through `DeviceApi`, answered by its internal API (`device/adapter/out/remo
 
 | Call | Used by | Reused for | Without an answer |
 |---|---|---|---|
-| `GET /internal/devices/{id}` | alerts and recommendations (existence, name, installation date, home) | 30 s, unknown devices included | the last answer, kept 1 h; with none, the call fails |
-| `GET /internal/homes/{id}/devices` | limit alerts and recommendations of a home | 30 s | the same |
+| `GET /internal/devices/{id}` | recommendations (existence, name) | 30 s, unknown devices included | the last answer, kept 1 h; with none, the call fails |
+| `GET /internal/homes/{id}/devices` | recommendations of a home | 30 s | the same |
 
-Its events arrive on the queue `energy-monitor-backend.device.events`, bound to
-`energy-monitor.device` (with a `.dlq`):
-
-| Routing key | What this backend does |
-|---|---|
-| `device.connectivity-lost` | Publishes `DeviceConnectivityLost` in memory: the alert module raises the CONNECTIVITY alert (one while it is pending, however many times the message arrives) |
-| `device.connectivity-restored` | Publishes `DeviceConnectivityRestored`: the alert is resolved |
-| `device.linked`, `device.unlinked` | Drops the cached device and home, so a module just linked is not refused for half a minute |
+Its links and unlinks arrive on the queue `energy-monitor-backend.device.events`, bound to
+`energy-monitor.device` with `device.linked` and `device.unlinked` (with a `.dlq`): they drop the
+cached device and home, so the recommendations see a device just linked or unlinked. The
+connectivity events are the alert service's; a queue an earlier version also bound to them drops
+them until it is deleted and declared again (see "Servicio de alertas" in `infra/README.md`).
 
 Settings: `DEVICE_SERVICE_URL` (`device.service.url`, default `http://localhost:8084`),
 `device.service.ttl`, `device.service.stale-ttl` and the timeouts (1 s connect, 2 s read). The
@@ -335,21 +325,17 @@ listens.
 ### The measurement service
 
 The readings live in the measurement service (`en-monitor-measurement-service`, port 8085). The
-alerts and the recommendations read them through `MeasurementApi`, answered by its internal API
+recommendations read them through `MeasurementApi`, answered by its internal API
 (`measurement/adapter/out/remote`):
 
 | Call | Used by | Reused for | Without an answer |
 |---|---|---|---|
-| `GET /internal/consumption-levels` | the threshold alert classifies every reading (`[minLimit, maxLimit)`) | 10 min | the last levels, kept 24 h; with none, the reading goes back to the broker |
-| `GET /internal/measurements/hourly-energy` | consumption limit alerts, recommendations | never | the limit is checked on the next reading, the recommendations on the next run |
+| `GET /internal/consumption-levels` | the consumption levels (`[minLimit, maxLimit)`) | 10 min | the last levels, kept 24 h; with none, the call fails |
+| `GET /internal/measurements/hourly-energy` | recommendations | never | the recommendations wait for the next run |
 | `GET /internal/measurements/reporting-devices` | recommendations | never | the same |
 
-Every stored reading arrives on the queue `energy-monitor-backend.measurement.recorded`, bound to
-`energy-monitor.measurement` with `measurement.recorded` (with a `.dlq`). It is published again in
-memory as `MeasurementRecorded`, in a transaction of its own, so the alert module evaluates it as
-before: threshold (one alert while it is pending, however many times the message arrives), daily
-or monthly limit and linked device. Declaring the queue is what lets the measurement service
-publish: until then its messages wait in its outbox.
+The stored readings (`measurement.recorded`) are the alert service's: this backend no longer
+declares `energy-monitor-backend.measurement.recorded`.
 
 Settings: `MEASUREMENT_SERVICE_URL` (`measurement.service.url`, default `http://localhost:8085`),
 `measurement.service.levels-ttl`, `levels-stale-ttl` and the timeouts (1 s connect, 5 s read: the
@@ -360,16 +346,16 @@ energy of weeks for the recommendations is the slowest call). The calls carry
 
 The homes live in the home service (`en-monitor-home-service`, port 8086): their members, roles,
 ownership, thresholds and types, the `home.deleted` events and the cleanup of deleted accounts.
-The alerts and the recommendations read them through `HomeApi`, answered by its
+The recommendations read them through `HomeApi`, answered by its
 internal API (`home/adapter/out/remote`):
 
 | Call | Answers | Used by | Reused for | Without an answer |
 |---|---|---|---|---|
-| `GET /internal/homes/{id}` | `findHome`, `memberIds`, `homeExists` | alerts and recommendations (the home exists) | 30 s, missing homes included | the last answer, kept 1 h; with none, the call fails |
-| `GET /internal/homes/{id}/thresholds` | `findThresholds` | limit alerts, recommendations | 30 s | the same |
-| `GET /internal/homes/{id}/access?userId=` | `isMember`, `isOwner` | alerts and recommendations of a home | 30 s per user and home | **never stale**: a removed member must not keep access while the service is down, so the call fails |
+| `GET /internal/homes/{id}` | `findHome`, `memberIds`, `homeExists` | recommendations (the home exists) | 30 s, missing homes included | the last answer, kept 1 h; with none, the call fails |
+| `GET /internal/homes/{id}/thresholds` | `findThresholds` | recommendations | 30 s | the same |
+| `GET /internal/homes/{id}/access?userId=` | `isMember`, `isOwner` | recommendations of a home | 30 s per user and home | **never stale**: a removed member must not keep access while the service is down, so the call fails |
 
-`findThresholds` returns the limits and their period, which is all the alerts and recommendations
+`findThresholds` returns the limits and their period, which is all the recommendations
 read: the home service does not expose the identifier of the thresholds row nor whether they are
 the system defaults (`null` and `false`).
 
@@ -402,7 +388,6 @@ inside the image, and any profile other than `local` works (`prod`).
 | Tests fail with `Access denied for user 'energymonitor'` | `.env` sets `SPRING_DATASOURCE_USERNAME` to something other than `energy_app`: remove it |
 | `Too many connections` in a few persistence tests | the backend is running while the suite runs; both use the same MySQL. Run the failing class alone or stop the backend |
 | Broker logs `context deadline exceeded` calling `device:8084` | the device service is not running, so the broker cannot authenticate anybody (see its README for the ufw rule in development mode) |
-| Readings arrive but no threshold alert is raised, log `measurement service did not answer` | the measurement service is down and no consumption levels were kept, or `INTERNAL_API_TOKEN` differs between the `.env` files; the readings wait in `energy-monitor-backend.measurement.recorded` (or its `.dlq`) |
 | Web app: every request fails or the browser reports CORS | the API gateway is not running on 8080, or `SECURITY_CORS_ALLOWED_ORIGINS` of its `.env` does not list the web's origin |
 | Device logs `rc=-2` / TLS error | certificate not valid for the PC's current IP: update `DEVICE_MQTT_PUBLIC_HOST` in `infra/.env`, re-run `infra/prepare.sh` and restart the broker |
 | Device logs `rc=4` / `rc=5` | `device_code` / API key refused by the device service (link it again from the web) |
