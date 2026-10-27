@@ -1,5 +1,9 @@
 # Architecture
 
+> **Retired.** With the recommendations moved to `en-monitor-recommendation-service`, no module is
+> left here: the backend no longer runs (see "Migration status"). This document describes it as it
+> was during the migration.
+
 `energy-monitor-backend` is a **modular monolith** (Spring Modulith). Each bounded context is a
 top-level package under `com.energymonitor`, organised internally as Hexagonal Architecture
 (`domain`, `application`, `adapter`, `infrastructure`), and exposes to the others only what is in
@@ -118,7 +122,8 @@ foreign key crosses a service boundary: other contexts are referenced by identif
 | Notification service: events | `alert.raised` and `recommendation.created` published from `backend_outbox` | Done |
 | Notification service: removal | Notification module, its changelogs, its consumers of the security service, the security service client and the admin routes removed | Done |
 | Alert service: removal | Alert module, its changelogs, its exchange, the `measurement.recorded` consumer and the connectivity events removed; the alerts are raised, served and announced by `en-monitor-alert-service` | Done |
-| Recommendation | Migration of the last module to a microservice | Pending |
+| Recommendation service: removal | Recommendation module and its changelog removed; the recommendations are evaluated, served and announced by `en-monitor-recommendation-service` | Done |
+| Retirement | The backend leaves the infra repository and the gateway; the deployment job of its CI is removed. The repository stays as history | Done |
 
 Everything above marked Done up to the home service is in production since 24-Oct-2026.
 

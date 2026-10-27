@@ -1,5 +1,12 @@
 # Energy Monitor Backend
 
+> **Retired.** Every module of this monolith moved to its own service: security, devices,
+> measurements, homes, notifications, alerts and, the last one, recommendations
+> (`en-monitor-recommendation-service`). The infra repository no longer runs it, the API gateway no
+> longer routes to it, and this repository is kept only as history. What follows describes the
+> backend as it was before the last migrations, and only the token validation, the outbox of its
+> earlier recommendations and the proxies are still in the code.
+
 Backend for Energy Monitor, built with Spring Boot 4.1.1 on Java 21. The firmware of the
 ESP32 + PZEM-004T V3 meter that publishes to it lives in [`firmware/`](firmware/README.md); MySQL
 and the MQTT broker run from the
