@@ -35,10 +35,6 @@ measurement.service:
   # Nothing listens here, so the suite never reaches a measurement service running on this machine.
   url: http://127.0.0.1:9
 
-recommendation:
-  # The hourly evaluation is exercised by unit tests; it must not run against the shared database.
-  enabled: false
-
 spring.rabbitmq.listener.simple:
   # No broker is needed to run the suite, and a test context must not take messages from a queue
   # a running backend consumes. The consumers are exercised by calling them directly.
