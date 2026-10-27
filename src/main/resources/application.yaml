@@ -19,9 +19,8 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
 
-  # Message broker (RabbitMQ, from infra): the device and measurement events this backend
-  # consumes, and the alert and recommendation events it publishes. Each consumer declares and
-  # binds its own queue.
+  # Message broker (RabbitMQ, from infra): the device links this backend consumes, and the
+  # recommendation events it publishes. Each consumer declares and binds its own queue.
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -77,20 +76,16 @@ security:
 messaging:
   # Dead-letter exchange of the queues this application consumes.
   dead-letter-exchange: energy-monitor-backend.dlx
-  # Topic exchange the device service publishes to (device.linked, device.unlinked,
-  # device.connectivity-lost, device.connectivity-restored).
+  # Topic exchange the device service publishes to; this backend hears device.linked and
+  # device.unlinked. The connectivity events and the readings go to the alert service.
   device-exchange: energy-monitor.device
-  # Topic exchange the measurement service publishes every stored reading to
-  # (measurement.recorded), which the alerts evaluate.
-  measurement-exchange: energy-monitor.measurement
-  # Topic exchanges this backend announces its alerts (alert.raised) and recommendations
-  # (recommendation.created) to, through the outbox; the notification service delivers them.
-  alert-exchange: energy-monitor.alert
+  # Topic exchange this backend announces its recommendations (recommendation.created) to,
+  # through the outbox; the notification service delivers them.
   recommendation-exchange: energy-monitor.recommendation
   outbox:
-    # The notification service is the only one that delivers the alerts and recommendations. Off
-    # only to go back to a notification service whose consumers are off: the events are kept in
-    # backend_outbox meanwhile.
+    # The notification service is the only one that delivers the recommendations. Off only to go
+    # back to a notification service whose consumers are off: the events are kept in
+    # backend_outbox meanwhile. The variable keeps its name from when it also carried the alerts.
     relay-enabled: ${ALERT_OUTBOX_RELAY_ENABLED:true}
     poll-interval: PT1S
     batch-size: 50
@@ -111,10 +106,9 @@ internal-api:
   token: ${INTERNAL_API_TOKEN:}
 
 device:
-  # The device service owns the devices: its internal API answers which device a reading comes
-  # from, its home and its name, and its events (energy-monitor.device) raise and close the
-  # connectivity alerts. Answers are reused for a while, and the last one is served while the
-  # service does not answer.
+  # The device service owns the devices: its internal API answers the devices of a home and their
+  # names, for the recommendations. Answers are reused for a while, and the last one is served
+  # while the service does not answer.
   service:
     url: ${DEVICE_SERVICE_URL:http://localhost:8084}
     connect-timeout: 1s
@@ -136,20 +130,14 @@ home:
 
 measurement:
   # The measurement service owns the readings: its internal API answers the consumption levels,
-  # the energy of devices hour by hour and the devices that report, and its events
-  # (energy-monitor.measurement) bring every stored reading to the alerts. The levels are reused
-  # for a while, and the last ones are served while the service does not answer.
+  # the energy of devices hour by hour and the devices that report. The levels are reused for a
+  # while, and the last ones are served while the service does not answer.
   service:
     url: ${MEASUREMENT_SERVICE_URL:http://localhost:8085}
     connect-timeout: 1s
     read-timeout: 5s
     levels-ttl: 10m
     levels-stale-ttl: 24h
-
-alert:
-  limit:
-    # Zone in which the day and the month of the consumption limit start.
-    zone: ${ALERT_LIMIT_ZONE:America/Bogota}
 
 recommendation:
   # The rules run over the hourly energy of every home with readings in the last week.

@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Connects this backend to the measurement service: the client of its internal API, with its
  * address, timeouts and the shared token, and {@link RemoteMeasurementApi} as the
- * {@code MeasurementApi} the alerts and the recommendations read with.
+ * {@code MeasurementApi} the recommendations read with.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(MeasurementServiceProperties.class)
