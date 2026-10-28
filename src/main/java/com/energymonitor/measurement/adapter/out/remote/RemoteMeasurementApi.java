@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@link MeasurementApi} answered by the measurement service, for the alerts and the
+ * {@link MeasurementApi} answered by the measurement service, for the
  * recommendations.
  *
  * <p>The consumption levels are a catalogue of four rows that rarely changes, and every reading is

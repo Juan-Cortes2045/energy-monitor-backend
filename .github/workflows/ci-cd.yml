@@ -1,7 +1,7 @@
 # CI: the full test suite against a real MySQL on every pull request and push to dev and main.
-# CD: after a push to main, and once the "production" environment is approved, the server pulls
-# main and rebuilds the backend (infra/deploy/deploy.sh on the VPS).
-name: Backend CI/CD
+# No deployment: the backend is retired. Every module moved to its own service, and the infra
+# repository no longer runs it.
+name: Backend CI
 
 on:
   pull_request:
@@ -72,36 +72,3 @@ jobs:
           name: surefire-reports
           path: target/surefire-reports/
           retention-days: 7
-
-  deploy:
-    name: Deploy to production
-    needs: test
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment:
-      name: production
-      url: https://energy-monitor.tech
-    concurrency:
-      group: production-backend
-      cancel-in-progress: false
-    steps:
-      - name: Deploy over SSH
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          # The key is restricted on the server to infra/deploy/deploy.sh: the argument is the component.
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes \
-            "$DEPLOY_USER@$DEPLOY_HOST" backend
-
-      - name: Smoke test
-        run: |
-          curl -fsS https://energy-monitor.tech/ -o /dev/null
-          test "$(curl -s -o /dev/null -w '%{http_code}' https://energy-monitor.tech/api/v1/homes)" = 401

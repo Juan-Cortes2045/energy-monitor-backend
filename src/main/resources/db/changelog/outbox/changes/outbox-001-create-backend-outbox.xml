@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Outbox of the events this backend announces to other services: alert.raised and
+        recommendation.created, which the notification service delivers to the members of a home.
+
+        Every event is written here when its alert or recommendation is stored, and a relay
+        publishes it to the message broker afterwards, so an event is not lost while the broker or
+        the notification service is down.
+    -->
+    <changeSet id="outbox-001-create-backend-outbox" author="angelgarcia0">
+        <comment>Creates the backend_outbox table of the event outbox.</comment>
+
+        <createTable tableName="backend_outbox">
+            <!-- Also the message id on the broker: consumers use it to drop duplicates. -->
+            <column name="id_message" type="VARCHAR(10)">
+                <constraints primaryKey="true" primaryKeyName="pk_backend_outbox" nullable="false"/>
+            </column>
+            <!-- Topic exchange on the broker, for example energy-monitor.alert. -->
+            <column name="exchange" type="VARCHAR(60)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Routing key and message type on the broker, for example alert.raised. -->
+            <column name="message_type" type="VARCHAR(60)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payload" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="occurred_at" type="DATETIME(6)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="published_at" type="DATETIME(6)"/>
+            <column name="discarded_at" type="DATETIME(6)"/>
+            <column name="attempts" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_error" type="VARCHAR(255)"/>
+        </createTable>
+
+        <!-- The relay reads the pending messages in order. -->
+        <createIndex tableName="backend_outbox" indexName="idx_backend_outbox_pending">
+            <column name="published_at"/>
+            <column name="discarded_at"/>
+            <column name="occurred_at"/>
+        </createIndex>
+
+        <rollback>
+            <dropTable tableName="backend_outbox"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

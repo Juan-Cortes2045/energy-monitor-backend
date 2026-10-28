@@ -189,15 +189,6 @@ class SecurityCorsWebTest extends JwtKeyedTest {
     // --------------------------------------------------------------- actual requests
 
     @Test
-    void stampsTheAllowOriginHeaderOnARealCrossOriginResponse() throws Exception {
-        mvc.perform(get("/api/v1/homes")
-                        .header("Origin", ALLOWED)
-                        .header("Authorization", bearer("USR0000001")))
-                .andExpect(status().isOk())
-                .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED));
-    }
-
-    @Test
     void answersARejectedRequestWithTheCORSHeaderToo() throws Exception {
         // A 401 the browser cannot read is indistinguishable from a network failure, which is the
         // most confusing symptom a cross-origin client can be handed. The header has to be there.

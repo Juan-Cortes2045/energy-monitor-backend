@@ -99,13 +99,13 @@
 			<artifactId>spring-modulith-starter-core</artifactId>
 		</dependency>
 
-		<!-- Messaging: account events and mail requests from the security service -->
+		<!-- Messaging: device and measurement events in, alert and recommendation events out -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-amqp</artifactId>
 		</dependency>
 
-		<!-- Short-lived cache of what the security service answers (permissions, profiles) -->
+		<!-- Short-lived cache of what the device, measurement and home services answer -->
 		<dependency>
 			<groupId>com.github.ben-manes.caffeine</groupId>
 			<artifactId>caffeine</artifactId>
@@ -184,11 +184,6 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-amqp-test</artifactId>
 			<scope>test</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-mail</artifactId>
 		</dependency>
 
 	</dependencies>

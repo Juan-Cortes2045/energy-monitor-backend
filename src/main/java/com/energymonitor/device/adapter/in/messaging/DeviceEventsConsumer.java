@@ -1,71 +1,53 @@
 package com.energymonitor.device.adapter.in.messaging;
 
 import com.energymonitor.device.adapter.out.remote.DeviceChanges;
-import com.energymonitor.device.api.DeviceConnectivityLost;
-import com.energymonitor.device.api.DeviceConnectivityRestored;
 import com.energymonitor.device.infrastructure.DeviceEventsMessagingConfiguration;
-import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Hears what the device service announces on {@code energy-monitor.device}.
+ * Hears {@code device.linked} and {@code device.unlinked} on {@code energy-monitor.device}: they
+ * drop what this backend keeps of the device and of the home, so the recommendations of a home
+ * see a device just linked or unlinked without waiting for the cache to expire.
  *
- * <ul>
- *   <li>{@code device.connectivity-lost} and {@code device.connectivity-restored} are published
- *       again in memory as {@link DeviceConnectivityLost} and {@link DeviceConnectivityRestored},
- *       the same events the alert module has always listened to. They run in a transaction of
- *       their own, the alert's writes included.</li>
- *   <li>{@code device.linked} and {@code device.unlinked} drop what this backend keeps of the
- *       device and of the home, so a reading of a device just linked is not refused for half a
- *       minute.</li>
- * </ul>
+ * <p>The connectivity events belong to the alert service. A queue declared by an earlier version
+ * of this backend may still be bound to them until it is recreated; they are dropped quietly.
  *
- * <p>A message may arrive twice: a connectivity alert already pending is not raised again, a
- * resolved one stays resolved, and forgetting twice only costs one more request. An unknown type,
+ * <p>A message may arrive twice: forgetting twice only costs one more request. An unknown type,
  * or a message without a device, is dropped.
  */
 public class DeviceEventsConsumer {
 
     static final String DEVICE_LINKED = "device.linked";
     static final String DEVICE_UNLINKED = "device.unlinked";
-    static final String CONNECTIVITY_LOST = "device.connectivity-lost";
-    static final String CONNECTIVITY_RESTORED = "device.connectivity-restored";
+    static final String CONNECTIVITY_PREFIX = "device.connectivity-";
 
     private static final Logger LOG = LoggerFactory.getLogger(DeviceEventsConsumer.class);
 
-    private final ApplicationEventPublisher events;
     private final DeviceChanges changes;
-    private final TransactionTemplate transaction;
     private final ObjectMapper json;
 
-    public DeviceEventsConsumer(ApplicationEventPublisher events, DeviceChanges changes,
-                                PlatformTransactionManager transactions, ObjectMapper json) {
-        this.events = events;
+    public DeviceEventsConsumer(DeviceChanges changes, ObjectMapper json) {
         this.changes = changes;
-        this.transaction = new TransactionTemplate(transactions);
         this.json = json;
     }
 
     @RabbitListener(queues = DeviceEventsMessagingConfiguration.DEVICE_EVENTS_QUEUE)
     public void on(Message message) {
         String type = typeOf(message);
+        if (type != null && type.startsWith(CONNECTIVITY_PREFIX)) {
+            LOG.debug("Ignoring {}: the alert service handles it", type);
+            return;
+        }
         DeviceMessage body = json.readValue(message.getBody(), DeviceMessage.class);
         if (body.deviceId() == null || body.deviceId().isBlank()) {
             LOG.warn("Ignoring {} {} without a deviceId", type, message.getMessageProperties().getMessageId());
             return;
         }
         switch (type == null ? "" : type) {
-            case CONNECTIVITY_LOST -> transaction.executeWithoutResult(status ->
-                    events.publishEvent(new DeviceConnectivityLost(body.deviceId(), body.at())));
-            case CONNECTIVITY_RESTORED -> transaction.executeWithoutResult(status ->
-                    events.publishEvent(new DeviceConnectivityRestored(body.deviceId(), body.at())));
             case DEVICE_LINKED, DEVICE_UNLINKED -> changes.forget(body.deviceId(), body.homeId());
             default -> LOG.warn("Ignoring device message of type '{}'", type);
         }
@@ -77,15 +59,7 @@ public class DeviceEventsConsumer {
         return routingKey != null ? routingKey : message.getMessageProperties().getType();
     }
 
-    /**
-     * The fields of every device message this backend reads; each type carries its own instant
-     * ({@code occurredAt}, {@code linkedAt} or {@code unlinkedAt}).
-     */
-    record DeviceMessage(String deviceId, String homeId, Instant occurredAt, Instant linkedAt,
-                         Instant unlinkedAt) {
-
-        Instant at() {
-            return occurredAt != null ? occurredAt : linkedAt != null ? linkedAt : unlinkedAt;
-        }
+    /** The fields of a link or an unlink this backend reads. */
+    record DeviceMessage(String deviceId, String homeId) {
     }
 }

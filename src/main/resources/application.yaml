@@ -19,37 +19,14 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
 
-  # Email delivery. Every value comes from the environment: no credential is ever written here.
-  # The username and password default to empty on purpose, so the application still starts with
-  # no mail configured and a send attempt is recorded as failed in the notification log rather
-  # than breaking the whole context. The host is required for Spring to build a JavaMailSender
-  # at all, so it keeps a default.
-  mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    default-encoding: UTF-8
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-          # A silent SMTP server must not hold the request thread: bounded waits, then give up.
-          connectiontimeout: 5000
-          timeout: 5000
-          writetimeout: 5000
-
-  # Message broker (RabbitMQ, from infra): account events and mail requests published by the
-  # security service, and the home events this backend publishes. Each consumer declares and
-  # binds its own queue.
+  # Message broker (RabbitMQ, from infra): the device links this backend consumes, and the
+  # recommendation events it publishes. Each consumer declares and binds its own queue.
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:energy-monitor}
     password: ${RABBITMQ_PASSWORD:}
-    # A home message is marked as published only after the broker confirms it and a queue took it
+    # An outbox message is marked as published only after the broker confirms it and a queue took it
     # (correlated: the return of an unrouted message is known before the confirmation completes).
     publisher-confirm-type: correlated
     publisher-returns: true
@@ -77,17 +54,6 @@ security:
     issuer: https://energy-monitor-backend
     public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:}
 
-  # The internal API of the security service: permissions of the admin routes, profiles and
-  # administrators. Its answers are reused for a while, and a call that takes longer than the
-  # timeouts fails: the admin routes answer 503 and names are left out.
-  service:
-    url: ${SECURITY_SERVICE_URL:http://localhost:8082}
-    connect-timeout: 1s
-    read-timeout: 2s
-    permissions-ttl: 30s
-    administrators-ttl: 30s
-    profiles-ttl: 60s
-
   cors:
     # The origins allowed to call this API from a browser, comma separated. Empty by default,
     # which means no cross-origin caller is answered at all: fail closed until a deployment
@@ -107,49 +73,20 @@ security:
     allow-credentials: false
     max-age: 30m
 
-app:
-  mail:
-    # The address outgoing mail is sent from, which is the same account that owns the app password.
-    from: ${MAIL_FROM:}
-    # A record left PENDING claims a delivery that a previous run started and never finished. The
-    # sweep closes those as failed once they are older than this. Generous compared with any real
-    # SMTP conversation, so a slow send is not mistaken for a dead one; nothing is ever resent,
-    # because only the security service holds the code and its hash.
-    pending-threshold: 30m
-    sweep-delay: 5m
-
-notification:
-  # Base URL of the web app, for the links in alert mail.
-  web-url: ${NOTIFICATION_WEB_URL:http://localhost:5173}
-  push:
-    # VAPID key pair for Web Push (base64url: public = 65-byte point, private = 32-byte scalar).
-    # Generate once per environment (docs: devices/README.md) and never rotate it casually:
-    # browsers bind their subscription to the public key. Empty = push disabled.
-    vapid-public-key: ${NOTIFICATION_VAPID_PUBLIC_KEY:}
-    vapid-private-key: ${NOTIFICATION_VAPID_PRIVATE_KEY:}
-    subject: ${NOTIFICATION_VAPID_SUBJECT:mailto:support.energymonitor@gmail.com}
-    # Credential of the push relay the mobile apps publish through (Expo: "expo push token" in the
-    # project dashboard). Unlike the VAPID pair this is safe to rotate: it authorises us with the
-    # relay, it is not baked into any installation. Empty = app push disabled.
-    expo-access-token: ${EXPO_ACCESS_TOKEN:}
-
 messaging:
-  # Topic exchange the security service publishes to, and the dead-letter exchange of the queues
-  # this application consumes.
-  security-exchange: energy-monitor.security
+  # Dead-letter exchange of the queues this application consumes.
   dead-letter-exchange: energy-monitor-backend.dlx
-  # Topic exchange the device service publishes to (device.linked, device.unlinked,
-  # device.connectivity-lost, device.connectivity-restored).
+  # Topic exchange the device service publishes to; this backend hears device.linked and
+  # device.unlinked. The connectivity events and the readings go to the alert service.
   device-exchange: energy-monitor.device
-  # Topic exchange the measurement service publishes every stored reading to
-  # (measurement.recorded), which the alerts evaluate.
-  measurement-exchange: energy-monitor.measurement
-  # Topic exchange of the home events this backend announces (home.deleted), written to the
-  # home_outbox table with the change and relayed every second, up to 50 messages, each confirmed
-  # by the broker within 5 s.
-  home:
-    exchange: energy-monitor.home
-    relay-enabled: true
+  # Topic exchange this backend announces its recommendations (recommendation.created) to,
+  # through the outbox; the notification service delivers them.
+  recommendation-exchange: energy-monitor.recommendation
+  outbox:
+    # The notification service is the only one that delivers the recommendations. Off only to go
+    # back to a notification service whose consumers are off: the events are kept in
+    # backend_outbox meanwhile. The variable keeps its name from when it also carried the alerts.
+    relay-enabled: ${ALERT_OUTBOX_RELAY_ENABLED:true}
     poll-interval: PT1S
     batch-size: 50
     confirm-timeout: PT5S
@@ -159,27 +96,19 @@ management:
     web:
       exposure:
         include: health,info
-  health:
-    mail:
-      # A mail server that is down is not the application's health: it must not fail the probe.
-      enabled: false
 
-# Calls between this backend and the other services, both ways: the security service (deletion
-# check, permissions, profiles), the device service (home access; devices) and the measurement
-# service (home access and limits; levels and energy). Each side checks the other's network and
-# the shared token; the reverse proxy never forwards /internal/**.
+# Calls from this backend to the other services: the device service (devices), the measurement
+# service (levels and energy) and the home service (homes, members, limits). This backend serves no /internal/** of its own. The other services
+# check its network and the shared token; the reverse proxy never forwards /internal/**.
 internal-api:
-  # Same value in every service. Empty refuses every call to /internal/accounts/** and
-  # /internal/homes/**, and the other services refuse every call of this backend.
+  # Same value in every service. Empty makes the other services refuse every call of this backend.
   # Generate with: openssl rand -hex 32
   token: ${INTERNAL_API_TOKEN:}
-  allowed-networks: ${INTERNAL_API_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
 
 device:
-  # The device service owns the devices: its internal API answers which device a reading comes
-  # from, its home and its name, and its events (energy-monitor.device) raise and close the
-  # connectivity alerts. Answers are reused for a while, and the last one is served while the
-  # service does not answer.
+  # The device service owns the devices: its internal API answers the devices of a home and their
+  # names, for the recommendations. Answers are reused for a while, and the last one is served
+  # while the service does not answer.
   service:
     url: ${DEVICE_SERVICE_URL:http://localhost:8084}
     connect-timeout: 1s
@@ -187,11 +116,22 @@ device:
     ttl: 30s
     stale-ttl: 1h
 
+home:
+  # The home service owns the homes: its internal API answers a home and its members, what a user
+  # is in it and its consumption limits. Answers
+  # are reused for a while; the last home and limits are served while the service does not
+  # answer (what a user may do in a home never is).
+  service:
+    url: ${HOME_SERVICE_URL:http://localhost:8086}
+    connect-timeout: 1s
+    read-timeout: 2s
+    ttl: 30s
+    stale-ttl: 1h
+
 measurement:
   # The measurement service owns the readings: its internal API answers the consumption levels,
-  # the energy of devices hour by hour and the devices that report, and its events
-  # (energy-monitor.measurement) bring every stored reading to the alerts. The levels are reused
-  # for a while, and the last ones are served while the service does not answer.
+  # the energy of devices hour by hour and the devices that report. The levels are reused for a
+  # while, and the last ones are served while the service does not answer.
   service:
     url: ${MEASUREMENT_SERVICE_URL:http://localhost:8085}
     connect-timeout: 1s
@@ -199,16 +139,3 @@ measurement:
     levels-ttl: 10m
     levels-stale-ttl: 24h
 
-alert:
-  limit:
-    # Zone in which the day and the month of the consumption limit start.
-    zone: ${ALERT_LIMIT_ZONE:America/Bogota}
-
-recommendation:
-  # The rules run over the hourly energy of every home with readings in the last week.
-  evaluate-interval: ${RECOMMENDATION_EVALUATE_INTERVAL:PT1H}
-  initial-delay: PT2M
-  # Zone of the day-part rules: evening peak (18-22 h), night standby (1-5 h), calendar month.
-  zone: ${RECOMMENDATION_ZONE:America/Bogota}
-  # The same advice is not repeated for the same home and device within this period.
-  cool-down: P7D

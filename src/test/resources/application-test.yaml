@@ -17,10 +17,6 @@ security:
     # JwtKeyedTest replaces it with a key pair of its own; any other one falls back to the
     # per-machine public key (see application-local.yaml.example).
     public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:${user.home}/.energy-monitor/keys/public.pem}
-  service:
-    # Nothing listens here, so the suite never reaches a security service running on this machine:
-    # a test that needs its answers mocks them, and every other one sees it unavailable.
-    url: http://127.0.0.1:9
 
 internal-api:
   # Test-only token: committed on purpose, because it protects nothing outside the test profile
@@ -31,26 +27,26 @@ device.service:
   # Nothing listens here, so the suite never reaches a device service running on this machine.
   url: http://127.0.0.1:9
 
+home.service:
+  # Nothing listens here, so the suite never reaches a home service running on this machine.
+  url: http://127.0.0.1:9
+
 measurement.service:
   # Nothing listens here, so the suite never reaches a measurement service running on this machine.
   url: http://127.0.0.1:9
-
-recommendation:
-  # The hourly evaluation is exercised by unit tests; it must not run against the shared database.
-  enabled: false
 
 spring.rabbitmq.listener.simple:
   # No broker is needed to run the suite, and a test context must not take messages from a queue
   # a running backend consumes. The consumers are exercised by calling them directly.
   auto-startup: false
 
-messaging.home:
-  # The suite deletes homes in the shared database, and their home.deleted rows must not reach a
-  # broker that a running device service consumes. Stored already discarded, a backend started
-  # later on the same database never publishes them either. The relay is covered by
-  # HomeOutboxRelayTest.
-  relay-enabled: false
-  discard-written: true
-
 management.health.rabbit:
   enabled: false
+
+messaging.outbox:
+  # The suite raises recommendations in the shared database, and their rows must not
+  # reach a broker that a running notification service consumes. Stored already discarded, a
+  # backend started later on the same database never publishes them either. The relay is covered
+  # by OutboxRelayTest.
+  relay-enabled: false
+  discard-written: true
